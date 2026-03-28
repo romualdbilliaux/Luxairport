@@ -1975,7 +1975,7 @@ function App(){
       // ── KITS ──
       page==='kits'&&h('div',{className:'fi'},
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:14}},
-          h('div',{style:{fontSize:17,fontWeight:800}},'🧰 Kits d'outils'),
+          h('div',{style:{fontSize:17,fontWeight:800}},'🧰 Kits'),
           h('button',{onClick:()=>setModal({t:'kit'}),style:{background:'#af52de',color:'#fff',border:'none',borderRadius:10,padding:'9px 16px',fontSize:13,fontWeight:700,cursor:'pointer'}},'+Nouveau kit')
         ),
         kits.length===0
@@ -3104,7 +3104,7 @@ function AIPhotoModal({onResult,onClose}){
   const ec=e=>e==='Bon'?S.green:e==='Moyen'?S.orange:S.danger;
   return h(Modal,{onClose},
     h('h2',{style:{fontSize:19,fontWeight:800,marginBottom:4}},'Robot Analyse IA'),
-    h('p',{style:{fontSize:13,color:S.gray,marginBottom:14}},"Prenez une photo de l'outil pour evaluer son etat automatiquement"),
+    h('p',{style:{fontSize:13,color:S.gray,marginBottom:14}},"Prenez une photo pour evaluer l'etat automatiquement"),
     !photo&&h('label',{style:{display:'block',border:'2px dashed '+S.border,borderRadius:14,padding:'30px 20px',textAlign:'center',cursor:'pointer',marginBottom:12}},
       h('div',{style:{fontSize:40,marginBottom:8}},'robot'),
       h('div',{style:{fontSize:14,fontWeight:600,color:S.gray}},'Prendre une photo pour analyse IA'),
@@ -3437,7 +3437,7 @@ function FicheEmployeModal({emp,emprunts,sigs,signalements,tools,cfg,genPDF,onCl
         )
       )
     ),
-    moy>0&&h('div',{style:{background:'#e8f0fe',borderRadius:10,padding:'8px 12px',marginBottom:10,fontSize:13,color:S.blue,fontWeight:600}},'Durée moyenne d'emprunt : '+moy+' jour(s)'),
+    moy>0&&h('div',{style:{background:'#e8f0fe',borderRadius:10,padding:'8px 12px',marginBottom:10,fontSize:13,color:S.blue,fontWeight:600}},'Durée moyenne d\'emprunt : '+moy+' jour(s)'),
     enCours.length>0&&h('div',{style:{marginBottom:12}},
       h('div',{style:{fontSize:13,fontWeight:700,marginBottom:6,color:S.blue}},'Outils actuellement sortis'),
       enCours.map((e,i)=>{const t=tools.find(x=>x.id===e.toolId);return h('div',{key:i,style:{fontSize:12,padding:'6px 10px',background:'#e8f0fe',borderRadius:8,marginBottom:4}},t?t.nom:e.toolId,' · depuis '+e.dateDepart);})
