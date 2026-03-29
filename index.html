@@ -390,7 +390,11 @@ function App(){
   const[lang,setLang]=useState("fr");
   const[menuOpen,setMenuOpen]=useState(false);
   const[currentUser,setCurrentUser]=useState(null);// {name, pin, role: "admin"|"user"}
-  const[userAccounts,setUserAccounts]=useState([]);// {name, pin, role, avatar}
+  const[userAccounts,setUserAccounts]=useState([]);
+  const[warehouseConfig,setWarehouseConfig]=useState({zones:[
+    {id:"A",nom:"Zone A",allees:2,racks:3,etages:3,positions:["G","M","D"]}
+  ]});
+  const saveWarehouseConfig=async(wc)=>{setWarehouseConfig(wc);await db.collection("params").doc("config").set({warehouseConfig:wc},{merge:true});showT("Configuration entrepot sauvegardee!");};// {name, pin, role, avatar}
   const[zoomPhoto,setZoomPhoto]=useState(null);
   const[navConfig,setNavConfig]=useState([
     {id:"accueil",icon:"🏠",label:"Accueil",visible:true,order:0},
@@ -400,7 +404,7 @@ function App(){
     {id:"kits",icon:"🧰",label:"Kits",visible:true,order:4},
     {id:"entrepot",icon:"🏭",label:"Entrepot",visible:true,order:5},
     {id:"rapport",icon:"📊",label:"Rapport",visible:true,order:6},
-    {id:"admin",icon:"🔐",label:"Admin",visible:true,order:7},
+    {id:"admin",icon:"🔐",label:"Admin",visible:false,order:7},
     {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:8},
     {id:"vehicules",icon:"🚗",label:"Vehicules",visible:true,order:9},
   ]);
@@ -445,7 +449,7 @@ function App(){
         const gd={};garSnap.forEach(x=>gd[x.id]=x.data());setGaranties(gd);
         setKits(kitsSnap.docs.map(d=>({...d.data(),_id:d.id})));
         if(toolsSnap.docs.length>0)setTools(toolsSnap.docs.map(d=>({...d.data(),id:d.id})));
-        if(parSnap.exists){const p=parSnap.data();if(p.employes)setEmployes(p.employes);if(p.adminPin)setAdminPin(p.adminPin);if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));if(p.lang)setLang(p.lang);if(p.navConfig)setNavConfig(p.navConfig);if(p.userAccounts)setUserAccounts(p.userAccounts);}
+        if(parSnap.exists){const p=parSnap.data();if(p.employes)setEmployes(p.employes);if(p.adminPin)setAdminPin(p.adminPin);if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));if(p.lang)setLang(p.lang);if(p.navConfig)setNavConfig(p.navConfig);if(p.userAccounts)setUserAccounts(p.userAccounts);if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);}
       }catch(e){console.error(e);}
       setReady(true);
     })();
@@ -592,7 +596,10 @@ function App(){
             )
           )
         ),
-        isAdmin&&h("div",{style:{marginTop:20,paddingTop:16,borderTop:"1px solid "+(darkMode?"#3a3a3c":"#e5e5ea")}},
+        h("div",{style:{marginTop:16,paddingTop:16,borderTop:"1px solid "+(darkMode?"#3a3a3c":"#e5e5ea")}},
+          h("button",{onClick:()=>{setPage("admin");setMenuOpen(false);},style:{width:"100%",padding:"12px",background:"linear-gradient(135deg,#c8102e,#8b0000)",color:"#fff",border:"none",borderRadius:12,fontWeight:700,fontSize:13,cursor:"pointer",marginBottom:12}},"🔐 Administration")
+        ),
+        isAdmin&&h("div",{style:{paddingTop:8}},
           h("div",{style:{fontSize:12,fontWeight:700,color:S.gray,marginBottom:10}},"Configurer le menu (Admin)"),
           navConfig.map((n,i)=>h("div",{key:n.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid "+(darkMode?"#2c2c2e":"#f0f0f0")}},
             h("span",{style:{fontSize:13}},n.icon+" "+n.label),
@@ -822,7 +829,7 @@ function App(){
           })
       ),
 
-      page==="entrepot"&&h(EntrepotPage,{isAdmin,showT,cfg,emprunts,tools,genPDF}),
+      page==="entrepot"&&h(EntrepotPage,{isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,currentUser}),
 
       page==="rapport"&&h("div",{className:"fi"},
         !isAdmin
@@ -934,6 +941,7 @@ function App(){
         )
       ),
       modal.t==="addUser"&&h(AddUserModal,{onSave:(u)=>{saveUserAccounts([...(userAccounts||[]),u]);setModal(null);},onClose:()=>setModal(null)}),
+      modal.t==="editUser"&&h(AddUserModal,{existing:modal.acc,onSave:(u)=>{const na=[...(userAccounts||[])];na[modal.idx]=u;saveUserAccounts(na);setModal(null);},onClose:()=>setModal(null)}),
       modal.t==="planningMaint"&&h(PlanningMaintenanceModal,{tools,maintenances,onClose:()=>setModal(null)}),
       modal.t==="reparation"&&h(ReparationModal,{tool:modal.tool,ins:modal.ins||{},onSave:async(toolId,data)=>{setSyncing(true);const existing=inspections[toolId]||{};const repHist=[...(existing.repHistory||[]),{...data,date:now()}];await fbSet("inspections",toolId,{...existing,statut:"En reparation",reparation:data,repHistory:repHist,date:now()});setSyncing(false);setModal(null);showT("Mise en reparation enregistree!");},onRetour:async(toolId)=>{setSyncing(true);const existing=inspections[toolId]||{};await fbSet("inspections",toolId,{...existing,statut:"Disponible",date:now()});setSyncing(false);setModal(null);showT("Retour de reparation enregistre!");},onClose:()=>setModal(null)}),
       modal.t==="addTool"&&h(AddToolModal,{onSave:async(data)=>{setSyncing(true);const id=data.id.toUpperCase();await fbSet("tools",id,{...data,id});setSyncing(false);setModal(null);showT("Outil ajoute!");},onClose:()=>setModal(null)}),
@@ -946,7 +954,7 @@ function App(){
   );
 }
 
-function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts}){
+function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig}){
   const[tab,setTab]=useState("stats");
   const[emps,setEmps]=useState([...employes]);
   const[newE,setNewE]=useState("");
@@ -1118,6 +1126,8 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
       }),
       modal&&modal.t==="maintEdit"&&h(MaintModal,{toolId:modal.toolId,toolNom:modal.toolNom,maint:modal.maint,onSave:saveMaint,onClose:()=>setModal(null)})
     ),
+
+    tab==="entrepotCfg"&&h(WarehouseConfigPanel,{warehouseConfig,onSave:saveWarehouseConfig,showT}),
 
     tab==="comptes"&&h("div",{},
       h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Comptes utilisateurs"),
@@ -1836,13 +1846,23 @@ function EmplacementBadge({zone,allee,rack,etagere,position}){
   );
 }
 
-function PaletteModal({existingCount,zones,onSave,onClose}){
+function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}){
   const num=String(existingCount+1).padStart(4,"0");
   const palId="PAL-"+num;
   const[items,setItems]=useState([{nom:"",qte:""}]);
   const[photos,setPhotos]=useState([]);
   const[zone,setZone]=useState("");const[allee,setAllee]=useState("");const[rack,setRack]=useState("");const[etagere,setEtagere]=useState("");const[position,setPosition]=useState("");
   const[photoPos,setPhotoPos]=useState("");
+  const[provenance,setProvenance]=useState("");
+  const[destination,setDestination]=useState("");
+  const[createdBy,setCreatedBy]=useState(currentUser?.name||"");
+  const zones=warehouseConfig?.zones||[];
+  const selZoneObj=zones.find(z=>z.id===zone);
+  const alleesOpts=selZoneObj?Array.from({length:selZoneObj.allees},(_, i)=>String(i+1)):[];
+  const racksOpts=selZoneObj?Array.from({length:selZoneObj.racks},(_, i)=>String(i+1)):[];
+  const etagesOpts=selZoneObj?Array.from({length:selZoneObj.etages},(_, i)=>String(i+1)):[];
+  const positionsOpts=selZoneObj?selZoneObj.positions||["G","M","D"]:["G","M","D"];
+  const genQRData=()=>palId+"\n"+items.filter(x=>x.nom).map(x=>x.nom+(x.qte?" x"+x.qte:"")).join("\n")+"\n"+( provenance?"De: "+provenance:"")+"\n"+(destination?"Vers: "+destination:"")+"\n"+(zone?"Emplacement: "+zone+(allee?"/A"+allee:"")+(rack?"/R"+rack:"")+(etagere?"/E"+etagere:"")+(position?"/"+position:""):"");
   const addItem=()=>setItems(p=>[...p,{nom:"",qte:""}]);
   const updItem=(i,k,v)=>setItems(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const remItem=i=>setItems(p=>p.filter((_,j)=>j!==i));
@@ -1868,16 +1888,34 @@ function PaletteModal({existingCount,zones,onSave,onClose}){
       h("input",{type:"file",accept:"image/*",multiple:true,capture:"environment",style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(f=>{const r=new FileReader();r.onload=ev=>setPhotos(p=>[...p,ev.target.result]);r.readAsDataURL(f);});}})
     ),
     photos.length>0&&h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},photos.map((p,i)=>h("div",{key:i,style:{position:"relative"}},h("img",{src:p,style:{width:64,height:64,borderRadius:8,objectFit:"cover"}}),h("button",{onClick:()=>setPhotos(ph=>ph.filter((_,j)=>j!==i)),style:{position:"absolute",top:-4,right:-4,width:18,height:18,borderRadius:"50%",background:S.danger,color:"#fff",border:"none",fontSize:10,cursor:"pointer"}},"x")))),
+    FL("Cree par",true),h("input",{value:createdBy,onChange:e=>setCreatedBy(e.target.value),placeholder:"Votre nom...",style:IS}),
+    FL("Provenance",true),h("input",{value:provenance,onChange:e=>setProvenance(e.target.value),placeholder:"Fournisseur, chantier...",style:IS}),
+    FL("Destination",true),h("input",{value:destination,onChange:e=>setDestination(e.target.value),placeholder:"Client, zone livraison...",style:IS}),
     FL("Emplacement hierarchique",true),
     h("div",{style:{background:"#f5f5f7",borderRadius:12,padding:"12px",marginBottom:8}},
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Zone"),h("input",{value:zone,onChange:e=>setZone(e.target.value),placeholder:"Ex: A",style:{...IS,padding:"8px 10px",fontSize:12}})),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Allee"),h("input",{value:allee,onChange:e=>setAllee(e.target.value),placeholder:"Ex: 1",style:{...IS,padding:"8px 10px",fontSize:12}}))
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Zone"),
+          h("select",{value:zone,onChange:e=>{setZone(e.target.value);setAllee("");setRack("");setEtagere("");setPosition("");},style:{...SS,padding:"8px 10px",fontSize:12}},
+            h("option",{value:""},"-- Zone --"),...zones.map(z=>h("option",{key:z.id,value:z.id},z.nom||"Zone "+z.id)))
+        ),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Allee"),
+          h("select",{value:allee,onChange:e=>setAllee(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!zone},
+            h("option",{value:""},"-- Allee --"),...alleesOpts.map(a=>h("option",{key:a,value:a},"Allee "+a)))
+        )
       ),
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Rack"),h("input",{value:rack,onChange:e=>setRack(e.target.value),placeholder:"R1",style:{...IS,padding:"8px 10px",fontSize:12}})),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Etagere"),h("input",{value:etagere,onChange:e=>setEtagere(e.target.value),placeholder:"E2",style:{...IS,padding:"8px 10px",fontSize:12}})),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Position"),h("input",{value:position,onChange:e=>setPosition(e.target.value),placeholder:"P1",style:{...IS,padding:"8px 10px",fontSize:12}}))
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Rack"),
+          h("select",{value:rack,onChange:e=>setRack(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!allee},
+            h("option",{value:""},"-- Rack --"),...racksOpts.map(r=>h("option",{key:r,value:r},"Rack "+r)))
+        ),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Etagere"),
+          h("select",{value:etagere,onChange:e=>setEtagere(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!rack},
+            h("option",{value:""},"-- Etage --"),...etagesOpts.map(e2=>h("option",{key:e2,value:e2},"Etage "+e2)))
+        ),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:4}},"Position"),
+          h("select",{value:position,onChange:e=>setPosition(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!etagere},
+            h("option",{value:""},"-- Pos --"),...positionsOpts.map(p=>h("option",{key:p,value:p},p)))
+        )
       ),
       (zone||allee||rack||etagere||position)&&h("div",{style:{marginTop:8}},h(EmplacementBadge,{zone,allee,rack,etagere,position}))
     ),
@@ -1888,12 +1926,12 @@ function PaletteModal({existingCount,zones,onSave,onClose}){
     photoPos&&h("img",{src:photoPos,style:{width:"100%",borderRadius:10,maxHeight:120,objectFit:"cover",marginBottom:14}}),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
       h("button",{onClick:onClose,style:BS},"Annuler"),
-      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}onSave({id:palId,items:items.filter(x=>x.nom),photos,zone,allee,rack,etagere,position,photoPos,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock"});},style:BB},"Creer la palette")
+      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}onSave({id:palId,items:items.filter(x=>x.nom),photos,zone,allee,rack,etagere,position,photoPos,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock",qrData:genQRData()});},style:BB},"Creer la palette")
     )
   );
 }
 
-function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF}){
+function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,currentUser}){
   const[palettes,setPalettes]=useState([]);
   const[search,setSearch]=useState("");
   const[modal,setModal]=useState(null);
@@ -1936,6 +1974,13 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF}){
         })
       ),
       h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}},
+          pal.createdBy&&h("div",{style:{background:"#f5f5f7",borderRadius:8,padding:"8px 10px"}},h("div",{style:{fontSize:9,fontWeight:700,color:S.gray,textTransform:"uppercase"}},"Cree par"),h("div",{style:{fontSize:13,fontWeight:600,marginTop:2}},pal.createdBy)),
+          pal.provenance&&h("div",{style:{background:"#e8f0fe",borderRadius:8,padding:"8px 10px"}},h("div",{style:{fontSize:9,fontWeight:700,color:S.blue,textTransform:"uppercase"}},"Provenance"),h("div",{style:{fontSize:13,fontWeight:600,marginTop:2,color:S.blue}},pal.provenance)),
+          pal.destination&&h("div",{style:{background:"#e6fff0",borderRadius:8,padding:"8px 10px",gridColumn:"1/-1"}},h("div",{style:{fontSize:9,fontWeight:700,color:S.green,textTransform:"uppercase"}},"Destination"),h("div",{style:{fontSize:13,fontWeight:600,marginTop:2,color:S.green}},pal.destination))
+        )
+      ),
+      h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
         h("div",{style:{fontSize:14,fontWeight:700,marginBottom:10}},"Contenu ("+pal.items?.length+" articles)"),
         pal.items?.map((item,i)=>h("div",{key:i,style:{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:i<pal.items.length-1?"1px solid "+S.bg:"none",fontSize:13}},
           h("span",{style:{fontWeight:600}},item.nom),
@@ -1949,6 +1994,10 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF}){
       pal.photoPos&&h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
         h("div",{style:{fontSize:14,fontWeight:700,marginBottom:8}},"Photo de l'emplacement"),
         h("img",{src:pal.photoPos,onClick:()=>setZoomImg(pal.photoPos),style:{width:"100%",borderRadius:10,maxHeight:180,objectFit:"cover",cursor:"zoom-in"}})
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},
+        h("button",{onClick:()=>generatePalettePDF(pal,cfg),style:{...BP,background:"#2c3e50"}},"📄 Fiche PDF"),
+        h("button",{onClick:()=>setModal({t:"qrPal",pal}),style:{...BB}},"📱 QR Code")
       ),
       isAdmin&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
         h("button",{onClick:()=>deletePalette(pal._id),style:{...BS,color:S.danger}},"Supprimer"),
@@ -1999,8 +2048,23 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF}){
         )
       )),
     modal&&h("div",{},
-      modal.t==="newPal"&&h(PaletteModal,{existingCount:palettes.length,zones:[],onSave:savePalette,onClose:()=>setModal(null)}),
-      modal.t==="editPal"&&h(PaletteModal,{existingCount:palettes.length,zones:[],onSave:(data)=>updatePalette(modal.pal._id,data),onClose:()=>setModal(null)})
+      modal.t==="qrPal"&&h(Modal,{onClose:()=>setModal(null)},
+        h("div",{style:{textAlign:"center",padding:"20px 10px"}},
+          h("div",{style:{fontSize:14,fontWeight:700,marginBottom:4}},modal.pal?.id),
+          h("div",{style:{background:"#f5f5f5",borderRadius:12,padding:"24px",margin:"10px 0",display:"inline-block"}},
+            h("div",{style:{width:200,height:200,background:"#fff",border:"2px solid #000",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}},
+              h("div",{style:{fontSize:14,fontWeight:900,letterSpacing:2,color:"#000"}},modal.pal?.id),
+              h("div",{style:{fontSize:10,color:"#666",textAlign:"center",padding:"0 10px"}},modal.pal?.items?.slice(0,3).map(i=>i.nom).join(", ")),
+              h("div",{style:{fontSize:9,color:"#888"}},modal.pal?.zone?"Zone "+modal.pal.zone:"")
+            )
+          ),
+          h("div",{style:{fontSize:11,color:S.gray,marginBottom:14}},"Scannez avec l'app pour voir les details"),
+          h("button",{onClick:()=>generatePalettePDF(modal.pal,cfg),style:BP},"Generer Fiche PDF"),
+          h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:8}},"Fermer")
+        )
+      ),
+      modal.t==="newPal"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:savePalette,onClose:()=>setModal(null)}),
+      modal.t==="editPal"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:(data)=>updatePalette(modal.pal._id,data),onClose:()=>setModal(null)})
     )
   );
 }
@@ -2087,13 +2151,13 @@ function LoginScreen({cfg,userAccounts,adminPin,employes,onLogin}){
 }
 
 // ── ADD USER MODAL ────────────────────────────────────────────────────────
-function AddUserModal({onSave,onClose}){
-  const[name,setName]=useState("");const[pin,setPin]=useState("");const[role,setRole]=useState("user");const[avatar,setAvatar]=useState("👤");
+function AddUserModal({existing,onSave,onClose}){
+  const[name,setName]=useState(existing?.name||"");const[pin,setPin]=useState(existing?.pin||"");const[role,setRole]=useState(existing?.role||"user");const[avatar,setAvatar]=useState(existing?.avatar||"👤");
   const avatars=["👤","👨","👩","👨‍✈️","👩‍✈️","🧑‍🔧","👷","🧑‍💼","🧑‍🦱","🧑‍🦰"];
   return h(Modal,{onClose},
     h("div",{style:{background:"linear-gradient(135deg,#007aff,#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
-      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"NOUVEAU"),
-      h("div",{style:{fontSize:20,fontWeight:900}},"Creer un compte")
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},existing?"MODIFIER":"NOUVEAU"),
+      h("div",{style:{fontSize:20,fontWeight:900}},existing?"Modifier le compte":"Creer un compte")
     ),
     FL("Avatar",true),
     h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
@@ -2152,6 +2216,205 @@ function RackVisual({palettes,onSelectPalette}){
       )
     ))
   );
+}
+
+
+// ── WAREHOUSE CONFIG PANEL ────────────────────────────────────────────────
+function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
+  const[zones,setZones]=useState(warehouseConfig?.zones||[]);
+  const[editIdx,setEditIdx]=useState(null);
+  const[form,setForm]=useState({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});
+
+  const addZone=()=>{
+    if(!form.id||!form.nom){showT("ID et nom requis");return;}
+    if(editIdx!==null){const nz=[...zones];nz[editIdx]=form;setZones(nz);setEditIdx(null);}
+    else setZones(p=>[...p,form]);
+    setForm({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});
+  };
+
+  const posStr=p=>Array.isArray(p)?p.join(","):p||"G,M,D";
+
+  return h("div",{},
+    h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration entrepot"),
+    h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:S.blue}},
+      "Definissez ici la structure de votre entrepot. Les utilisateurs choisiront via menus deroulants."
+    ),
+    // Existing zones
+    zones.map((z,i)=>h("div",{key:i,style:{background:S.white,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}},
+        h("div",{},
+          h("div",{style:{fontSize:14,fontWeight:700}},z.nom||"Zone "+z.id),
+          h("div",{style:{fontSize:12,color:S.gray,marginTop:4}},
+            z.allees+" allee(s) · "+z.racks+" rack(s) · "+z.etages+" etage(s)"
+          ),
+          h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},"Positions: "+posStr(z.positions))
+        ),
+        h("div",{style:{display:"flex",gap:8}},
+          h("button",{onClick:()=>{setForm({...z});setEditIdx(i);},style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:8,padding:"5px 10px",fontSize:12,cursor:"pointer"}},"✏️"),
+          h("button",{onClick:()=>setZones(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"5px 10px",fontSize:12,cursor:"pointer"}},"🗑️")
+        )
+      )
+    )),
+    // Add/Edit zone form
+    h("div",{style:{background:"#f5f5f7",borderRadius:14,padding:"14px",marginBottom:14}},
+      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:10,color:editIdx!==null?S.orange:S.green}},editIdx!==null?"Modifier zone":"Nouvelle zone"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"ID (ex: A)"),h("input",{value:form.id,onChange:e=>setForm(p=>({...p,id:e.target.value.toUpperCase()})),style:{...IS,padding:"8px 10px",fontSize:13}})),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Nom"),h("input",{value:form.nom,onChange:e=>setForm(p=>({...p,nom:e.target.value})),placeholder:"Zone A, Frigo...",style:{...IS,padding:"8px 10px",fontSize:13}}))
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}},
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Allees"),h("input",{type:"number",min:1,max:20,value:form.allees,onChange:e=>setForm(p=>({...p,allees:parseInt(e.target.value)||1})),style:{...IS,padding:"8px 10px",fontSize:13,textAlign:"center"}})),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Racks"),h("input",{type:"number",min:1,max:20,value:form.racks,onChange:e=>setForm(p=>({...p,racks:parseInt(e.target.value)||1})),style:{...IS,padding:"8px 10px",fontSize:13,textAlign:"center"}})),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Etages"),h("input",{type:"number",min:1,max:10,value:form.etages,onChange:e=>setForm(p=>({...p,etages:parseInt(e.target.value)||1})),style:{...IS,padding:"8px 10px",fontSize:13,textAlign:"center"}}))
+      ),
+      h("div",{style:{marginBottom:8}},
+        h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Positions (separees par virgule)"),
+        h("input",{value:posStr(form.positions),onChange:e=>setForm(p=>({...p,positions:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})),placeholder:"G,M,D ou 1,2,3...",style:{...IS,padding:"8px 10px",fontSize:13}})
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        editIdx!==null&&h("button",{onClick:()=>{setEditIdx(null);setForm({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});},style:BS},"Annuler"),
+        h("button",{onClick:addZone,style:{...BP,background:editIdx!==null?S.orange:S.green}},editIdx!==null?"Modifier":"Ajouter zone")
+      )
+    ),
+    h("button",{onClick:()=>onSave({zones}),style:BP},"Sauvegarder la configuration")
+  );
+}
+
+// ── RACK 3D VISUAL ────────────────────────────────────────────────────────
+function RackVisual3D({warehouseConfig,palettes,onSelectPalette}){
+  const[selZone,setSelZone]=useState(null);
+  const zones=warehouseConfig?.zones||[];
+  const zoneObj=zones.find(z=>z.id===selZone)||zones[0];
+
+  const getPal=(z,a,r,e,p)=>palettes.find(pal=>pal.zone===z&&String(pal.allee)===String(a)&&String(pal.rack)===String(r)&&String(pal.etagere)===String(e)&&String(pal.position)===String(p));
+
+  if(!zoneObj)return h("div",{style:{padding:30,textAlign:"center",color:S.gray}},"Aucune zone configuree");
+
+  const allees=Array.from({length:zoneObj.allees},(_,i)=>String(i+1));
+  const racks=Array.from({length:zoneObj.racks},(_,i)=>String(i+1));
+  const etages=Array.from({length:zoneObj.etages},(_,i)=>String(zoneObj.etages-i));// top to bottom
+  const positions=zoneObj.positions||["G","M","D"];
+
+  const totalCells=allees.length*racks.length*etages.length*positions.length;
+  const occupied=palettes.filter(p=>p.zone===zoneObj.id).length;
+  const pct=totalCells>0?Math.round(occupied/totalCells*100):0;
+
+  return h("div",{},
+    // Zone selector
+    zones.length>1&&h("div",{style:{display:"flex",gap:8,marginBottom:12,overflowX:"auto"}},
+      zones.map(z=>h("button",{key:z.id,onClick:()=>setSelZone(z.id),
+        style:{flex:"none",padding:"8px 16px",borderRadius:20,fontSize:12,fontWeight:600,
+          border:"1.5px solid "+(selZone===z.id||(!selZone&&zones[0]===z)?S.blue:S.border),
+          background:selZone===z.id||(!selZone&&zones[0]===z)?"#e8f0fe":S.white,
+          color:selZone===z.id||(!selZone&&zones[0]===z)?S.blue:S.dark,cursor:"pointer"}},z.nom||"Zone "+z.id)
+      )
+    ),
+    // Header stats
+    h("div",{style:{background:"#1c1c1e",borderRadius:14,padding:"14px 16px",marginBottom:14,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h("div",{},
+        h("div",{style:{fontSize:16,fontWeight:800,color:"#fff"}},(zoneObj.nom||"Zone "+zoneObj.id)),
+        h("div",{style:{fontSize:12,color:"rgba(255,255,255,.6)",marginTop:2}},occupied+" / "+totalCells+" emplacements occupes")
+      ),
+      h("div",{style:{textAlign:"right"}},
+        h("div",{style:{fontSize:28,fontWeight:900,color:pct>80?"#ff3b30":pct>50?"#ff9500":"#34c759"}},pct+"%"),
+        h("div",{style:{fontSize:10,color:"rgba(255,255,255,.5)"}},"Taux remplissage")
+      )
+    ),
+    // Rack visual
+    h("div",{style:{overflowX:"auto"}},
+      h("div",{style:{minWidth:Math.max(340,allees.length*racks.length*80),padding:"0 4px"}},
+        allees.map(a=>h("div",{key:a,style:{marginBottom:20}},
+          h("div",{style:{fontSize:11,fontWeight:800,color:S.gray,marginBottom:6,display:"flex",alignItems:"center",gap:6}},
+            h("div",{style:{width:24,height:24,borderRadius:6,background:"#2c3e50",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800}},"A"+a),
+            "Allee "+a
+          ),
+          h("div",{style:{display:"flex",gap:8}},
+            racks.map(r=>h("div",{key:r,style:{flex:1,background:"#f0f0f0",borderRadius:10,padding:"6px",minWidth:60}},
+              h("div",{style:{fontSize:9,fontWeight:700,color:"#666",textAlign:"center",marginBottom:4,background:"#2c3e50",color:"#fff",borderRadius:4,padding:"2px"}},"Rack "+r),
+              etages.map(e=>h("div",{key:e,style:{display:"flex",gap:2,marginBottom:2,alignItems:"center"}},
+                h("div",{style:{fontSize:8,fontWeight:700,color:"#888",width:12,textAlign:"center",flexShrink:0}},"E"+e),
+                positions.map(p=>{
+                  const pal=getPal(zoneObj.id,a,r,e,p);
+                  return h("div",{key:p,onClick:()=>pal&&onSelectPalette(pal),
+                    style:{flex:1,height:28,borderRadius:4,background:pal?"#e74c3c":"#2ecc71",
+                      border:"1px solid "+(pal?"#c0392b":"#27ae60"),cursor:pal?"pointer":"default",
+                      display:"flex",alignItems:"center",justifyContent:"center",position:"relative"},
+                    title:pal?pal.id+" - "+pal.items?.map(i=>i.nom).join(", "):"Libre"},
+                    pal&&h("div",{style:{fontSize:6,fontWeight:700,color:"#fff",textAlign:"center",lineHeight:1.2,padding:"1px",overflow:"hidden"}},pal.id.replace("PAL-","")),
+                    !pal&&h("div",{style:{fontSize:8,color:"#fff",fontWeight:600}},p)
+                  );
+                })
+              ))
+            ))
+          )
+        ))
+      )
+    ),
+    // Legend
+    h("div",{style:{display:"flex",gap:12,marginTop:10,justifyContent:"center"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:4}},h("div",{style:{width:16,height:16,background:"#2ecc71",borderRadius:3,border:"1px solid #27ae60"}}),h("span",{style:{fontSize:11,color:S.gray}},"Libre")),
+      h("div",{style:{display:"flex",alignItems:"center",gap:4}},h("div",{style:{width:16,height:16,background:"#e74c3c",borderRadius:3,border:"1px solid #c0392b"}}),h("span",{style:{fontSize:11,color:S.gray}},"Occupe"))
+    )
+  );
+}
+
+// ── QR CODE + PDF PALETTE ─────────────────────────────────────────────────
+function generatePalettePDF(pal,cfg){
+  try{
+    const{jsPDF}=window.jspdf;const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const W=210,H=297;
+    // Header
+    doc.setFillColor(44,62,80);doc.rect(0,0,W,40,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(28);doc.setFont("helvetica","bold");
+    doc.text(pal.id,W/2,22,{align:"center"});
+    doc.setFontSize(10);doc.setFont("helvetica","normal");
+    doc.text((cfg.nomSite||"LUX AIRPORT")+" - Gestion Entrepot",W/2,32,{align:"center"});
+    // QR code zone (large, scannable at 6m)
+    doc.setFillColor(255,255,255);doc.rect(20,50,80,80,"F");
+    doc.setDrawColor(44,62,80);doc.setLineWidth(2);doc.rect(20,50,80,80,"S");
+    doc.setFontSize(8);doc.setTextColor(100,100,100);doc.text("QR CODE",60,138,{align:"center"});
+    // Simulate QR with ID text (large)
+    doc.setFillColor(0,0,0);
+    doc.setFontSize(18);doc.setFont("helvetica","bold");doc.setTextColor(0,0,0);
+    doc.text(pal.id,60,92,{align:"center"});
+    doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(80,80,80);
+    doc.text("Scanner pour details",60,100,{align:"center"});
+    // Info box
+    doc.setFillColor(245,245,247);doc.rect(110,50,80,80,"F");
+    doc.setFontSize(9);doc.setFont("helvetica","bold");doc.setTextColor(44,62,80);
+    doc.text("INFORMATIONS",150,60,{align:"center"});
+    doc.setFont("helvetica","normal");doc.setTextColor(60,60,60);
+    let iy=68;
+    const addInfo=(l,v)=>{if(!v)return;doc.setFont("helvetica","bold");doc.text(l+":",112,iy);doc.setFont("helvetica","normal");doc.text(String(v).substring(0,22),150,iy);iy+=8;};
+    addInfo("Cree le",pal.createdAt?.split(" ")[0]||"");
+    addInfo("Par",pal.createdBy||"");
+    addInfo("Provenance",pal.provenance||"");
+    addInfo("Destination",pal.destination||"");
+    // Emplacement
+    if(pal.zone){iy+=2;doc.setFont("helvetica","bold");doc.setTextColor(52,152,219);doc.text("EMPLACEMENT",112,iy);iy+=7;
+      doc.setFont("helvetica","normal");doc.setTextColor(60,60,60);
+      doc.text("Zone: "+pal.zone+(pal.allee?" Allee: "+pal.allee:""),112,iy);iy+=7;
+      if(pal.rack)doc.text("Rack: "+pal.rack+(pal.etagere?" Etage: "+pal.etagere:"")+(pal.position?" Pos: "+pal.position:""),112,iy);
+    }
+    // Content table
+    doc.setFillColor(44,62,80);doc.rect(0,145,W,10,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","bold");
+    doc.text("CONTENU DE LA PALETTE",W/2,152,{align:"center"});
+    let cy=162;
+    (pal.items||[]).forEach((item,i)=>{
+      if(cy>H-20)return;
+      if(i%2===0){doc.setFillColor(248,248,248);doc.rect(10,cy-5,W-20,10,"F");}
+      doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(40,40,40);
+      doc.text((i+1)+". "+item.nom.substring(0,50),15,cy);
+      if(item.qte)doc.text("x"+item.qte,W-20,cy,{align:"right"});
+      cy+=10;
+    });
+    // Footer
+    doc.setFillColor(44,62,80);doc.rect(0,H-15,W,15,"F");
+    doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(200,200,200);
+    doc.text(pal.id+" - "+new Date().toLocaleDateString("fr-FR"),W/2,H-6,{align:"center"});
+    doc.save(pal.id+"_fiche.pdf");
+  }catch(e){alert("Erreur PDF: "+e.message);}
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App,null));
