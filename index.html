@@ -262,7 +262,7 @@ function CamScanner({onDetect}){
   );
 }
 
-function AppHeader({cfg,lowStock,syncing,isAdmin,isOnline,darkMode,onDarkToggle,onScan,onGlobalSearch,onAlerts,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}){
+function AppHeader({cfg,lowStock,syncing,isAdmin,isOnline,darkMode,onDarkToggle,onScan,onGlobalSearch,onAlerts,onLogout,currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}){
   const bgColor=cfg.couleur||"#c8102e";
   const visibleNavs=[...navConfig].filter(n=>n.visible).sort((a,b)=>a.order-b.order);
   return h("div",{style:{background:"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")",paddingTop:"env(safe-area-inset-top,0)",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 12px rgba(0,0,0,.3)"}},
@@ -294,19 +294,11 @@ function AppHeader({cfg,lowStock,syncing,isAdmin,isOnline,darkMode,onDarkToggle,
         (lowStock>0||alertCount>0)&&h("button",{onClick:onAlerts,style:{background:"rgba(255,200,0,.25)",border:"none",borderRadius:20,padding:"4px 9px",color:"#ffe",fontSize:11,fontWeight:700,cursor:"pointer"}},"⚠️"+(lowStock+alertCount)),
         syncing&&h("span",{style:{color:"rgba(255,255,255,.7)",fontSize:11}},"🔄"),
         !isOnline&&h("span",{style:{background:"rgba(255,100,0,.4)",borderRadius:10,padding:"2px 7px",fontSize:9,color:"#fff"}},"📵"),
-        h("button",{onClick:onDarkToggle,style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:20,padding:"6px 8px",color:"#fff",fontSize:13,cursor:"pointer"}},darkMode?"☀️":"🌙"),
+        h("button",{onClick:onLogout,style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:20,padding:"5px 10px",color:"#fff",fontSize:10,fontWeight:600,cursor:"pointer",maxWidth:70,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},currentUser?.name?.split(" ")[0]||"👤"),
         h("button",{onClick:onGlobalSearch,style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:20,padding:"6px 10px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}},"🔍"),
         h("button",{onClick:onScan,style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:20,padding:"6px 10px",color:"#fff",fontSize:12,fontWeight:700,cursor:"pointer"}},"📷")
       )
     ),
-    h("div",{style:{display:"flex",gap:6,overflowX:"auto",padding:"4px 14px 8px",WebkitOverflowScrolling:"touch"}},
-      visibleNavs.slice(0,6).map(n=>h("button",{key:n.id,onClick:()=>setPage(n.id),
-        style:{flex:"none",padding:"5px 10px",borderRadius:20,fontSize:10,fontWeight:page===n.id?700:500,
-          border:"1.5px solid "+(page===n.id?"rgba(255,255,255,.8)":"rgba(255,255,255,.2)"),
-          background:page===n.id?"rgba(255,255,255,.25)":"transparent",color:"#fff",cursor:"pointer"}},
-        n.icon+" "+n.label
-      ))
-    )
   );
 }
 
@@ -397,6 +389,8 @@ function App(){
   const[signalements,setSignalements]=useState([]);
   const[lang,setLang]=useState("fr");
   const[menuOpen,setMenuOpen]=useState(false);
+  const[currentUser,setCurrentUser]=useState(null);// {name, pin, role: "admin"|"user"}
+  const[userAccounts,setUserAccounts]=useState([]);// {name, pin, role, avatar}
   const[zoomPhoto,setZoomPhoto]=useState(null);
   const[navConfig,setNavConfig]=useState([
     {id:"accueil",icon:"🏠",label:"Accueil",visible:true,order:0},
@@ -411,6 +405,8 @@ function App(){
     {id:"vehicules",icon:"🚗",label:"Vehicules",visible:true,order:9},
   ]);
   const saveNavConfig=async(nc)=>{setNavConfig(nc);await db.collection("params").doc("config").set({navConfig:nc},{merge:true});showT("Menu configure!");};
+  const saveUserAccounts=async(accounts)=>{setUserAccounts(accounts);await db.collection("params").doc("config").set({userAccounts:accounts},{merge:true});showT("Comptes mis a jour!");};
+  const activeUserName=currentUser?.name||"";
   const saveLang=async(l)=>{setLang(l);await db.collection("params").doc("config").set({lang:l},{merge:true});showT("Langue changee!");};
   const T=(fr,en,de)=>lang==="en"?en:lang==="de"?de:fr;
   const[toast,setToast]=useState("");
@@ -449,7 +445,7 @@ function App(){
         const gd={};garSnap.forEach(x=>gd[x.id]=x.data());setGaranties(gd);
         setKits(kitsSnap.docs.map(d=>({...d.data(),_id:d.id})));
         if(toolsSnap.docs.length>0)setTools(toolsSnap.docs.map(d=>({...d.data(),id:d.id})));
-        if(parSnap.exists){const p=parSnap.data();if(p.employes)setEmployes(p.employes);if(p.adminPin)setAdminPin(p.adminPin);if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));if(p.lang)setLang(p.lang);if(p.navConfig)setNavConfig(p.navConfig);}
+        if(parSnap.exists){const p=parSnap.data();if(p.employes)setEmployes(p.employes);if(p.adminPin)setAdminPin(p.adminPin);if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));if(p.lang)setLang(p.lang);if(p.navConfig)setNavConfig(p.navConfig);if(p.userAccounts)setUserAccounts(p.userAccounts);}
       }catch(e){console.error(e);}
       setReady(true);
     })();
@@ -570,8 +566,11 @@ function App(){
 
   if(!ready)return h(Spinner,null);
 
+  // Show login screen if no user logged in
+  if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,employes,onLogin:(user)=>setCurrentUser(user)});
+
   return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
-    h(AppHeader,{cfg,lowStock:lowS.length,syncing,isAdmin,isOnline,darkMode,onDarkToggle:()=>setDarkMode(d=>!d),onScan:()=>setModal({t:"scan"}),onGlobalSearch:()=>setModal({t:"globalSearch"}),onAlerts:()=>setModal({t:"alertes"}),page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}),
+    h(AppHeader,{cfg,lowStock:lowS.length,syncing,isAdmin,isOnline,darkMode,onDarkToggle:()=>setDarkMode(d=>!d),onScan:()=>setModal({t:"scan"}),onGlobalSearch:()=>setModal({t:"globalSearch"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>setCurrentUser(null),currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}),
     zoomPhoto&&h("div",{onClick:()=>setZoomPhoto(null),style:{position:"fixed",inset:0,background:"rgba(0,0,0,.95)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}},
       h("div",{style:{maxWidth:"95vw",maxHeight:"95vh"}},
         h("img",{src:zoomPhoto,style:{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}),
@@ -892,14 +891,14 @@ function App(){
     modal&&h("div",{},
       modal.t==="scan"&&h(Modal,{onClose:()=>setModal(null)},h("h2",{style:{fontSize:19,fontWeight:800,marginBottom:4}},"Scanner QR Code"),h("p",{style:{fontSize:13,color:S.gray,marginBottom:14}},"Compatible iPhone - iPad - Android"),h(CamScanner,{onDetect:scanHandle}),h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:12}},"Fermer")),
       modal.t==="insp"&&h(InspModal,{tool:modal.tool,ins:modal.ins,empr:modal.empr,employes,cfg,maint:maintenances[modal.tool?.id]||{},onSave:saveInsp,onClose:()=>setModal(null)}),
-      modal.t==="dep"&&h(DepModal,{emprunts,employes,tools,onSave:saveDepart,onClose:()=>setModal(null)}),
+      modal.t==="dep"&&h(DepModal,{emprunts,employes,tools,defaultPers:activeUserName,onSave:saveDepart,onClose:()=>setModal(null)}),
       modal.t==="retFind"&&h(RetFindModal,{emprunts,onFound:id=>{setModal(null);setTimeout(()=>openRetour(id),150);},onClose:()=>setModal(null)}),
       modal.t==="retCheck"&&h(RetCheckModal,{onOk:()=>setModal({t:"ret",empr:modal.empr,tool:modal.tool}),onClose:()=>setModal(null)}),
       modal.t==="ret"&&h(RetModal,{empr:modal.empr,tool:modal.tool,employes,onSave:saveRetour,onClose:()=>setModal(null)}),
       modal.t==="modEmp"&&h(ModEmpModal,{empr:modal.empr,employes,onSave:modEmprunt,onClose:()=>setModal(null)}),
       modal.t==="detEmp"&&h(DetEmpModal,{empr:modal.empr,tool:modal.tool,isAdmin,cfg,onClose:()=>setModal(null),onPDF:(e,t)=>{genPDF("detail",{details:[["Outil",e.toolId],["Personne",e.personne],["Depart",e.dateDepart],["Etat depart",e.etatDepart],["Note depart",e.commentaireDepart||""],["Retour",e.retour||"En cours"],["Etat retour",e.etatRetour||""],["Note retour",e.commentaireRetour||""]]},cfg);}}),
-      modal.t==="take"&&h(TakeModal,{item:modal.item,cat:modal.cat,employes,onSave:takeStock,onClose:()=>setModal(null)}),
-      modal.t==="add"&&h(AddModal,{item:modal.item,cat:modal.cat,employes,onSave:addStock,onClose:()=>setModal(null)}),
+      modal.t==="take"&&h(TakeModal,{item:modal.item,cat:modal.cat,employes,defaultPers:activeUserName,onSave:takeStock,onClose:()=>setModal(null)}),
+      modal.t==="add"&&h(AddModal,{item:modal.item,cat:modal.cat,employes,defaultPers:activeUserName,onSave:addStock,onClose:()=>setModal(null)}),
       modal.t==="adj"&&h(AdjModal,{item:modal.item,cat:modal.cat,onSave:adjStock,onClose:()=>setModal(null)}),
       modal.t==="csv"&&h(CSVModal,{cat:modal.cat,onImport:importCSV,onClose:()=>setModal(null)}),
       modal.t==="kit"&&h(KitModal,{kit:modal.kit,tools,emprunts,isEmp,onSave:saveKit,onClose:()=>setModal(null)}),
@@ -934,6 +933,7 @@ function App(){
           h("button",{onClick:()=>setModal(null),style:BP},"Fermer")
         )
       ),
+      modal.t==="addUser"&&h(AddUserModal,{onSave:(u)=>{saveUserAccounts([...(userAccounts||[]),u]);setModal(null);},onClose:()=>setModal(null)}),
       modal.t==="planningMaint"&&h(PlanningMaintenanceModal,{tools,maintenances,onClose:()=>setModal(null)}),
       modal.t==="reparation"&&h(ReparationModal,{tool:modal.tool,ins:modal.ins||{},onSave:async(toolId,data)=>{setSyncing(true);const existing=inspections[toolId]||{};const repHist=[...(existing.repHistory||[]),{...data,date:now()}];await fbSet("inspections",toolId,{...existing,statut:"En reparation",reparation:data,repHistory:repHist,date:now()});setSyncing(false);setModal(null);showT("Mise en reparation enregistree!");},onRetour:async(toolId)=>{setSyncing(true);const existing=inspections[toolId]||{};await fbSet("inspections",toolId,{...existing,statut:"Disponible",date:now()});setSyncing(false);setModal(null);showT("Retour de reparation enregistre!");},onClose:()=>setModal(null)}),
       modal.t==="addTool"&&h(AddToolModal,{onSave:async(data)=>{setSyncing(true);const id=data.id.toUpperCase();await fbSet("tools",id,{...data,id});setSyncing(false);setModal(null);showT("Outil ajoute!");},onClose:()=>setModal(null)}),
@@ -946,7 +946,7 @@ function App(){
   );
 }
 
-function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig}){
+function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts}){
   const[tab,setTab]=useState("stats");
   const[emps,setEmps]=useState([...employes]);
   const[newE,setNewE]=useState("");
@@ -1119,6 +1119,22 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
       modal&&modal.t==="maintEdit"&&h(MaintModal,{toolId:modal.toolId,toolNom:modal.toolNom,maint:modal.maint,onSave:saveMaint,onClose:()=>setModal(null)})
     ),
 
+    tab==="comptes"&&h("div",{},
+      h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Comptes utilisateurs"),
+      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:S.blue}},
+        "Les employes selectionneront leur compte sur l'ecran d'accueil et entreront leur PIN a 4 chiffres."
+      ),
+      (userAccounts||[]).map((acc,i)=>h("div",{key:i,style:{background:S.white,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)",display:"flex",alignItems:"center",gap:10}},
+        h("div",{style:{width:40,height:40,borderRadius:"50%",background:acc.role==="admin"?S.red:S.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}},acc.avatar||"👤"),
+        h("div",{style:{flex:1}},
+          h("div",{style:{fontSize:14,fontWeight:700}},acc.name),
+          h("div",{style:{fontSize:11,color:S.gray}},acc.role==="admin"?"Admin":"Utilisateur"+" · PIN: "+acc.pin)
+        ),
+        h("button",{onClick:()=>{if(confirm("Supprimer "+acc.name+"?"))saveUserAccounts((userAccounts||[]).filter((_,j)=>j!==i));},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"🗑️")
+      )),
+      h("button",{onClick:()=>setModal({t:"addUser"}),style:{...BP,marginTop:8}},"+Ajouter un compte")
+    ),
+
     tab==="notifs"&&h("div",{},
       h("div",{style:{background:S.white,borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
         h("div",{style:{fontSize:15,fontWeight:800,marginBottom:12}},"Checklist retour personnalisee"),
@@ -1282,8 +1298,8 @@ function InspModal({tool,ins,empr,employes,cfg,maint,onSave,onClose}){
   );
 }
 
-function DepModal({emprunts,employes,tools,onSave,onClose}){
-  const[search,setSearch]=useState("");const[sel,setSel]=useState([]);const[pers,setPers]=useState("");const[etat,setEtat]=useState("Bon");const[comm,setComm]=useState("");const[photo,setPhoto]=useState("");
+function DepModal({emprunts,employes,tools,defaultPers,onSave,onClose}){
+  const[search,setSearch]=useState("");const[sel,setSel]=useState([]);const[pers,setPers]=useState(defaultPers||"");const[etat,setEtat]=useState("Bon");const[comm,setComm]=useState("");const[photo,setPhoto]=useState("");
   let getSig=null;
   const filt=search.length>1?tools.filter(t=>!sel.includes(t.id)&&(t.id.toLowerCase().includes(search.toLowerCase())||t.nom.toLowerCase().includes(search.toLowerCase()))).slice(0,5):[];
   const tog=id=>setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
@@ -1425,8 +1441,8 @@ function DetEmpModal({empr,tool,isAdmin,cfg,onClose,onPDF}){
   );
 }
 
-function TakeModal({item,cat,employes,onSave,onClose}){
-  const[pers,setPers]=useState("");const[qte,setQte]=useState(1);const[code,setCode]=useState("");const[comm,setComm]=useState("");
+function TakeModal({item,cat,employes,defaultPers,onSave,onClose}){
+  const[pers,setPers]=useState(defaultPers||"");const[qte,setQte]=useState(1);const[code,setCode]=useState("");const[comm,setComm]=useState("");
   const low=item.stock<=item.min;
   return h(Modal,{onClose},
     h("div",{style:{background:low?"linear-gradient(135deg,#ff3b30,#c0392b)":"linear-gradient(135deg,"+S.red+","+darken(S.red)+")",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
@@ -1455,8 +1471,8 @@ function TakeModal({item,cat,employes,onSave,onClose}){
   );
 }
 
-function AddModal({item,cat,employes,onSave,onClose}){
-  const[pers,setPers]=useState("");const[qte,setQte]=useState(1);const[comm,setComm]=useState("");
+function AddModal({item,cat,employes,defaultPers,onSave,onClose}){
+  const[pers,setPers]=useState(defaultPers||"");const[qte,setQte]=useState(1);const[comm,setComm]=useState("");
   return h(Modal,{onClose},
     h("div",{style:{background:"linear-gradient(135deg,#34c759,#27ae60)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
       h("div",{style:{fontSize:10,fontWeight:700,opacity:.8,textTransform:"uppercase",marginBottom:4}},item.id),
@@ -1989,6 +2005,154 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF}){
   );
 }
 
+
+
+// ── LOGIN SCREEN ──────────────────────────────────────────────────────────
+function LoginScreen({cfg,userAccounts,adminPin,employes,onLogin}){
+  const[sel,setSel]=useState(null);
+  const[pin,setPin]=useState("");
+  const[err,setErr]=useState(false);
+  const bgColor=cfg.couleur||"#c8102e";
+
+  // Build full list: custom accounts + fallback employes
+  const accounts=userAccounts&&userAccounts.length>0
+    ?userAccounts
+    :employes.map(e=>({name:e,pin:"0000",role:"user",avatar:"👤"}));
+
+  const press=d=>{
+    const np=pin+d;setPin(np);
+    if(np.length===4){
+      // Check pin
+      const acc=accounts.find(a=>a.name===sel);
+      const isAdm=np===adminPin;
+      if(isAdm){setErr(false);onLogin({name:sel||"Admin",pin:np,role:"admin"});return;}
+      if(acc&&np===acc.pin){setErr(false);onLogin({...acc});return;}
+      setErr(true);setTimeout(()=>{setPin("");setErr(false);},600);
+    }
+  };
+
+  if(!sel)return h("div",{style:{minHeight:"100vh",background:"linear-gradient(180deg,"+bgColor+" 0%,"+bgColor+"dd 40%,#f2f2f7 40%)",display:"flex",flexDirection:"column",alignItems:"center",padding:"0 20px 40px"}},
+    h("div",{style:{marginTop:50,marginBottom:30,textAlign:"center"}},
+      cfg.logoUrl
+        ?h("img",{src:cfg.logoUrl,style:{width:80,height:80,borderRadius:18,objectFit:"cover",boxShadow:"0 4px 20px rgba(0,0,0,.3)",marginBottom:12}})
+        :h("svg",{width:80,height:80,viewBox:"0 0 200 200",style:{marginBottom:12}},
+          h("rect",{width:200,height:200,rx:28,fill:"rgba(255,255,255,.2)"}),
+          h("rect",{x:22,y:28,width:26,height:90,rx:7,fill:"white"}),h("rect",{x:22,y:100,width:52,height:18,rx:7,fill:"white"}),
+          h("rect",{x:76,y:28,width:24,height:80,rx:7,fill:"white"}),h("rect",{x:76,y:108,width:50,height:18,rx:7,fill:"white"}),
+          h("rect",{x:102,y:28,width:24,height:80,rx:7,fill:"white"}),
+          h("polygon",{points:"138,28 178,85 158,85 128,42",fill:"rgba(255,255,255,.7)"}),
+          h("polygon",{points:"138,90 178,85 158,142 128,105",fill:"rgba(255,255,255,.4)"})
+        ),
+      h("div",{style:{color:"#fff",fontWeight:900,fontSize:24,letterSpacing:-.5}},cfg.nomSite||"LUX AIRPORT"),
+      h("div",{style:{color:"rgba(255,255,255,.7)",fontSize:13,marginTop:4}},cfg.sousTitre||"Gestion Airside")
+    ),
+    h("div",{style:{background:"#fff",borderRadius:24,padding:"20px",width:"100%",maxWidth:440,boxShadow:"0 8px 40px rgba(0,0,0,.15)"}},
+      h("div",{style:{fontSize:16,fontWeight:800,marginBottom:16,textAlign:"center"}},"Qui etes-vous ?"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+        accounts.map((acc,i)=>h("button",{key:i,onClick:()=>setSel(acc.name),
+          style:{background:"#f5f5f7",border:"2px solid transparent",borderRadius:16,padding:"16px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
+          h("div",{style:{width:48,height:48,borderRadius:"50%",background:acc.role==="admin"?"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")":"linear-gradient(135deg,#007aff,#005ecb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}},acc.avatar||"👤"),
+          h("div",{style:{fontSize:12,fontWeight:700,textAlign:"center",lineHeight:1.2}},acc.name)
+        ))
+      )
+    )
+  );
+
+  return h("div",{style:{minHeight:"100vh",background:"linear-gradient(180deg,"+bgColor+" 0%,"+bgColor+"dd 45%,#f2f2f7 45%)",display:"flex",flexDirection:"column",alignItems:"center",padding:"40px 20px"}},
+    h("div",{style:{textAlign:"center",marginBottom:20}},
+      cfg.logoUrl
+        ?h("img",{src:cfg.logoUrl,style:{width:60,height:60,borderRadius:14,objectFit:"cover",marginBottom:8}})
+        :h("div",{style:{fontSize:50,marginBottom:8}},"✈️"),
+      h("div",{style:{color:"#fff",fontWeight:900,fontSize:18}},cfg.nomSite||"LUX AIRPORT")
+    ),
+    h("div",{style:{background:"#fff",borderRadius:24,padding:"24px 20px",width:"100%",maxWidth:340,boxShadow:"0 8px 40px rgba(0,0,0,.15)"}},
+      h("button",{onClick:()=>{setSel(null);setPin("");},style:{background:"none",border:"none",color:S.gray,fontSize:12,cursor:"pointer",marginBottom:12,display:"flex",alignItems:"center",gap:4}},"← Retour"),
+      h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:20}},
+        h("div",{style:{width:56,height:56,borderRadius:"50%",background:accounts.find(a=>a.name===sel)?.role==="admin"?"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")":"linear-gradient(135deg,#007aff,#005ecb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,marginBottom:8}},accounts.find(a=>a.name===sel)?.avatar||"👤"),
+        h("div",{style:{fontSize:16,fontWeight:800}},sel),
+        h("div",{style:{fontSize:13,color:S.gray}},"Entrez votre PIN")
+      ),
+      h("div",{className:err?"shake":"",style:{display:"flex",justifyContent:"center",gap:12,marginBottom:24}},
+        [0,1,2,3].map(i=>h("div",{key:i,style:{width:14,height:14,borderRadius:"50%",background:i<pin.length?bgColor:S.border,transition:"background .15s"}}))
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}},
+        [1,2,3,4,5,6,7,8,9,"",0,"<"].map((d,i)=>
+          h("button",{key:i,onClick:()=>d===""?null:d==="<"?setPin(p=>p.slice(0,-1)):press(String(d)),
+            style:{height:58,borderRadius:14,border:"none",background:d===""?"transparent":"#f5f5f7",fontSize:20,fontWeight:600,cursor:d===""?"default":"pointer",boxShadow:d===""?"none":"0 1px 3px rgba(0,0,0,.08)"}},
+            d===""?"":d==="<"?"⌫":d)
+        )
+      )
+    )
+  );
+}
+
+// ── ADD USER MODAL ────────────────────────────────────────────────────────
+function AddUserModal({onSave,onClose}){
+  const[name,setName]=useState("");const[pin,setPin]=useState("");const[role,setRole]=useState("user");const[avatar,setAvatar]=useState("👤");
+  const avatars=["👤","👨","👩","👨‍✈️","👩‍✈️","🧑‍🔧","👷","🧑‍💼","🧑‍🦱","🧑‍🦰"];
+  return h(Modal,{onClose},
+    h("div",{style:{background:"linear-gradient(135deg,#007aff,#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"NOUVEAU"),
+      h("div",{style:{fontSize:20,fontWeight:900}},"Creer un compte")
+    ),
+    FL("Avatar",true),
+    h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
+      avatars.map(av=>h("button",{key:av,onClick:()=>setAvatar(av),style:{width:42,height:42,borderRadius:12,border:"2px solid "+(avatar===av?"#007aff":S.border),background:avatar===av?"#e8f0fe":"#f5f5f7",fontSize:22,cursor:"pointer"}},av))
+    ),
+    FL("Nom complet *",true),h("input",{value:name,onChange:e=>setName(e.target.value),placeholder:"Prenom Nom...",style:IS}),
+    FL("PIN (4 chiffres) *",true),h("input",{value:pin,onChange:e=>setPin(e.target.value.replace(/\D/g,"").substring(0,4)),placeholder:"0000",style:{...IS,letterSpacing:8,fontSize:20,textAlign:"center"},maxLength:4}),
+    FL("Role",true),
+    h("div",{style:{display:"flex",background:S.border,borderRadius:12,padding:3,marginBottom:4}},
+      [["user","Utilisateur"],["admin","Administrateur"]].map(([r,l])=>
+        h("button",{key:r,onClick:()=>setRole(r),style:{flex:1,padding:"9px",borderRadius:10,border:"none",background:role===r?S.white:"transparent",color:role===r?S.dark:S.gray,fontWeight:role===r?700:500,fontSize:13,cursor:"pointer"}},l)
+      )
+    ),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+      h("button",{onClick:onClose,style:BS},"Annuler"),
+      h("button",{onClick:()=>{if(!name||pin.length!==4){alert("Nom et PIN requis");return;}onSave({name,pin,role,avatar});},style:BB},"Creer")
+    )
+  );
+}
+
+// ── RACK VISUAL ───────────────────────────────────────────────────────────
+function RackVisual({palettes,onSelectPalette}){
+  const zones=["A","B","C","D"];const allees=[1,2,3,4];const racks=[1,2,3];
+  const getPal=(z,a,r,e,p)=>palettes.find(pal=>pal.zone===z&&String(pal.allee)===String(a)&&String(pal.rack)===String(r)&&String(pal.etagere)===String(e)&&String(pal.position)===String(p));
+  return h("div",{style:{background:S.white,borderRadius:16,padding:"16px",boxShadow:"0 2px 8px rgba(0,0,0,.08)",marginBottom:14}},
+    h("div",{style:{fontSize:15,fontWeight:800,marginBottom:14}},"Plan de l'entrepot"),
+    h("div",{style:{display:"flex",gap:6,marginBottom:10,overflowX:"auto"}},
+      [["#34c759","Libre"],["#ff9500","Occupe"],["#1c1c1e","Structure"]].map(([c,l])=>
+        h("div",{key:l,style:{display:"flex",alignItems:"center",gap:4}},
+          h("div",{style:{width:12,height:12,background:c,borderRadius:2}}),
+          h("span",{style:{fontSize:10,color:S.gray}},l)
+        )
+      )
+    ),
+    zones.map(z=>h("div",{key:z,style:{marginBottom:16}},
+      h("div",{style:{fontSize:12,fontWeight:800,color:S.gray,marginBottom:6,display:"flex",alignItems:"center",gap:6}},
+        h("div",{style:{width:28,height:28,borderRadius:8,background:"#1c1c1e",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}},"Z"+z),
+        "Zone "+z
+      ),
+      h("div",{style:{display:"flex",gap:4}},
+        allees.map(a=>h("div",{key:a,style:{flex:1}},
+          h("div",{style:{fontSize:9,color:S.gray,textAlign:"center",marginBottom:3}},"A"+a),
+          racks.map(r=>h("div",{key:r,style:{display:"flex",flexDirection:"column",gap:2,marginBottom:2}},
+            [1,2,3].map(e=>{
+              const pos=[1,2].map(p=>{const pal=getPal(z,a,r,e,p);return{pal,occupied:!!pal};});
+              return h("div",{key:e,style:{display:"flex",gap:1}},
+                pos.map(({pal,occupied},pi)=>h("div",{key:pi,onClick:()=>pal&&onSelectPalette(pal),
+                  style:{flex:1,height:16,borderRadius:3,background:occupied?"#ff9500":"#e8f5e9",border:"1px solid "+(occupied?"#e67e22":"#a5d6a7"),cursor:occupied?"pointer":"default",position:"relative"},
+                  title:pal?pal.id:"Libre"},
+                  occupied&&h("div",{style:{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:6,fontWeight:700,color:"#fff",overflow:"hidden"}},pal.id.replace("PAL-",""))
+                ))
+              );
+            })
+          ))
+        ))
+      )
+    ))
+  );
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App,null));
 </script>
