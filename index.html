@@ -1,45 +1,4 @@
-<!DOCTYPE html>
-<html lang="fr">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="apple-mobile-web-app-title" content="Lux Airport"/>
-<meta name="theme-color" content="#c8102e"/>
-<title>Lux Airport — Gestion Airside</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f2f2f7;color:#1c1c1e;}
-::-webkit-scrollbar{display:none;}
-input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appearance:none;}
-@keyframes spin{to{transform:rotate(360deg)}}
-@keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-.shake{animation:shake .3s ease}
-.row:active{opacity:.7}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
-.fi{animation:fadeIn .2s ease}
-
-.glass{background:rgba(255,255,255,.1);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.2);}
-.pin-dot{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.2);border:2px solid rgba(255,255,255,.4);transition:all .2s;}
-.pin-dot.active{background:#fff;border-color:#fff;transform:scale(1.1);}
-.user-card{background:rgba(255,255,255,.08);border:1.5px solid rgba(255,255,255,.15);border-radius:18px;cursor:pointer;transition:all .25s;}
-.user-card:active{background:rgba(255,255,255,.18);}
-@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
-.su{animation:slideUp .3s ease}
-</style>
-</head>
-<body>
-<div id="root"></div>
 <script>
-
 window.onerror = function(msg, src, line, col, err) {
   document.getElementById('root').innerHTML =
     '<div style="padding:20px;font-family:monospace;background:#fff;color:#c00">' +
@@ -60,21 +19,7 @@ window.addEventListener('unhandledrejection', function(e) {
     '</div>';
 });
 
-// 🔥 Sécurisation Firebase
-try {
-  firebase.initializeApp({
-    apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
-    authDomain:"luxairport-airside.firebaseapp.com",
-    projectId:"luxairport-airside",
-    storageBucket:"luxairport-airside.firebasestorage.app",
-    messagingSenderId:"1073777108600",
-    appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
-  });
-} catch(e) {
-  console.log("Firebase déjà initialisé");
-}
-
-const db = firebase.firestore();
+firebase.initializeApp({
   apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
   authDomain:"luxairport-airside.firebaseapp.com",
   projectId:"luxairport-airside",
@@ -82,8 +27,8 @@ const db = firebase.firestore();
   messagingSenderId:"1073777108600",
   appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
 });
-const db=firebase.firestore();
 
+const db = firebase.firestore();
 const TOOLS_DEFAULT=[
   {id:"AS-COMM-0001",nom:"Kit TE 60-ATC/AVR + TE-YX 20/52",marque:"HILTI",type:"COFFRET",ref:"#2177313",fournisseur:"HILTI",date:"04/03/2024",emplacement:"Bureau airside"},
   {id:"AS-COMM-0002",nom:"Perforateur TE 60-ATC/AVR 220V-240V",marque:"HILTI",type:"PERFORATEUR",ref:"TE 60-ATC/AVR",fournisseur:"HILTI",date:"",emplacement:""},
