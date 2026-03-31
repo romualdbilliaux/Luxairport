@@ -716,10 +716,13 @@ function App(){
   if(!ready)return h(Spinner,null);
 
   // Show login screen if no user logged in
-  if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,employes,onLogin:(user)=>setCurrentUser(user)});
+  if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,employes,onLogin:(user)=>{
+    setCurrentUser(user);
+    if(user.role==="admin"){setIsAdmin(true);setPage("admin");}
+  }});
 
   return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
-    h(AppHeader,{cfg,lowStock:lowS.length,syncing,isAdmin,isOnline,darkMode,onDarkToggle:()=>setDarkMode(d=>!d),onScan:()=>setModal({t:"scan"}),onGlobalSearch:()=>setModal({t:"globalSearch"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>setCurrentUser(null),currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}),
+    h(AppHeader,{cfg,lowStock:lowS.length,syncing,isAdmin,isOnline,darkMode,onDarkToggle:()=>setDarkMode(d=>!d),onScan:()=>setModal({t:"scan"}),onGlobalSearch:()=>setModal({t:"globalSearch"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}),
     zoomPhoto&&h("div",{onClick:()=>setZoomPhoto(null),style:{position:"fixed",inset:0,background:"rgba(0,0,0,.95)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}},
       h("div",{style:{maxWidth:"95vw",maxHeight:"95vh"}},
         h("img",{src:zoomPhoto,style:{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}),
@@ -742,16 +745,7 @@ function App(){
           )
         ),
 
-        isAdmin&&h("div",{style:{paddingTop:8}},
-          h("div",{style:{fontSize:12,fontWeight:700,color:S.gray,marginBottom:10}},"Configurer le menu (Admin)"),
-          navConfig.map((n,i)=>h("div",{key:n.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid "+(darkMode?"#2c2c2e":"#f0f0f0")}},
-            h("span",{style:{fontSize:13}},n.icon+" "+n.label),
-            h("div",{onClick:()=>{const nc=[...navConfig];nc[i]={...nc[i],visible:!nc[i].visible};saveNavConfig(nc);},
-              style:{width:44,height:24,borderRadius:12,background:n.visible?S.green:S.border,position:"relative",cursor:"pointer",transition:"background .2s"}},
-              h("div",{style:{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:n.visible?22:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}})
-            )
-          ))
-        )
+
       )
     ),
     h("div",{style:{padding:"14px 14px 90px"}},
@@ -982,7 +976,6 @@ function App(){
             h("div",{style:{fontSize:56,marginBottom:16}},"🔐"),
             h("div",{style:{fontSize:18,fontWeight:700,marginBottom:8}},"Acces restreint"),
             h("p",{style:{fontSize:14,color:S.gray,marginBottom:20}},"Les rapports sont disponibles uniquement en mode administrateur."),
-            h("button",{onClick:()=>setPage("admin"),style:BP},"Se connecter en Admin")
           )
           :h("div",{},
             h("div",{style:{fontSize:15,fontWeight:800,marginBottom:12}},"Generer des rapports PDF"),
@@ -1034,10 +1027,10 @@ function App(){
         )
       ),
       page==="admin"&&h("div",{className:"fi"},
-        !isAdmin
-          ?h(PinLogin,{pin:adminPin,onOk:()=>setIsAdmin(true)})
-          :h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>setIsAdmin(false),onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup})
-      )
+        currentUser?.role!=="admin"
+          ?h("div",{style:{textAlign:"center",padding:40}},h("div",{style:{fontSize:56,marginBottom:16}},"🔐"),h("div",{style:{fontSize:18,fontWeight:700,marginBottom:8}},"Acces refuse"),h("p",{style:{fontSize:13,color:S.gray}},"Connectez-vous avec un compte administrateur"))
+          :h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>{setIsAdmin(false);setCurrentUser(null);setPage("accueil");},onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig})
+      ),
     ),
 
     modal&&h("div",{},
@@ -1389,6 +1382,17 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
     ),
 
     tab==="perso"&&h("div",{},
+      h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration du menu"),
+      h("div",{style:{background:S.white,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+        navConfig.map((n,i)=>h("div",{key:n.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid "+S.bg}},
+          h("span",{style:{fontSize:13,fontWeight:500}},n.icon+" "+n.label),
+          !n.hidden&&h("div",{onClick:()=>{const nc=[...navConfig];nc[i]={...nc[i],visible:!nc[i].visible};saveNavConfig(nc);},
+            style:{width:44,height:24,borderRadius:12,background:n.visible?S.green:S.border,position:"relative",cursor:"pointer",transition:"background .2s"}},
+            h("div",{style:{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:n.visible?22:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}})
+          )
+        ))
+      ),
+      h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Personnalisation"),
       h("div",{style:{fontSize:14,fontWeight:700,marginBottom:10}},"Apparence de l'application"),
       h(Card,{},
         h("div",{style:{padding:"14px 16px"}},
