@@ -113,6 +113,8 @@ const EMP_DEFAULT=["Jean Dupont","Marie Martin","Pierre Bernard","Sophie Lambert
 
 const {useState,useEffect,useRef}=React;
 const h=React.createElement;
+const today=()=>new Date().toISOString().slice(0,10);
+const daysSince=d=>{if(!d)return 0;try{const p=d.split('/');if(p.length>=3){return Math.floor((Date.now()-new Date(p[2],p[1]-1,p[0]).getTime())/86400000);}return 0;}catch(e){return 0;}};
 const n2=s=>s.replace(/-/g,"").toUpperCase().trim();
 const now=()=>new Date().toLocaleString('fr-FR');
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
