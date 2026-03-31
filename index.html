@@ -2430,6 +2430,295 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
 }
 
 
+
+// ── EMPLACEMENT BADGE ────────────────────────────────────────────────────
+function EmplacementBadge({zone,allee,rack,etagere,position}){
+  const parts=[];
+  if(zone)parts.push(zone);if(allee)parts.push("A"+allee);if(rack)parts.push("R"+rack);if(etagere)parts.push("E"+etagere);if(position)parts.push(position);
+  if(!parts.length)return null;
+  return h("div",{style:{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}},
+    parts.map((p,i)=>h("span",{key:i,style:{background:"#e8f0fe",color:S.blue,borderRadius:8,padding:"2px 7px",fontSize:10,fontWeight:700}},p))
+  );
+}
+
+// ── PALETTE MODAL ─────────────────────────────────────────────────────────
+function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}){
+  const num=String(existingCount+1).padStart(4,"0");
+  const palId="PAL-"+num;
+  const[items,setItems]=useState([{nom:"",qte:""}]);
+  const[photos,setPhotos]=useState([]);
+  const[zone,setZone]=useState("");const[allee,setAllee]=useState("");const[rack,setRack]=useState("");const[etagere,setEtagere]=useState("");const[position,setPosition]=useState("");
+  const[photoPos,setPhotoPos]=useState("");
+  const[provenance,setProvenance]=useState("");
+  const[destination,setDestination]=useState("");
+  const[createdBy,setCreatedBy]=useState(currentUser?.name||"");
+  const zones=(warehouseConfig?.zones)||[];
+  const selZoneObj=zones.find(z=>z.id===zone);
+  const alleesOpts=selZoneObj?Array.from({length:selZoneObj.allees},(_, i)=>String(i+1)):[];
+  const racksOpts=selZoneObj?Array.from({length:selZoneObj.racks},(_, i)=>String(i+1)):[];
+  const etagesOpts=selZoneObj?Array.from({length:selZoneObj.etages},(_, i)=>String(i+1)):[];
+  const positionsOpts=selZoneObj?(selZoneObj.positions||["G","M","D"]):["G","M","D"];
+  const addItem=()=>setItems(p=>[...p,{nom:"",qte:""}]);
+  const updItem=(i,k,v)=>setItems(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
+  const remItem=i=>setItems(p=>p.filter((_,j)=>j!==i));
+  return h(Modal,{onClose},
+    h("div",{style:{background:"linear-gradient(135deg,#2c3e50,#3498db)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"NOUVELLE PALETTE"),
+      h("div",{style:{fontSize:28,fontWeight:900,letterSpacing:1}},palId)
+    ),
+    FL("Cree par",true),h("input",{value:createdBy,onChange:e=>setCreatedBy(e.target.value),placeholder:"Votre nom...",style:IS}),
+    FL("Provenance",true),h("input",{value:provenance,onChange:e=>setProvenance(e.target.value),placeholder:"Fournisseur, origine...",style:IS}),
+    FL("Destination",true),h("input",{value:destination,onChange:e=>setDestination(e.target.value),placeholder:"Client, zone livraison...",style:IS}),
+    FL("Contenu *",true),
+    items.map((item,i)=>h("div",{key:i,style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}},
+      h("input",{value:item.nom,onChange:e=>updItem(i,"nom",e.target.value),placeholder:"Article...",style:{...IS,flex:3}}),
+      h("input",{type:"number",value:item.qte,onChange:e=>updItem(i,"qte",e.target.value),placeholder:"Qte",style:{...IS,flex:1,textAlign:"center"}}),
+      i>0&&h("button",{onClick:()=>remItem(i),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"8px 10px",cursor:"pointer",fontWeight:700}},"x")
+    )),
+    h("button",{onClick:addItem,style:{...BS,marginBottom:14,fontSize:12}},"+Ajouter une ligne"),
+    FL("Photos"),
+    h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"10px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:8}},"Ajouter photos",
+      h("input",{type:"file",accept:"image/*",multiple:true,capture:"environment",style:{display:"none"},onChange:e=>{Array.from(e.target.files).forEach(f=>{const r=new FileReader();r.onload=ev=>setPhotos(p=>[...p,ev.target.result]);r.readAsDataURL(f);});}})
+    ),
+    photos.length>0&&h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}},
+      photos.map((p,i)=>h("div",{key:i,style:{position:"relative"}},
+        h("img",{src:p,style:{width:64,height:64,borderRadius:8,objectFit:"cover"}}),
+        h("button",{onClick:()=>setPhotos(ph=>ph.filter((_,j)=>j!==i)),style:{position:"absolute",top:-4,right:-4,width:18,height:18,borderRadius:"50%",background:S.danger,color:"#fff",border:"none",fontSize:10,cursor:"pointer"}},"x")
+      ))
+    ),
+    FL("Emplacement",true),
+    h("div",{style:{background:"#f5f5f7",borderRadius:12,padding:"12px",marginBottom:8}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Zone"),
+          h("select",{value:zone,onChange:e=>{setZone(e.target.value);setAllee("");setRack("");setEtagere("");setPosition("");},style:{...SS,padding:"8px 10px",fontSize:12}},
+            h("option",{value:""},"-- Zone --"),...zones.map(z=>h("option",{key:z.id,value:z.id},z.nom||"Zone "+z.id))
+          )
+        ),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Allee"),
+          h("select",{value:allee,onChange:e=>setAllee(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!zone},
+            h("option",{value:""},"-- Allee --"),...alleesOpts.map(a=>h("option",{key:a,value:a},"Allee "+a))
+          )
+        )
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Rack"),
+          h("select",{value:rack,onChange:e=>setRack(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!allee},
+            h("option",{value:""},"-- Rack --"),...racksOpts.map(r=>h("option",{key:r,value:r},"Rack "+r))
+          )
+        ),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Etage"),
+          h("select",{value:etagere,onChange:e=>setEtagere(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!rack},
+            h("option",{value:""},"-- Etage --"),...etagesOpts.map(e2=>h("option",{key:e2,value:e2},"Etage "+e2))
+          )
+        ),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Position"),
+          h("select",{value:position,onChange:e=>setPosition(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!etagere},
+            h("option",{value:""},"-- Pos --"),...positionsOpts.map(p=>h("option",{key:p,value:p},p))
+          )
+        )
+      ),
+      (zone||allee||rack||etagere||position)&&h("div",{style:{marginTop:8}},h(EmplacementBadge,{zone,allee,rack,etagere,position}))
+    ),
+    FL("Photo emplacement"),
+    h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"10px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:photoPos?8:14}},"Photo de la position",
+      h("input",{type:"file",accept:"image/*",capture:"environment",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setPhotoPos(ev.target.result);r.readAsDataURL(f);}})
+    ),
+    photoPos&&h("img",{src:photoPos,style:{width:"100%",borderRadius:10,maxHeight:120,objectFit:"cover",marginBottom:14}}),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+      h("button",{onClick:onClose,style:BS},"Annuler"),
+      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}onSave({id:palId,items:items.filter(x=>x.nom),photos,zone,allee,rack,etagere,position,photoPos,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock"});},style:BB},"Creer la palette")
+    )
+  );
+}
+
+// ── GENERATE PALETTE PDF ──────────────────────────────────────────────────
+function generatePalettePDF(pal,cfg){
+  try{
+    const{jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
+    const W=297,H=210;
+    doc.setFontSize(72);doc.setFont("helvetica","bold");doc.setTextColor(0,0,0);
+    doc.text(pal.id,W/2,55,{align:"center"});
+    doc.setDrawColor(0,0,0);doc.setLineWidth(2);doc.line(10,65,W-10,65);
+    doc.setFontSize(22);doc.setFont("helvetica","bold");
+    doc.text("CONTENU:",12,78);
+    let cy=92;doc.setFont("helvetica","normal");doc.setFontSize(18);
+    (pal.items||[]).forEach((item,i)=>{
+      if(cy>H-25)return;
+      doc.text((i+1)+". "+item.nom.substring(0,35)+(item.qte?" x"+item.qte:""),12,cy);
+      cy+=14;
+    });
+    doc.setLineWidth(1);doc.line(10,H-28,W-10,H-28);
+    doc.setFontSize(11);doc.setFont("helvetica","normal");
+    let info="";
+    if(pal.createdBy)info+="Par: "+pal.createdBy+"  ";
+    if(pal.provenance)info+="De: "+pal.provenance+"  ";
+    if(pal.destination)info+="Vers: "+pal.destination+"  ";
+    if(pal.createdAt)info+="Date: "+pal.createdAt.split(" ")[0];
+    doc.text(info,W/2,H-20,{align:"center"});
+    doc.save(pal.id+"_fiche.pdf");
+  }catch(e){alert("Erreur PDF: "+e.message);}
+}
+
+// ── LOGIN SCREEN ──────────────────────────────────────────────────────────
+function LoginScreen({cfg,userAccounts,adminPin,employes,onLogin}){
+  const[step,setStep]=useState("select");
+  const[sel,setSel]=useState(null);
+  const[pin,setPin]=useState("");
+  const[err,setErr]=useState(false);
+  const[showAdminEntry,setShowAdminEntry]=useState(false);
+  const bgColor=cfg.couleur||"#c8102e";
+  const accounts=(userAccounts&&userAccounts.length>0)
+    ?userAccounts.filter(a=>a.role!=="admin")
+    :employes.map(e=>({name:e,pin:"0000",role:"user",avatar:"👤"}));
+  const adminAccounts=(userAccounts||[]).filter(a=>a.role==="admin");
+  const pressPin=d=>{
+    const np=pin+d;setPin(np);
+    if(np.length===4){
+      if(step==="adminPin"){
+        const adminAcc=adminAccounts.find(a=>a.pin===np);
+        if(adminAcc){setErr(false);onLogin({...adminAcc});return;}
+        if(np===adminPin){setErr(false);onLogin({name:"Administrateur",pin:np,role:"admin",avatar:"🔐"});return;}
+        setErr(true);setTimeout(()=>{setPin("");setErr(false);},600);return;
+      }
+      const acc=accounts.find(a=>a.name===sel);
+      if(acc&&np===acc.pin){setErr(false);onLogin({...acc});return;}
+      setErr(true);setTimeout(()=>{setPin("");setErr(false);},600);
+    }
+  };
+  const bgGrad="linear-gradient(135deg,"+bgColor+" 0%,"+darken(bgColor)+" 40%,#0f0f1a 100%)";
+  if(step==="select")return h("div",{style:{minHeight:"100vh",background:bgGrad,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}},
+    h("div",{style:{textAlign:"center",marginBottom:28}},
+      cfg.logoUrl?h("img",{src:cfg.logoUrl,style:{width:72,height:72,borderRadius:18,objectFit:"cover",marginBottom:12}}):h("div",{style:{fontSize:60,marginBottom:12}},"✈️"),
+      h("h1",{style:{color:"#fff",fontWeight:900,fontSize:24}},cfg.nomSite||"LUX AIRPORT"),
+      h("p",{style:{color:"rgba(255,255,255,.5)",fontSize:12,marginTop:4}},cfg.sousTitre||"Gestion Airside")
+    ),
+    h("div",{className:"glass",style:{borderRadius:24,padding:"22px",width:"100%",maxWidth:400}},
+      h("h2",{style:{color:"#fff",fontWeight:700,fontSize:16,marginBottom:4,textAlign:"center"}},"Qui etes-vous ?"),
+      h("p",{style:{color:"rgba(255,255,255,.45)",fontSize:11,marginBottom:18,textAlign:"center"}},"Selectionnez votre compte"),
+      accounts.length===0?h("div",{style:{textAlign:"center",padding:"20px",color:"rgba(255,255,255,.4)",fontSize:12}},"Aucun compte - acces admin requis")
+      :h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
+        accounts.map((acc,i)=>h("div",{key:i,className:"user-card",onClick:()=>{setSel(acc.name);setStep("pin");setPin("");},style:{padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:8}},
+          h("div",{style:{width:48,height:48,borderRadius:"50%",background:"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.1))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,border:"1px solid rgba(255,255,255,.2)"}},acc.avatar||"👤"),
+          h("div",{style:{fontSize:11,fontWeight:700,color:"#fff",textAlign:"center"}},acc.name)
+        ))
+      ),
+      h("div",{style:{textAlign:"center",paddingTop:10,borderTop:"1px solid rgba(255,255,255,.1)"}},
+        h("button",{onClick:()=>setShowAdminEntry(p=>!p),style:{background:"none",border:"none",color:"rgba(255,255,255,.25)",fontSize:10,cursor:"pointer",textDecoration:"underline"}},"Acces administrateur"),
+        showAdminEntry&&h("div",{style:{marginTop:10}},
+          adminAccounts.map((acc,i)=>h("button",{key:i,onClick:()=>{setSel(acc.name);setStep("adminPin");setPin("");},className:"glass-btn",style:{width:"100%",padding:"9px",borderRadius:10,fontSize:11,marginBottom:6}},acc.avatar||"🔐"," "+acc.name)),
+          h("button",{onClick:()=>{setSel("Admin");setStep("adminPin");setPin("");},className:"glass-btn",style:{width:"100%",padding:"9px",borderRadius:10,fontSize:11}},"🔐 Admin systeme")
+        )
+      )
+    )
+  );
+  const isAdmin=step==="adminPin";
+  const selAcc=isAdmin?adminAccounts.find(a=>a.name===sel):accounts.find(a=>a.name===sel);
+  return h("div",{style:{minHeight:"100vh",background:bgGrad,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}},
+    h("div",{className:"glass su",style:{borderRadius:24,padding:"28px 22px",width:"100%",maxWidth:320,textAlign:"center",position:"relative"}},
+      h("button",{onClick:()=>{setStep("select");setSel(null);setPin("");setShowAdminEntry(false);},style:{position:"absolute",top:14,left:14,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"5px 10px",color:"rgba(255,255,255,.6)",fontSize:11,cursor:"pointer"}},"<"),
+      h("div",{style:{width:60,height:60,borderRadius:"50%",background:isAdmin?"linear-gradient(135deg,#c8102e,#8b0000)":"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.08))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,margin:"8px auto 14px",border:"2px solid rgba(255,255,255,.25)"}},selAcc?.avatar||(isAdmin?"🔐":"👤")),
+      h("h2",{style:{color:"#fff",fontWeight:800,fontSize:17,marginBottom:4}},sel||"Admin"),
+      h("p",{style:{color:"rgba(255,255,255,.45)",fontSize:11,marginBottom:22}},isAdmin?"Code PIN admin":"Entrez votre PIN"),
+      h("div",{className:err?"shake":"",style:{display:"flex",justifyContent:"center",gap:12,marginBottom:26}},
+        [0,1,2,3].map(i=>h("div",{key:i,className:"pin-dot"+(i<pin.length?" filled":"")}))
+      ),
+      err&&h("div",{style:{color:"#ff4d8d",fontSize:11,marginBottom:12,fontWeight:600}},"Code incorrect"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,maxWidth:200,margin:"0 auto"}},
+        [1,2,3,4,5,6,7,8,9,"",0,"<"].map((d,i)=>
+          h("button",{key:i,onClick:()=>d===""?null:d==="<"?setPin(p=>p.slice(0,-1)):pressPin(String(d)),
+            className:d===""?"":"glass-btn",
+            style:{height:52,borderRadius:12,fontSize:18,fontWeight:600,cursor:d===""?"default":"pointer",background:d===""?"transparent":undefined}},
+            d===""?"":d==="<"?"<":d)
+        )
+      )
+    )
+  );
+}
+
+// ── ADD USER MODAL ────────────────────────────────────────────────────────
+function AddUserModal({existing,onSave,onClose}){
+  const[name,setName]=useState(existing?.name||"");
+  const[pin,setPin]=useState(existing?.pin||"");
+  const[role,setRole]=useState(existing?.role||"user");
+  const[avatar,setAvatar]=useState(existing?.avatar||"👤");
+  const avatars=["👤","👨","👩","👨‍✈️","👩‍✈️","🧑‍🔧","👷","🧑‍💼","🧑‍🦱","🧑‍🦰"];
+  return h(Modal,{onClose},
+    h("div",{style:{background:"linear-gradient(135deg,#007aff,#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},existing?"MODIFIER":"NOUVEAU"),
+      h("div",{style:{fontSize:20,fontWeight:900}},existing?"Modifier le compte":"Creer un compte")
+    ),
+    FL("Avatar",true),
+    h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
+      avatars.map(av=>h("button",{key:av,onClick:()=>setAvatar(av),style:{width:40,height:40,borderRadius:10,border:"2px solid "+(avatar===av?"#007aff":S.border),background:avatar===av?"#e8f0fe":"#f5f5f7",fontSize:20,cursor:"pointer"}},av))
+    ),
+    FL("Nom complet *",true),h("input",{value:name,onChange:e=>setName(e.target.value),placeholder:"Prenom Nom...",style:IS}),
+    FL("PIN (4 chiffres) *",true),h("input",{value:pin,onChange:e=>setPin(e.target.value.replace(/[^0-9]/g,"").substring(0,4)),placeholder:"0000",style:{...IS,letterSpacing:8,fontSize:20,textAlign:"center"},maxLength:4}),
+    FL("Role",true),
+    h("div",{style:{display:"flex",background:S.border,borderRadius:12,padding:3,marginBottom:4}},
+      [["user","Utilisateur"],["admin","Administrateur"]].map(([r,l])=>
+        h("button",{key:r,onClick:()=>setRole(r),style:{flex:1,padding:"9px",borderRadius:10,border:"none",background:role===r?S.white:"transparent",color:role===r?S.dark:S.gray,fontWeight:role===r?700:500,fontSize:13,cursor:"pointer"}},l)
+      )
+    ),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+      h("button",{onClick:onClose,style:BS},"Annuler"),
+      h("button",{onClick:()=>{if(!name||pin.length!==4){alert("Nom et PIN 4 chiffres requis");return;}onSave({name,pin,role,avatar});},style:BB},"Sauvegarder")
+    )
+  );
+}
+
+// ── WAREHOUSE CONFIG PANEL ────────────────────────────────────────────────
+function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
+  const[zones,setZones]=useState(warehouseConfig?.zones||[]);
+  const[editIdx,setEditIdx]=useState(null);
+  const[form,setForm]=useState({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});
+  const posStr=p=>Array.isArray(p)?p.join(","):p||"G,M,D";
+  const addZone=()=>{
+    if(!form.id||!form.nom){showT("ID et nom requis");return;}
+    if(editIdx!==null){const nz=[...zones];nz[editIdx]=form;setZones(nz);setEditIdx(null);}
+    else setZones(p=>[...p,form]);
+    setForm({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});
+  };
+  return h("div",{},
+    h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration entrepot"),
+    h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:S.blue}},"Definissez vos zones, allees, racks, etages et positions."),
+    zones.map((z,i)=>h("div",{key:i,style:{background:S.white,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}},
+        h("div",{},
+          h("div",{style:{fontSize:14,fontWeight:700}},z.nom||"Zone "+z.id),
+          h("div",{style:{fontSize:12,color:S.gray,marginTop:2}},z.allees+" allee(s) x "+z.racks+" rack(s) x "+z.etages+" etage(s)"),
+          h("div",{style:{fontSize:11,color:S.gray}},"Positions: "+posStr(z.positions))
+        ),
+        h("div",{style:{display:"flex",gap:6}},
+          h("button",{onClick:()=>{setForm({...z});setEditIdx(i);},style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:8,padding:"5px 9px",fontSize:12,cursor:"pointer"}},"Editer"),
+          h("button",{onClick:()=>setZones(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"5px 9px",fontSize:12,cursor:"pointer"}},"Suppr.")
+        )
+      )
+    )),
+    h("div",{style:{background:"#f5f5f7",borderRadius:14,padding:"14px",marginBottom:14}},
+      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:10,color:editIdx!==null?S.orange:S.green}},editIdx!==null?"Modifier zone":"Nouvelle zone"),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"ID (ex: A)"),h("input",{value:form.id,onChange:e=>setForm(p=>({...p,id:e.target.value.toUpperCase()})),style:{...IS,padding:"8px"}})),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Nom"),h("input",{value:form.nom,onChange:e=>setForm(p=>({...p,nom:e.target.value})),placeholder:"Zone A...",style:{...IS,padding:"8px"}}))
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}},
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Allees"),h("input",{type:"number",min:1,max:20,value:form.allees,onChange:e=>setForm(p=>({...p,allees:parseInt(e.target.value)||1})),style:{...IS,padding:"8px",textAlign:"center"}})),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Racks"),h("input",{type:"number",min:1,max:20,value:form.racks,onChange:e=>setForm(p=>({...p,racks:parseInt(e.target.value)||1})),style:{...IS,padding:"8px",textAlign:"center"}})),
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Etages"),h("input",{type:"number",min:1,max:10,value:form.etages,onChange:e=>setForm(p=>({...p,etages:parseInt(e.target.value)||1})),style:{...IS,padding:"8px",textAlign:"center"}}))
+      ),
+      h("div",{style:{marginBottom:8}},
+        h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Positions (ex: G,M,D)"),
+        h("input",{value:posStr(form.positions),onChange:e=>setForm(p=>({...p,positions:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})),style:{...IS,padding:"8px"}})
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+        editIdx!==null&&h("button",{onClick:()=>{setEditIdx(null);setForm({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});},style:BS},"Annuler"),
+        h("button",{onClick:addZone,style:{...BP,background:editIdx!==null?S.orange:S.green}},editIdx!==null?"Modifier":"Ajouter zone")
+      )
+    ),
+    h("button",{onClick:()=>onSave({zones}),style:BP},"Sauvegarder la configuration")
+  );
+}
+
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App,null));
 </script>
 </body>
