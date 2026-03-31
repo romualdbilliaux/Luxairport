@@ -10,8 +10,8 @@
 <title>Lux Airport — Gestion Airside</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
@@ -525,27 +525,44 @@ function App(){
   },[]);
 
   useEffect(()=>{
+    // Timeout fallback: show app after 5s even if Firebase fails
+    const fallback=setTimeout(()=>setReady(true),5000);
     (async()=>{
       try{
-        const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,parSnap,toolsSnap,maintSnap,garSnap,kitsSnap]=await Promise.all([
-          db.collection("emprunts").orderBy("ts","asc").get(),
-          db.collection("cons").get(),db.collection("vets").get(),
-          db.collection("consHist").orderBy("ts","asc").get(),
-          db.collection("inspections").get(),db.collection("params").doc("config").get(),
-          db.collection("tools").get(),db.collection("maintenances").get(),
-          db.collection("garanties").get(),db.collection("kits").orderBy("ts","asc").get(),
+        // Load config first (most important)
+        const parSnap=await db.collection("params").doc("config").get().catch(()=>({exists:false}));
+        if(parSnap.exists){
+          const p=parSnap.data();
+          if(p.employes)setEmployes(p.employes);
+          if(p.adminPin)setAdminPin(p.adminPin);
+          if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));
+          if(p.lang)setLang(p.lang);
+          if(p.navConfig)setNavConfig(p.navConfig);
+          if(p.userAccounts)setUserAccounts(p.userAccounts);
+          if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);
+        }
+        // Load other data in parallel with timeout
+        const load=async(fn)=>{try{return await Promise.race([fn(),new Promise(r=>setTimeout(()=>r(null),4000))]);}catch(e){return null;}};
+        const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,toolsSnap,maintSnap,kitsSnap]=await Promise.all([
+          load(()=>db.collection("emprunts").orderBy("ts","asc").get()),
+          load(()=>db.collection("cons").get()),
+          load(()=>db.collection("vets").get()),
+          load(()=>db.collection("consHist").orderBy("ts","asc").get()),
+          load(()=>db.collection("inspections").get()),
+          load(()=>db.collection("tools").get()),
+          load(()=>db.collection("maintenances").get()),
+          load(()=>db.collection("kits").orderBy("ts","asc").get()),
         ]);
-        setEmprunts(empSnap.docs.map(d=>({...d.data(),_id:d.id})));
-        const cd={};consSnap.forEach(x=>cd[x.id]=x.data());setCons(CONS_DEFAULT.map(c=>cd[c.id]?{...c,...cd[c.id]}:c));
-        const vd={};vetsSnap.forEach(x=>vd[x.id]=x.data());setVets(VET_DEFAULT.map(v=>vd[v.id]?{...v,...vd[v.id]}:v));
-        setHist(histSnap.docs.map(d=>({...d.data(),_id:d.id})));
-        const id={};inspSnap.forEach(x=>id[x.id]=x.data());setInspections(id);
-        const md={};maintSnap.forEach(x=>md[x.id]=x.data());setMaintenances(md);
-        const gd={};garSnap.forEach(x=>gd[x.id]=x.data());setGaranties(gd);
-        setKits(kitsSnap.docs.map(d=>({...d.data(),_id:d.id})));
-        if(toolsSnap.docs.length>0)setTools(toolsSnap.docs.map(d=>({...d.data(),id:d.id})));
-        if(parSnap.exists){const p=parSnap.data();if(p.employes)setEmployes(p.employes);if(p.adminPin)setAdminPin(p.adminPin);if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));if(p.lang)setLang(p.lang);if(p.navConfig)setNavConfig(p.navConfig);if(p.userAccounts)setUserAccounts(p.userAccounts);if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);}
-      }catch(e){console.error(e);}
+        if(empSnap)setEmprunts(empSnap.docs.map(d=>({...d.data(),_id:d.id})));
+        if(consSnap){const cd={};consSnap.forEach(x=>cd[x.id]=x.data());setCons(CONS_DEFAULT.map(c=>cd[c.id]?{...c,...cd[c.id]}:c));}
+        if(vetsSnap){const vd={};vetsSnap.forEach(x=>vd[x.id]=x.data());setVets(VET_DEFAULT.map(v=>vd[v.id]?{...v,...vd[v.id]}:v));}
+        if(histSnap)setHist(histSnap.docs.map(d=>({...d.data(),_id:d.id})));
+        if(inspSnap){const id={};inspSnap.forEach(x=>id[x.id]=x.data());setInspections(id);}
+        if(maintSnap){const md={};maintSnap.forEach(x=>md[x.id]=x.data());setMaintenances(md);}
+        if(kitsSnap)setKits(kitsSnap.docs.map(d=>({...d.data(),_id:d.id})));
+        if(toolsSnap&&toolsSnap.docs.length>0)setTools(toolsSnap.docs.map(d=>({...d.data(),id:d.id})));
+      }catch(e){console.error("Init error:",e);}
+      clearTimeout(fallback);
       setReady(true);
     })();
     const u1=db.collection("inspections").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setInspections(d);});
