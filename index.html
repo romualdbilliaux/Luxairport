@@ -14,6 +14,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
@@ -189,66 +190,32 @@ const {useState,useEffect,useRef}=React;
 const h=React.createElement;
 const n2=s=>s.replace(/-/g,"").toUpperCase().trim();
 
-// ── PURE JS QR CODE GENERATOR ─────────────────────────────────────────────
-// Minimal QR code generator - no external dependency
-const QR={
-  // Reed-Solomon tables
-  gexp:[],glog:[],
-  init(){
-    let x=1;for(let i=0;i<256;i++){this.gexp[i]=x;this.glog[x]=i;x<<=1;if(x&256)x^=285;}
-    for(let i=255;i<512;i++)this.gexp[i]=this.gexp[i-255];
-  },
-  // Simple alphanumeric/byte QR - returns matrix
-  generate(text){
-    // Use a visual representation: encode as simple data matrix style
-    // For simplicity, render as a visual barcode-like pattern based on text hash
-    return this.simpleMatrix(text);
-  },
-  simpleMatrix(text){
-    // Create a deterministic pattern from text - simple but visually unique
-    const size=21;const m=[];
-    for(let i=0;i<size;i++){m[i]=[];for(let j=0;j<size;j++)m[i][j]=0;}
-    // Finder patterns
-    [[0,0],[0,14],[14,0]].forEach(([r,c])=>{
-      for(let i=0;i<7;i++)for(let j=0;j<7;j++){
-        m[r+i][c+j]=(i===0||i===6||j===0||j===6||( i>=2&&i<=4&&j>=2&&j<=4))?1:0;
-      }
-    });
-    // Data modules from text hash
-    let hash=0;for(let i=0;i<text.length;i++)hash=(hash*31+text.charCodeAt(i))&0x7fffffff;
-    for(let i=8;i<13;i++)for(let j=8;j<13;j++){m[i][j]=(hash>>(( i-8)*5+(j-8)))&1;}
-    for(let i=0;i<size;i++)for(let j=8;j<size-8;j++){
-      if(!m[i][j]&&i>8&&i<12)m[i][j]=(hash>>(i+j))&1;
-    }
-    for(let i=8;i<size-8;i++)for(let j=0;j<size;j++){
-      if(!m[i][j]&&j>8&&j<12)m[i][j]=(hash>>(i*j))&1;
-    }
-    return{matrix:m,size};
-  }
-};
-
+// ── QR CODE avec qrious.js ───────────────────────────────────────────────
 function QRCodeDisplay({text,size,label}){
   const canvasRef=useRef(null);
   const sz=size||160;
   useEffect(()=>{
-    const canvas=canvasRef.current;
-    if(!canvas||!text)return;
-    const ctx=canvas.getContext("2d");
-    const qr=QR.generate(text);
-    const cell=Math.floor(sz/qr.size);
-    const offset=Math.floor((sz-cell*qr.size)/2);
-    ctx.fillStyle="#fff";ctx.fillRect(0,0,sz,sz);
-    ctx.fillStyle="#000";
-    qr.matrix.forEach((row,i)=>row.forEach((v,j)=>{
-      if(v)ctx.fillRect(offset+j*cell,offset+i*cell,cell,cell);
-    }));
-    // Center text
-    ctx.fillStyle="rgba(0,0,0,.6)";ctx.font="bold "+(cell*2)+"px monospace";
-    ctx.textAlign="center";
+    if(!canvasRef.current||!text)return;
+    try{
+      new window.QRious({
+        element:canvasRef.current,
+        value:text,
+        size:sz,
+        background:"white",
+        foreground:"black",
+        level:"H"
+      });
+    }catch(e){
+      // Fallback: draw text
+      const ctx=canvasRef.current.getContext("2d");
+      ctx.fillStyle="#fff";ctx.fillRect(0,0,sz,sz);
+      ctx.fillStyle="#000";ctx.font="bold 12px monospace";
+      ctx.textAlign="center";ctx.fillText(text,sz/2,sz/2);
+    }
   },[text,sz]);
   return h("div",{style:{textAlign:"center"}},
-    h("div",{style:{display:"inline-block",background:"#fff",padding:8,borderRadius:10,boxShadow:"0 2px 8px rgba(0,0,0,.12)"}},
-      h("canvas",{ref:canvasRef,width:sz,height:sz,style:{display:"block"}})
+    h("div",{style:{display:"inline-block",background:"#fff",padding:6,borderRadius:10,boxShadow:"0 2px 8px rgba(0,0,0,.12)"}},
+      h("canvas",{ref:canvasRef,width:sz,height:sz,style:{display:"block",borderRadius:6}})
     ),
     label&&h("div",{style:{fontSize:10,color:S.gray,fontWeight:700,marginTop:4,letterSpacing:.5}},label)
   );
@@ -957,6 +924,7 @@ function App(){
                   ),
                   h("span",{style:{background:dispo?"#e6fff0":"#fff8e6",color:dispo?S.green:S.orange,borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:700}},dispo?"Disponible":"Partiel")
                 ),
+                h("div",{style:{display:"flex",justifyContent:"flex-end",marginBottom:6}},h(QRCodeDisplay,{text:kit._id||kit.nom,size:40})),
                 h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}},
                   (kit.outils||[]).map(id=>{const t=tools.find(x=>x.id===id);const sorti=isEmp(id);return h("span",{key:id,style:{background:sorti?"#fff1f0":"#e6fff0",color:sorti?S.danger:S.green,borderRadius:8,padding:"3px 8px",fontSize:10,fontWeight:600}},t?t.nom.substring(0,20):id);})),
                 h("div",{style:{display:"flex",gap:8}},
@@ -2305,7 +2273,7 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
       ),
       h("button",{onClick:()=>emailPalette(pal),style:{...BS,color:S.blue,marginBottom:8}},"Envoyer par email"),
 
-      isAdmin&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
         h("button",{onClick:()=>deletePalette(pal._id),style:{...BS,color:S.danger}},"Supprimer"),
         h("button",{onClick:()=>setModal({t:"editPal",pal}),style:BB},"Modifier")
       ),
@@ -2716,6 +2684,113 @@ function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
       )
     ),
     h("button",{onClick:()=>onSave({zones}),style:BP},"Sauvegarder la configuration")
+  );
+}
+
+
+// ── USER MANAGEMENT PANEL ────────────────────────────────────────────────
+function UserManagementPanel({userAccounts,onSave,setModal,adminPin}){
+  const[search,setSearch]=useState("");
+  const[filterRole,setFilterRole]=useState("tous");
+  const[showPins,setShowPins]=useState({});
+
+  const togglePin=i=>setShowPins(p=>({...p,[i]:!p[i]}));
+
+  const filtered=(userAccounts||[]).filter(acc=>{
+    const q=search.toLowerCase();
+    const matchSearch=!search||acc.name.toLowerCase().includes(q);
+    const matchRole=filterRole==="tous"||(filterRole==="admin"&&acc.role==="admin")||(filterRole==="user"&&acc.role!=="admin");
+    return matchSearch&&matchRole;
+  });
+
+  const resetPin=async(i)=>{
+    if(!confirm("Reinitialiser le PIN de "+(userAccounts[i]?.name)+" a 0000?"))return;
+    const na=[...userAccounts];na[i]={...na[i],pin:"0000"};
+    onSave(na);
+  };
+
+  const toggleActive=(i)=>{
+    const na=[...userAccounts];na[i]={...na[i],active:na[i].active===false?true:false};
+    onSave(na);
+  };
+
+  const deleteUser=(i)=>{
+    if(!confirm("Supprimer "+userAccounts[i]?.name+"?"))return;
+    onSave(userAccounts.filter((_,j)=>j!==i));
+  };
+
+  const admins=(userAccounts||[]).filter(a=>a.role==="admin").length;
+  const users=(userAccounts||[]).filter(a=>a.role!=="admin").length;
+
+  return h("div",{},
+    // Header stats
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}},
+      h("div",{style:{background:"#1c1c1e",borderRadius:12,padding:"12px",textAlign:"center",color:"#fff"}},
+        h("div",{style:{fontSize:22,fontWeight:800}},(userAccounts||[]).length),
+        h("div",{style:{fontSize:10,opacity:.6,marginTop:2,textTransform:"uppercase",letterSpacing:.5}},"Total")
+      ),
+      h("div",{style:{background:"#fff1f0",borderRadius:12,padding:"12px",textAlign:"center"}},
+        h("div",{style:{fontSize:22,fontWeight:800,color:S.danger}},admins),
+        h("div",{style:{fontSize:10,color:S.danger,marginTop:2,textTransform:"uppercase",letterSpacing:.5}},"Admins")
+      ),
+      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"12px",textAlign:"center"}},
+        h("div",{style:{fontSize:22,fontWeight:800,color:S.blue}},users),
+        h("div",{style:{fontSize:10,color:S.blue,marginTop:2,textTransform:"uppercase",letterSpacing:.5}},"Users")
+      )
+    ),
+    // Search + Add
+    h("div",{style:{display:"flex",gap:8,marginBottom:12}},
+      h("div",{style:{position:"relative",flex:1}},
+        h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:14}},"🔍"),
+        h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher un compte...",style:{...IS,paddingLeft:34}})
+      ),
+      h("button",{onClick:()=>setModal({t:"addUser"}),style:{background:"#1c1c1e",color:"#fff",border:"none",borderRadius:12,padding:"0 16px",fontWeight:700,fontSize:18,cursor:"pointer"}},"+")
+    ),
+    // Role filter
+    h("div",{style:{display:"flex",gap:6,marginBottom:14}},
+      [["tous","Tous"],["admin","Admins"],["user","Users"]].map(([f,l])=>
+        h("button",{key:f,onClick:()=>setFilterRole(f),style:{padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(filterRole===f?"#1c1c1e":S.border),background:filterRole===f?"#1c1c1e":S.white,color:filterRole===f?"#fff":S.gray,cursor:"pointer"}},l)
+      )
+    ),
+    // Info badge
+    h("div",{style:{background:"#e8f0fe",borderRadius:10,padding:"8px 12px",marginBottom:14,fontSize:11,color:S.blue}},
+      "Comptes ADMIN masques de l'ecran de connexion. Acces via lien discret."
+    ),
+    // User cards
+    filtered.length===0?h("div",{style:{padding:"30px",textAlign:"center",color:S.gray,fontSize:13}},"Aucun compte")
+    :filtered.map((acc,i)=>{
+      const realIdx=(userAccounts||[]).findIndex(a=>a.name===acc.name&&a.pin===acc.pin);
+      const isActive=acc.active!==false;
+      return h("div",{key:i,style:{background:S.white,borderRadius:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,.08)",overflow:"hidden",opacity:isActive?1:.6}},
+        // Card header - avatar + name + role
+        h("div",{style:{background:acc.role==="admin"?"linear-gradient(135deg,#c8102e,#8b0000)":"linear-gradient(135deg,#007aff,#005ecb)",padding:"16px 16px 20px",position:"relative"}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:14}},
+            h("div",{style:{width:56,height:56,borderRadius:"50%",background:"rgba(255,255,255,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,border:"2px solid rgba(255,255,255,.3)",flexShrink:0}},acc.avatar||"👤"),
+            h("div",{},
+              h("div",{style:{fontSize:18,fontWeight:800,color:"#fff"}},acc.name),
+              h("div",{style:{display:"flex",alignItems:"center",gap:6,marginTop:4}},
+                h("span",{style:{background:"rgba(255,255,255,.25)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}},acc.role==="admin"?"ADMIN":"UTILISATEUR"),
+                !isActive&&h("span",{style:{background:"rgba(0,0,0,.3)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}},"INACTIF")
+              )
+            )
+          ),
+          // PIN display
+          h("div",{style:{display:"flex",alignItems:"center",gap:8,marginTop:12,background:"rgba(0,0,0,.15)",borderRadius:10,padding:"8px 12px"}},
+            h("span",{style:{color:"rgba(255,255,255,.6)",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:.5}},"PIN"),
+            h("span",{style:{color:"#fff",fontSize:14,fontWeight:800,letterSpacing:4,flex:1}},showPins[realIdx]?acc.pin:"●●●●"),
+            h("button",{onClick:()=>togglePin(realIdx),style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:8,padding:"4px 8px",color:"#fff",fontSize:11,cursor:"pointer"}},showPins[realIdx]?"Cacher":"Voir")
+          )
+        ),
+        // Actions
+        h("div",{style:{padding:"12px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}},
+          h("button",{onClick:()=>setModal({t:"editUser",acc,idx:realIdx}),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}},"✏️"),h("div",{},"Modifier")),
+          h("button",{onClick:()=>resetPin(realIdx),style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}},"🔑"),h("div",{},"Reset PIN")),
+          h("button",{onClick:()=>toggleActive(realIdx),style:{background:isActive?"#f5f5f7":"#e6fff0",color:isActive?S.gray:S.green,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}}),h("div",{},isActive?"Desactiver":"Activer")),
+          h("button",{onClick:()=>deleteUser(realIdx),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}},"🗑️"),h("div",{},"Supprimer"))
+        )
+      );
+    }),
+    h("button",{onClick:()=>setModal({t:"addUser"}),style:{...BP,marginTop:8,background:"#1c1c1e"}},"+Ajouter un compte")
   );
 }
 
