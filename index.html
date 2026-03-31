@@ -2610,6 +2610,151 @@ function EditStockModal({item,cat,onSave,onDelete,onClose}){
 
 
 
+
+
+function MultiScanModal({tools,emprunts,employes,isEmp,onSave,onClose}){
+  const[scanned,setScanned]=useState([]);
+  const[pers,setPers]=useState("");
+  const[scanning,setScanning]=useState(true);
+  const addScan=raw=>{
+    const id=raw.trim().toUpperCase();
+    const t=tools.find(x=>x.id===id||x.id.replace(/-/g,"").toUpperCase()===id.replace(/-/g,"").toUpperCase());
+    if(!t||scanned.find(s=>s.id===t.id)||isEmp(t.id))return;
+    setScanned(p=>[...p,{id:t.id,nom:t.nom}]);
+    if(navigator.vibrate)navigator.vibrate(100);
+  };
+  return h(Modal,{onClose},
+    h("div",{style:{background:"linear-gradient(135deg,"+S.blue+",#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"SCAN MULTIPLE"),
+      h("div",{style:{fontSize:20,fontWeight:900}},scanned.length+" outil(s) scanne(s)"),
+      h("div",{style:{fontSize:12,opacity:.75,marginTop:2}},"Scannez plusieurs outils sans fermer la camera")
+    ),
+    scanning&&h("div",{style:{marginTop:12}},h(CamScanner,{onDetect:raw=>{addScan(raw);}})),
+    scanned.length>0&&h("div",{style:{marginTop:10}},
+      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:8,color:S.green}},scanned.length+" outil(s) pret(s):"),
+      scanned.map((s,i)=>h("div",{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#e6fff0",borderRadius:10,marginBottom:4}},
+        h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.red}},s.id),h("div",{style:{fontSize:12,fontWeight:600}},s.nom.substring(0,35))),
+        h("button",{onClick:()=>setScanned(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"4px 8px",fontSize:12,cursor:"pointer"}},"x")
+      ))
+    ),
+    scanned.length>0&&h("div",{style:{marginTop:10}},
+      FL("Personne *"),
+      h("select",{value:pers,onChange:e=>setPers(e.target.value),style:SS},
+        h("option",{value:""},"-- Selectionner --"),
+        ...(employes||[]).map(e=>h("option",{key:e,value:e},e))
+      )
+    ),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+      h("button",{onClick:onClose,style:BS},"Annuler"),
+      h("button",{onClick:()=>{if(scanned.length===0||!pers){alert("Scannez des outils et selectionnez une personne");return;}onSave({tids:scanned.map(s=>s.id),pers,etat:"Bon",comm:"Scan multiple",photo:"",sig:""});},style:{...BP,background:S.blue}},"Sortir "+scanned.length+" outil(s)")
+    )
+  );
+}
+
+// ── PLANNING MAINTENANCE ──────────────────────────────────────────────────
+
+
+function ReparationModal({tool,ins,onSave,onRetour,onClose}){
+  const enRep=ins.statut==="En reparation";
+  const[lieu,setLieu]=useState(ins.reparation?.lieu||"");
+  const[desc,setDesc]=useState(ins.reparation?.description||"");
+  const[retourPrevu,setRetourPrevu]=useState(ins.reparation?.retourPrevu||"");
+  const repHist=ins.repHistory||[];
+  return h(Modal,{onClose},
+    h("div",{style:{background:"linear-gradient(135deg,#ff6b35,#e55a2b)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},tool.id),
+      h("div",{style:{fontSize:18,fontWeight:800}},"Reparation"),
+      h("div",{style:{fontSize:12,opacity:.75,marginTop:2}},tool.nom)
+    ),
+    enRep&&h("div",{style:{background:"#fff3ed",border:"2px solid #ff6b35",borderRadius:12,padding:"12px 14px",margin:"14px 0"}},
+      h("div",{style:{fontWeight:700,color:"#ff6b35",marginBottom:6}},"En reparation actuellement"),
+      ins.reparation?.lieu&&h("div",{style:{fontSize:13}},"Lieu: "+ins.reparation.lieu),
+      ins.reparation?.retourPrevu&&h("div",{style:{fontSize:13,color:S.orange,fontWeight:600}},"Retour prevu: "+ins.reparation.retourPrevu),
+      h("button",{onClick:()=>onRetour(tool.id),style:{...BG,marginTop:10}},"Marquer comme retourne")
+    ),
+    !enRep&&h("div",{},
+      FL("Lieu de reparation *",true),h("input",{value:lieu,onChange:e=>setLieu(e.target.value),placeholder:"Nom du reparateur...",style:IS}),
+      FL("Description du probleme",true),h("textarea",{value:desc,onChange:e=>setDesc(e.target.value),placeholder:"Defaut constate...",style:{...IS,minHeight:60,resize:"vertical"}}),
+      FL("Retour prevu",true),h("input",{type:"date",value:retourPrevu,onChange:e=>setRetourPrevu(e.target.value),style:IS}),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+        h("button",{onClick:onClose,style:BS},"Annuler"),
+        h("button",{onClick:()=>{if(!lieu){alert("Indiquez le lieu de reparation");return;}onSave(tool.id,{lieu,description:desc,retourPrevu});},style:{...BP,background:"#ff6b35"}},"Envoyer en reparation")
+      )
+    ),
+    repHist.length>0&&h("div",{style:{marginTop:14}},
+      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:8,color:S.gray}},"Historique ("+repHist.length+")"),
+      repHist.slice().reverse().map((r,i)=>h("div",{key:i,style:{background:S.bg,borderRadius:10,padding:"10px 12px",marginBottom:6}},
+        h("div",{style:{fontWeight:700,color:"#ff6b35",fontSize:13}},r.lieu||"Inconnu"),
+        r.description&&h("div",{style:{fontSize:12,color:"#444",marginTop:3}},r.description),
+        h("div",{style:{fontSize:11,color:S.gray,marginTop:3}},r.date||"")
+      ))
+    ),
+    enRep&&h("button",{onClick:onClose,style:{...BS,marginTop:10}},"Fermer")
+  );
+}
+
+// ── MULTI SCAN MODAL ──────────────────────────────────────────────────────
+
+
+function PlanningMaintenanceModal({tools,maintenances,onClose}){
+  const[yr,setYr]=useState(new Date().getFullYear());
+  const months=["Jan","Fev","Mar","Avr","Mai","Jun","Jul","Aou","Sep","Oct","Nov","Dec"];
+  const toolsWithMaint=tools.filter(t=>maintenances[t.id]?.prochaine);
+  const toolsWithout=tools.filter(t=>!maintenances[t.id]?.prochaine);
+  return h(Modal,{onClose},
+    h("div",{style:{background:"linear-gradient(135deg,"+S.orange+",#e67e22)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
+      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"PLANNING"),
+      h("div",{style:{fontSize:18,fontWeight:800}},"Maintenance annuelle "+yr)
+    ),
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",margin:"14px 0 10px"}},
+      h("button",{onClick:()=>setYr(y=>y-1),style:{background:S.bg,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer"}},String(yr-1)),
+      h("span",{style:{fontWeight:700}},yr),
+      h("button",{onClick:()=>setYr(y=>y+1),style:{background:S.bg,border:"none",borderRadius:8,padding:"6px 12px",cursor:"pointer"}},String(yr+1))
+    ),
+    h("div",{style:{overflowX:"auto",marginBottom:14}},
+      h("div",{style:{display:"grid",gridTemplateColumns:"110px repeat(12,1fr)",gap:2,minWidth:580}},
+        h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,padding:"3px"}},"Outil"),
+        months.map(m=>h("div",{key:m,style:{fontSize:8,fontWeight:700,color:S.gray,textAlign:"center",padding:"3px 1px"}},m)),
+        toolsWithMaint.slice(0,10).map(t=>[
+          h("div",{key:"n"+t.id,style:{fontSize:9,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",padding:"3px",fontWeight:600}},t.nom.substring(0,16)),
+          months.map((_,mi)=>{
+            const mDate=maintenances[t.id]?.prochaine;
+            const isMaint=mDate&&new Date(mDate).getMonth()===mi&&new Date(mDate).getFullYear()===yr;
+            return h("div",{key:mi,style:{height:20,borderRadius:3,background:isMaint?S.orange:"#f0f0f0",border:"1px solid "+(isMaint?S.orange+"88":S.border)}});
+          })
+        ]).flat()
+      )
+    ),
+    toolsWithout.length>0&&h("div",{style:{background:"#fff8e6",borderRadius:10,padding:"10px 12px",marginBottom:10,fontSize:12,color:S.orange,fontWeight:600}},
+      toolsWithout.length+" outil(s) sans maintenance planifiee"
+    ),
+    h("button",{onClick:onClose,style:BS},"Fermer")
+  );
+}
+
+// ── ENTREPOT - PROFESSIONAL WAREHOUSE SYSTEM ─────────────────────────────
+
+// Export to Excel (CSV)
+
+
+function MaintModal({toolId,toolNom,maint,onSave,onClose}){
+  const[type,setType]=useState(maint?.type||"");const[derniere,setDerniere]=useState(maint?.derniere||"");const[prochaine,setProchaine]=useState(maint?.prochaine||"");const[note,setNote]=useState(maint?.note||"");
+  return h(Modal,{onClose},
+    h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:4,color:S.orange}},"Maintenance"),
+    h("p",{style:{fontSize:13,color:S.gray,marginBottom:16}},toolNom),
+    FL("Type"),h("select",{value:type,onChange:e=>setType(e.target.value),style:SS},h("option",{value:""},"-- Selectionner --"),["Revision generale","Remplacement pieces","Nettoyage","Verification","Calibration","Autre"].map(t=>h("option",{key:t,value:t},t))),
+    FL("Date derniere maintenance",true),h("input",{type:"date",value:derniere,onChange:e=>setDerniere(e.target.value),style:IS}),
+    FL("Date prochaine maintenance",true),h("input",{type:"date",value:prochaine,onChange:e=>setProchaine(e.target.value),style:IS}),
+    FL("Notes",true),h("textarea",{value:note,onChange:e=>setNote(e.target.value),placeholder:"Details...",style:{...IS,minHeight:60,resize:"vertical"}}),
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+      h("button",{onClick:onClose,style:BS},"Annuler"),
+      h("button",{onClick:()=>onSave(toolId,{type,derniere,prochaine,note}),style:{...BP,background:S.orange}},"Sauvegarder")
+    )
+  );
+}
+
+
+
 ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App,null));
 </script>
 </body>
