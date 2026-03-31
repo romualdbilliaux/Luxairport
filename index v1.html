@@ -14,7 +14,6 @@
 <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsqr/1.4.0/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{--bg:#f2f2f7;--white:#ffffff;--dark:#1c1c1e;--border:#e5e5ea;--gray:#8e8e93;}
 *{box-sizing:border-box;margin:0;padding:0;transition:background-color .2s,color .2s;}
@@ -136,115 +135,6 @@ const FL=(label,mt)=>h("label",{style:{display:"block",fontSize:13,fontWeight:70
 
 function darken(hex){try{const r=Math.max(0,parseInt(hex.slice(1,3),16)-30);const g=Math.max(0,parseInt(hex.slice(3,5),16)-20);const b=Math.max(0,parseInt(hex.slice(5,7),16)-20);return"rgb("+r+","+g+","+b+")";}catch{return hex;}}
 function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16);const g=parseInt(hex.slice(3,5),16);const b=parseInt(hex.slice(5,7),16);return{r,g,b};}
-
-function getAccountList(userAccounts,employes){
-  return userAccounts&&userAccounts.length>0
-    ?userAccounts
-    :employes.map(e=>({name:e,pin:"0000",role:"user",avatar:"👤"}));
-}
-function paletteLocationText(pal,opts={}){
-  const parts=[];
-  if(pal?.zone)parts.push("Zone "+pal.zone);
-  if(pal?.allee)parts.push("Allee "+pal.allee);
-  if(!opts.hideRack&&pal?.rack)parts.push("Rack "+pal.rack);
-  if(pal?.etagere)parts.push("Etagere "+pal.etagere);
-  if(pal?.position)parts.push("Position "+pal.position);
-  return parts.join(" · ");
-}
-function paletteContentText(pal){
-  return (pal?.items||[]).map((item,i)=>((i+1)+". "+(item.nom||"")+(item.qte?" x"+item.qte:""))).join(" | ");
-}
-function paletteQRText(pal){
-  return [
-    pal?.id||"",
-    paletteLocationText(pal),
-    pal?.provenance?"Provenance: "+pal.provenance:"",
-    pal?.destination?"Destination: "+pal.destination:"",
-    paletteContentText(pal)
-  ].filter(Boolean).join("\n");
-}
-function makeQRCodeDataURL(value,size){
-  try{
-    const wrap=document.createElement("div");
-    new QRCode(wrap,{text:value||"",width:size||256,height:size||256,colorDark:"#000000",colorLight:"#ffffff",correctLevel:QRCode.CorrectLevel.M});
-    const canvas=wrap.querySelector("canvas");
-    const img=wrap.querySelector("img");
-    return canvas?canvas.toDataURL("image/png"):(img?img.src:"");
-  }catch(e){return "";}
-}
-function buildPalettePdfDoc(pal,cfg){
-  const {jsPDF}=window.jspdf;
-  const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
-  const W=297,H=210;
-  const qr=makeQRCodeDataURL(pal.qrData||paletteQRText(pal),1200);
-  doc.setFillColor(255,255,255);doc.rect(0,0,W,H,"F");
-  doc.setDrawColor(0,0,0);doc.setTextColor(0,0,0);
-  doc.setLineWidth(.8);doc.rect(8,8,W-16,H-16,"S");
-  doc.setFont("helvetica","bold");doc.setFontSize(34);
-  doc.text(pal.id||"PALETTE",16,24);
-  doc.setFont("helvetica","normal");doc.setFontSize(16);
-  doc.text((cfg.nomSite||"LUX AIRPORT")+" - Fiche palette",16,34);
-  if(qr){
-    doc.addImage(qr,"PNG",16,42,78,78,undefined,"FAST");
-    doc.setFontSize(11);
-    doc.text("QR code",55,124,{align:"center"});
-  }else{
-    doc.setFontSize(12);
-    doc.rect(16,42,78,78,"S");
-    doc.text("QR CODE INDISPONIBLE",55,84,{align:"center"});
-  }
-  doc.setFont("helvetica","bold");doc.setFontSize(22);
-  doc.text("DESCRIPTION",106,46);
-  doc.setFont("helvetica","normal");doc.setFontSize(16);
-  const desc=(pal.items||[]).map(i=>(i.nom||"")+(i.qte?" x"+i.qte:"")).join(" | ") || "Aucun contenu renseigne";
-  const descLines=doc.splitTextToSize(desc,175);
-  doc.text(descLines,106,58);
-  doc.setFont("helvetica","bold");doc.setFontSize(18);
-  doc.text("EMPLACEMENT",106,104);
-  doc.setFont("helvetica","normal");doc.setFontSize(22);
-  const loc=paletteLocationText(pal,{hideRack:true}) || "Non renseigne";
-  doc.text(loc,106,118);
-  doc.setFont("helvetica","bold");doc.setFontSize(14);
-  doc.text("PROVENANCE",106,142);
-  doc.text("DESTINATION",106,166);
-  doc.setFont("helvetica","normal");doc.setFontSize(16);
-  doc.text(doc.splitTextToSize(pal.provenance||"-",82),106,151);
-  doc.text(doc.splitTextToSize(pal.destination||"-",82),106,175);
-  doc.setFont("helvetica","bold");doc.setFontSize(14);
-  doc.text("CREE PAR",216,142);
-  doc.text("DATE",216,166);
-  doc.setFont("helvetica","normal");doc.setFontSize(16);
-  doc.text(doc.splitTextToSize(pal.createdBy||"-",58),216,151);
-  doc.text((pal.createdAt||"-").split(" ")[0],216,175);
-  return doc;
-}
-function generatePalettePDF(pal,cfg){
-  try{
-    const doc=buildPalettePdfDoc(pal,cfg);
-    doc.save((pal.id||"palette")+"_fiche.pdf");
-    return doc;
-  }catch(e){alert("Erreur PDF: "+e.message);return null;}
-}
-async function sharePalettePDF(pal,cfg,showT){
-  try{
-    const doc=buildPalettePdfDoc(pal,cfg);
-    const blob=doc.output("blob");
-    const file=new File([blob],(pal.id||"palette")+"_fiche.pdf",{type:"application/pdf"});
-    if(navigator.canShare&&navigator.canShare({files:[file]})){
-      await navigator.share({files:[file],title:pal.id||"Palette",text:"Fiche palette "+(pal.id||"")});
-      showT&&showT("PDF partage");
-      return;
-    }
-    const url=URL.createObjectURL(blob);
-    window.open("mailto:?subject="+encodeURIComponent("Fiche palette "+(pal.id||""))+"&body="+encodeURIComponent("Le PDF a ete genere dans l'application. Joignez le fichier telecharge ou partage ci-joint."));
-    const a=document.createElement("a");a.href=url;a.download=(pal.id||"palette")+"_fiche.pdf";a.click();
-    setTimeout(()=>URL.revokeObjectURL(url),4000);
-    showT&&showT("PDF telecharge et email prepare");
-  }catch(e){
-    alert("Erreur partage PDF: "+e.message);
-  }
-}
-
 
 function Spinner(){
   return h("div",{style:{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",flexDirection:"column",gap:20,background:"#c8102e"}},
@@ -374,7 +264,7 @@ function CamScanner({onDetect}){
 
 function AppHeader({cfg,lowStock,syncing,isAdmin,isOnline,darkMode,onDarkToggle,onScan,onGlobalSearch,onAlerts,onLogout,currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}){
   const bgColor=cfg.couleur||"#c8102e";
-  const visibleNavs=[...navConfig].filter(n=>n.visible&&(n.id!=="admin"||currentUser?.role==="admin")).sort((a,b)=>a.order-b.order);
+  const visibleNavs=[...navConfig].filter(n=>n.visible).sort((a,b)=>a.order-b.order);
   return h("div",{style:{background:"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")",paddingTop:"env(safe-area-inset-top,0)",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 12px rgba(0,0,0,.3)"}},
     h("div",{style:{height:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px"}},
       h("div",{style:{display:"flex",alignItems:"center",gap:10}},
@@ -478,7 +368,6 @@ function App(){
     else{r.setProperty("--bg","#f2f2f7");r.setProperty("--white","#ffffff");r.setProperty("--dark","#1c1c1e");r.setProperty("--border","#e5e5ea");r.setProperty("--gray","#8e8e93");document.body.style.background="#f2f2f7";document.body.style.color="#1c1c1e";}
   },[darkMode]);
   const[page,setPage]=useState("accueil");
-  const[isAdmin,setIsAdmin]=useState(false);
   const[isOnline,setIsOnline]=useState(navigator.onLine);
   const[tools,setTools]=useState(TOOLS_DEFAULT);
   const[inspections,setInspections]=useState({});
@@ -489,22 +378,7 @@ function App(){
   const[employes,setEmployes]=useState(EMP_DEFAULT);
   const[adminPin,setAdminPin]=useState("0000");
   const[cfg,setCfg]=useState({nomSite:"LUX AIRPORT",sousTitre:"Gestion Airside",couleur:"#c8102e",emailResp:"responsable@luxairport.lu",logoUrl:"",coverUrl:""});
-  const[loginCfg,setLoginCfg]=useState({
-    badge:"SECURE ACCESS",
-    title:"Connexion a l'espace Airside",
-    subtitle:"Accedez a la plateforme avec votre compte personnel et votre code confidentiel.",
-    welcomeTitle:"Bienvenue",
-    welcomeText:"Suivi des outils, des stocks, des kits et de l'entrepot dans une interface securisee.",
-    supportText:"En cas d'oubli du PIN, contactez un administrateur.",
-    footerText:"Acces reserve au personnel autorise.",
-    showSupport:true,
-    loginCardTitle:"Se connecter",
-    loginCardSubtitle:"Identifiez-vous pour acceder a votre espace personnel.",
-    userSearchPlaceholder:"Rechercher un collaborateur",
-    pinPlaceholder:"Code PIN a 4 chiffres",
-    primaryButtonText:"Connexion securisee",
-    copyrightLine:"Lux Airport - Portail Airside"
-  });
+  const[loginCfg,setLoginCfg]=useState({badge:"PLATEFORME AIRSIDE",heroTitle:"Connexion",heroSubtitle:"Acces securise a la gestion du materiel et de l'entrepot",cardTitle:"Se connecter",helpText:"Selectionnez votre compte puis saisissez votre code PIN personnel.",footerText:"Acces reserve au personnel autorise",buttonText:"Connexion",searchPlaceholder:"Rechercher un utilisateur...",pinPlaceholder:"Code PIN a 4 chiffres",welcomeTitle:"Bienvenue",welcomeText:"Consultez vos outils, palettes et stocks avec une interface moderne et securisee."});
   const[maintenances,setMaintenances]=useState({});
   const[garanties,setGaranties]=useState({});
   const[kits,setKits]=useState([]);
@@ -537,6 +411,7 @@ function App(){
   const saveNavConfig=async(nc)=>{setNavConfig(nc);await db.collection("params").doc("config").set({navConfig:nc},{merge:true});showT("Menu configure!");};
   const saveUserAccounts=async(accounts)=>{setUserAccounts(accounts);await db.collection("params").doc("config").set({userAccounts:accounts},{merge:true});showT("Comptes mis a jour!");};
   const activeUserName=currentUser?.name||"";
+  const isAdmin=currentUser?.role==="admin";
   const saveLang=async(l)=>{setLang(l);await db.collection("params").doc("config").set({lang:l},{merge:true});showT("Langue changee!");};
   const T=(fr,en,de)=>lang==="en"?en:lang==="de"?de:fr;
   const[toast,setToast]=useState("");
@@ -639,7 +514,7 @@ function App(){
   };
   const delHist=async id=>{if(!confirm("Supprimer?"))return;await fbDel("consHist",id);showT("Supprime");};
   const saveCfg=async newCfg=>{setCfg(newCfg);await db.collection("params").doc("config").set({cfg:newCfg},{merge:true});showT("Parametres sauvegardes!");};
-  const saveLoginCfg=async newLoginCfg=>{setLoginCfg(newLoginCfg);await db.collection("params").doc("config").set({loginCfg:newLoginCfg},{merge:true});showT("Page de connexion sauvegardee!");};
+  const saveLoginCfg=async newCfg=>{setLoginCfg(newCfg);await db.collection("params").doc("config").set({loginCfg:newCfg},{merge:true});showT("Page de connexion sauvegardee!");};
   const saveAdmin=async(np,ne)=>{setAdminPin(np);setEmployes(ne);await db.collection("params").doc("config").set({adminPin:np,employes:ne},{merge:true});showT("Sauvegarde!");};
   const saveKit=async(data)=>{setSyncing(true);if(data._id){await db.collection("kits").doc(data._id).set(data,{merge:true});}else{await fbAdd("kits",{...data,ts:Date.now()});}setSyncing(false);setModal(null);showT("Kit sauvegarde!");};
   const delKit=async id=>{if(!confirm("Supprimer ce kit?"))return;await fbDel("kits",id);showT("Kit supprime");};
@@ -698,10 +573,10 @@ function App(){
   if(!ready)return h(Spinner,null);
 
   // Show login screen if no user logged in
-  if(!currentUser)return h(LoginScreen,{cfg,loginCfg,userAccounts,employes,onLogin:(user)=>{setCurrentUser(user);setIsAdmin(user?.role==="admin");}});
+  if(!currentUser)return h(LoginScreen,{cfg,loginCfg,userAccounts,employes,onLogin:(user)=>{setCurrentUser(user);setPage("accueil");setMenuOpen(false);}});
 
   return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
-    h(AppHeader,{cfg,lowStock:lowS.length,syncing,isAdmin,isOnline,darkMode,onDarkToggle:()=>setDarkMode(d=>!d),onScan:()=>setModal({t:"scan"}),onGlobalSearch:()=>setModal({t:"globalSearch"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");setMenuOpen(false);},currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}),
+    h(AppHeader,{cfg,lowStock:lowS.length,syncing,isAdmin,isOnline,darkMode,onDarkToggle:()=>setDarkMode(d=>!d),onScan:()=>setModal({t:"scan"}),onGlobalSearch:()=>setModal({t:"globalSearch"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>setCurrentUser(null),currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}),
     zoomPhoto&&h("div",{onClick:()=>setZoomPhoto(null),style:{position:"fixed",inset:0,background:"rgba(0,0,0,.95)",zIndex:999,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}},
       h("div",{style:{maxWidth:"95vw",maxHeight:"95vh"}},
         h("img",{src:zoomPhoto,style:{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}),
@@ -715,7 +590,7 @@ function App(){
           h("button",{onClick:()=>setMenuOpen(false),style:{background:"none",border:"none",fontSize:24,cursor:"pointer",color:darkMode?"#fff":"#1c1c1e"}},"×")
         ),
         h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}},
-          [...navConfig].filter(n=>n.visible&&(n.id!=="admin"||currentUser?.role==="admin")).sort((a,b)=>a.order-b.order).map(n=>
+          [...navConfig].filter(n=>n.visible).sort((a,b)=>a.order-b.order).map(n=>
             h("button",{key:n.id,onClick:()=>{setPage(n.id);setMenuOpen(false);},
               style:{background:page===n.id?(cfg.couleur||S.red)+"22":darkMode?"#2c2c2e":"#f5f5f7",border:"1.5px solid "+(page===n.id?(cfg.couleur||S.red):"transparent"),borderRadius:16,padding:"14px 8px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
               h("span",{style:{fontSize:28}},n.icon),
@@ -723,7 +598,7 @@ function App(){
             )
           )
         ),
-        h("div",{style:{marginTop:16,paddingTop:16,borderTop:"1px solid "+(darkMode?"#3a3a3c":"#e5e5ea")}},
+        isAdmin&&h("div",{style:{marginTop:16,paddingTop:16,borderTop:"1px solid "+(darkMode?"#3a3a3c":"#e5e5ea")}},
           h("button",{onClick:()=>{setPage("admin");setMenuOpen(false);},style:{width:"100%",padding:"12px",background:"linear-gradient(135deg,#c8102e,#8b0000)",color:"#fff",border:"none",borderRadius:12,fontWeight:700,fontSize:13,cursor:"pointer",marginBottom:12}},"🔐 Administration")
         ),
         isAdmin&&h("div",{style:{paddingTop:8}},
@@ -1016,13 +891,13 @@ function App(){
         )
       ),
       page==="admin"&&h("div",{className:"fi"},
-        currentUser?.role!=="admin"
-          ?h("div",{style:{background:S.white,borderRadius:16,padding:"24px 20px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-              h("div",{style:{fontSize:42,marginBottom:10}},"🔒"),
-              h("div",{style:{fontSize:18,fontWeight:800,marginBottom:8}},"Acces reserve a l'administrateur connecte"),
-              h("div",{style:{fontSize:13,color:S.gray}},"Le mode administrateur n'est plus visible ni accessible hors session administrateur.")
+        !isAdmin
+          ?h("div",{style:{background:S.white,borderRadius:18,padding:"28px 22px",textAlign:"center",boxShadow:"0 8px 30px rgba(0,0,0,.08)"}},
+              h("div",{style:{fontSize:46,marginBottom:10}},"🔒"),
+              h("div",{style:{fontSize:18,fontWeight:800,marginBottom:6}},"Acces administrateur requis"),
+              h("p",{style:{fontSize:13,color:S.gray,lineHeight:1.5}},"Connectez-vous avec un compte administrateur pour acceder a cette section.")
             )
-          :h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>setPage("accueil"),onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig,loginCfg,saveLoginCfg})
+          :h(AdminPanel,{cfg,loginCfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveLoginCfg:saveLoginCfg,onSaveAdmin:saveAdmin,onLogout:()=>setPage("accueil"),onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig})
       )
     ),
 
@@ -1085,15 +960,15 @@ function App(){
   );
 }
 
-function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig,loginCfg,saveLoginCfg}){
+function AdminPanel({cfg,loginCfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveLoginCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,lang,saveLang,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig}){
   const[tab,setTab]=useState("stats");
   const[emps,setEmps]=useState([...employes]);
   const[newE,setNewE]=useState("");
   const[pin,setPin]=useState(adminPin);
   const[pin2,setPin2]=useState("");
   const[lCfg,setLCfg]=useState({...cfg});
-  const[lLoginCfg,setLLoginCfg]=useState({...loginCfg});
-  const tabs=[["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["backup","Sauvegarde"],["config","Config"],["perso","Perso"],["login","Login"]];
+  const[loginLocalCfg,setLoginLocalCfg]=useState({...loginCfg});
+  const tabs=[["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["backup","Sauvegarde"],["config","Config"],["comptes","Comptes"],["login","Login"],["perso","Perso"]];
   const sortiesParJour=()=>{const map={};emprunts.forEach(e=>{const d=(e.dateDepart||"").split(" ")[0];if(d)map[d]=(map[d]||0)+1;});return Object.entries(map).slice(-7).map(([d,n])=>({d:d.split("/").slice(0,2).join("/"),n}));};
   const sParJ=sortiesParJour();const maxN=Math.max(...sParJ.map(x=>x.n),1);
 
@@ -1270,15 +1145,36 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
         h("div",{style:{width:40,height:40,borderRadius:"50%",background:acc.role==="admin"?S.red:S.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}},acc.avatar||"👤"),
         h("div",{style:{flex:1}},
           h("div",{style:{fontSize:14,fontWeight:700}},acc.name),
-          h("div",{style:{fontSize:11,color:S.gray}},(acc.role==="admin"?"Administrateur":"Utilisateur")+" · PIN: "+acc.pin)
+          h("div",{style:{fontSize:11,color:S.gray}},(acc.role==="admin"?"Administrateur":"Utilisateur")+" · PIN masque")
         ),
         h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",justifyContent:"flex-end"}},
-          h("button",{onClick:()=>setModal({t:"editUser",acc,idx:i}),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"✏️"),
-          h("button",{onClick:()=>{const na=[...(userAccounts||[])];na[i]={...na[i],pin:"0000"};saveUserAccounts(na);showT("PIN reinitialise a 0000 pour "+acc.name);},style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"Reset PIN"),
+          h("button",{onClick:()=>setModal({t:"editUser",acc,idx:i}),style:{background:"#eef4ff",color:S.blue,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"✏️"),
+          h("button",{onClick:()=>{const np=prompt("Nouveau PIN 4 chiffres pour "+acc.name,acc.pin||"0000");if(!np)return;if(!/^\d{4}$/.test(np)){alert("PIN invalide");return;}const updated=(userAccounts||[]).map((u,j)=>j===i?{...u,pin:np}:u);saveUserAccounts(updated);showT("PIN reinitialise pour "+acc.name);},style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"🔑"),
           h("button",{onClick:()=>{if(confirm("Supprimer "+acc.name+"?"))saveUserAccounts((userAccounts||[]).filter((_,j)=>j!==i));},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"🗑️")
         )
       )),
       h("button",{onClick:()=>setModal({t:"addUser"}),style:{...BP,marginTop:8}},"+Ajouter un compte")
+    ),
+
+    tab==="login"&&h("div",{},
+      h("div",{style:{background:S.white,borderRadius:14,padding:"16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+        h("div",{style:{fontSize:15,fontWeight:800,marginBottom:12}},"Page de connexion"),
+        FL("Badge",true),h("input",{value:loginLocalCfg.badge||"",onChange:e=>setLoginLocalCfg(p=>({...p,badge:e.target.value})),style:IS}),
+        FL("Titre principal",true),h("input",{value:loginLocalCfg.heroTitle||"",onChange:e=>setLoginLocalCfg(p=>({...p,heroTitle:e.target.value})),style:IS}),
+        FL("Sous-titre",true),h("textarea",{value:loginLocalCfg.heroSubtitle||"",onChange:e=>setLoginLocalCfg(p=>({...p,heroSubtitle:e.target.value})),rows:3,style:{...IS,minHeight:84,resize:"vertical"}}),
+        FL("Titre carte connexion",true),h("input",{value:loginLocalCfg.cardTitle||"",onChange:e=>setLoginLocalCfg(p=>({...p,cardTitle:e.target.value})),style:IS}),
+        FL("Titre panneau bienvenue",true),h("input",{value:loginLocalCfg.welcomeTitle||"",onChange:e=>setLoginLocalCfg(p=>({...p,welcomeTitle:e.target.value})),style:IS}),
+        FL("Texte panneau bienvenue",true),h("textarea",{value:loginLocalCfg.welcomeText||"",onChange:e=>setLoginLocalCfg(p=>({...p,welcomeText:e.target.value})),rows:3,style:{...IS,minHeight:84,resize:"vertical"}}),
+        FL("Texte d'aide",true),h("textarea",{value:loginLocalCfg.helpText||"",onChange:e=>setLoginLocalCfg(p=>({...p,helpText:e.target.value})),rows:3,style:{...IS,minHeight:84,resize:"vertical"}}),
+        FL("Texte bouton",true),h("input",{value:loginLocalCfg.buttonText||"",onChange:e=>setLoginLocalCfg(p=>({...p,buttonText:e.target.value})),style:IS}),
+        FL("Placeholder recherche",true),h("input",{value:loginLocalCfg.searchPlaceholder||"",onChange:e=>setLoginLocalCfg(p=>({...p,searchPlaceholder:e.target.value})),style:IS}),
+        FL("Placeholder PIN",true),h("input",{value:loginLocalCfg.pinPlaceholder||"",onChange:e=>setLoginLocalCfg(p=>({...p,pinPlaceholder:e.target.value})),style:IS}),
+        FL("Texte de bas de page",true),h("input",{value:loginLocalCfg.footerText||"",onChange:e=>setLoginLocalCfg(p=>({...p,footerText:e.target.value})),style:IS}),
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+          h("button",{onClick:()=>setLoginLocalCfg({...loginCfg}),style:BS},"Recharger"),
+          h("button",{onClick:()=>onSaveLoginCfg(loginLocalCfg),style:BP},"Sauvegarder la page")
+        )
+      )
     ),
 
     tab==="notifs"&&h("div",{},
@@ -1391,39 +1287,6 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
         )
       ),
       h("button",{onClick:()=>{onSaveCfg({...cfg,...lCfg});showT("Apparence sauvegardee!");},style:BP},"Sauvegarder")
-    ),
-
-    tab==="login"&&h("div",{},
-      h("div",{style:{background:S.white,borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-        h("div",{style:{fontSize:15,fontWeight:800,marginBottom:6}},"Page de connexion"),
-        h("div",{style:{fontSize:12,color:S.gray,marginBottom:14}},"Personnalisez l'ecran de connexion depuis le compte administrateur."),
-        FL("Badge"),h("input",{value:lLoginCfg.badge||"",onChange:e=>setLLoginCfg(p=>({...p,badge:e.target.value})),style:IS}),
-        FL("Titre principal",true),h("input",{value:lLoginCfg.title||"",onChange:e=>setLLoginCfg(p=>({...p,title:e.target.value})),style:IS}),
-        FL("Sous-titre",true),h("textarea",{value:lLoginCfg.subtitle||"",onChange:e=>setLLoginCfg(p=>({...p,subtitle:e.target.value})),style:{...IS,minHeight:70,resize:"vertical"}}),
-        FL("Titre carte connexion",true),h("input",{value:lLoginCfg.loginCardTitle||"",onChange:e=>setLLoginCfg(p=>({...p,loginCardTitle:e.target.value})),style:IS}),
-        FL("Sous-titre carte connexion",true),h("textarea",{value:lLoginCfg.loginCardSubtitle||"",onChange:e=>setLLoginCfg(p=>({...p,loginCardSubtitle:e.target.value})),style:{...IS,minHeight:60,resize:"vertical"}}),
-        FL("Texte bienvenue",true),h("textarea",{value:lLoginCfg.welcomeText||"",onChange:e=>setLLoginCfg(p=>({...p,welcomeText:e.target.value})),style:{...IS,minHeight:70,resize:"vertical"}}),
-        FL("Texte assistance",true),h("textarea",{value:lLoginCfg.supportText||"",onChange:e=>setLLoginCfg(p=>({...p,supportText:e.target.value})),style:{...IS,minHeight:60,resize:"vertical"}}),
-        FL("Texte bouton",true),h("input",{value:lLoginCfg.primaryButtonText||"",onChange:e=>setLLoginCfg(p=>({...p,primaryButtonText:e.target.value})),style:IS}),
-        FL("Placeholder recherche",true),h("input",{value:lLoginCfg.userSearchPlaceholder||"",onChange:e=>setLLoginCfg(p=>({...p,userSearchPlaceholder:e.target.value})),style:IS}),
-        FL("Placeholder PIN",true),h("input",{value:lLoginCfg.pinPlaceholder||"",onChange:e=>setLLoginCfg(p=>({...p,pinPlaceholder:e.target.value})),style:IS}),
-        FL("Pied de page",true),h("input",{value:lLoginCfg.footerText||"",onChange:e=>setLLoginCfg(p=>({...p,footerText:e.target.value})),style:IS}),
-        FL("Ligne basse",true),h("input",{value:lLoginCfg.copyrightLine||"",onChange:e=>setLLoginCfg(p=>({...p,copyrightLine:e.target.value})),style:IS}),
-        h("label",{style:{display:"flex",alignItems:"center",gap:10,marginTop:14,fontSize:13,fontWeight:600}},
-          h("input",{type:"checkbox",checked:lLoginCfg.showSupport!==false,onChange:e=>setLLoginCfg(p=>({...p,showSupport:e.target.checked}))}),
-          "Afficher le bloc assistance"
-        )
-      ),
-      h("div",{style:{background:"linear-gradient(135deg,"+(lCfg.couleur||cfg.couleur||S.red)+","+darken(lCfg.couleur||cfg.couleur||S.red)+")",borderRadius:18,padding:"18px",color:"#fff",marginBottom:14}},
-        h("div",{style:{fontSize:11,fontWeight:800,letterSpacing:1.2,opacity:.8,marginBottom:8}},lLoginCfg.badge||"SECURE ACCESS"),
-        h("div",{style:{fontSize:22,fontWeight:900,marginBottom:8,lineHeight:1.1}},lLoginCfg.title||"Connexion a l'espace Airside"),
-        h("div",{style:{fontSize:13,opacity:.9,marginBottom:12}},lLoginCfg.subtitle||"Accedez a la plateforme avec votre compte personnel et votre code confidentiel."),
-        h("div",{style:{background:"rgba(255,255,255,.14)",borderRadius:14,padding:"14px",marginBottom:10}},
-          h("div",{style:{fontSize:14,fontWeight:800,marginBottom:6}},lLoginCfg.loginCardTitle||"Se connecter"),
-          h("div",{style:{fontSize:12,opacity:.95,lineHeight:1.5}},lLoginCfg.loginCardSubtitle||"Identifiez-vous pour acceder a votre espace personnel.")
-        )
-      ),
-      h("button",{onClick:()=>saveLoginCfg({...loginCfg,...lLoginCfg}),style:BP},"Sauvegarder la page de connexion")
     )
   );
 }
@@ -2042,8 +1905,7 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
       h("div",{style:{fontSize:12,opacity:.7,marginTop:2}},"Numero genere automatiquement")
     ),
     h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"12px 14px",margin:"14px 0",textAlign:"center"}},
-      h("div",{style:{fontSize:10,color:S.gray,fontWeight:700,marginBottom:8}},"QR CODE"),
-      h("img",{src:makeQRCodeDataURL(genQRData(),220),style:{width:120,height:120,background:"#fff",padding:8,borderRadius:12,display:"block",margin:"0 auto 8px"}}),
+      h("div",{style:{fontSize:10,color:S.gray,fontWeight:700,marginBottom:4}},"QR CODE"),
       h("div",{style:{fontSize:18,fontWeight:800,letterSpacing:2,color:S.blue}},palId)
     ),
     FL("Contenu de la palette *",true),
@@ -2096,7 +1958,7 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
     photoPos&&h("img",{src:photoPos,style:{width:"100%",borderRadius:10,maxHeight:120,objectFit:"cover",marginBottom:14}}),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
       h("button",{onClick:onClose,style:BS},"Annuler"),
-      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}const qrData=genQRData();onSave({id:palId,items:items.filter(x=>x.nom),photos,zone,allee,rack,etagere,position,photoPos,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock",qrData,qrImage:makeQRCodeDataURL(qrData,512)});},style:BB},"Creer la palette")
+      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}onSave({id:palId,items:items.filter(x=>x.nom),photos,zone,allee,rack,etagere,position,photoPos,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock",qrData:genQRData()});},style:BB},"Creer la palette")
     )
   );
 }
@@ -2113,18 +1975,14 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
     return()=>u();
   },[]);
 
-  const savePalette=async(data)=>{const qrData=data.qrData||paletteQRText(data);await fbAdd("palettes",{...data,qrData,qrImage:data.qrImage||makeQRCodeDataURL(qrData,512),ts:Date.now()});setModal(null);showT("Palette "+data.id+" creee!");};
-  const updatePalette=async(id,data)=>{const qrData=data.qrData||paletteQRText(data);await db.collection("palettes").doc(id).set({...data,qrData,qrImage:data.qrImage||makeQRCodeDataURL(qrData,512)},{merge:true});setModal(null);showT("Palette mise a jour!");};
+  const savePalette=async(data)=>{await fbAdd("palettes",{...data,ts:Date.now()});setModal(null);showT("Palette "+data.id+" creee!");};
+  const updatePalette=async(id,data)=>{await db.collection("palettes").doc(id).set(data,{merge:true});setModal(null);showT("Palette mise a jour!");};
   const deletePalette=async(id)=>{if(!confirm("Supprimer cette palette?"))return;await fbDel("palettes",id);setSelPal(null);showT("Palette supprimee");};
 
   const filtered=palettes.filter(p=>{
     if(!search)return true;
-    const q=search.toLowerCase().trim();
-    const bag=[
-      p.id,p.qrData,p.zone,p.allee,p.rack,p.etagere,p.position,p.provenance,p.destination,
-      ...(p.items||[]).flatMap(i=>[i.nom,i.qte])
-    ].filter(Boolean).join(" ").toLowerCase();
-    return bag.includes(q);
+    const q=search.toLowerCase();
+    return p.id?.toLowerCase().includes(q)||p.items?.some(i=>i.nom?.toLowerCase().includes(q))||(p.zone||"").toLowerCase().includes(q);
   });
 
   if(selPal){
@@ -2173,7 +2031,6 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
         h("button",{onClick:()=>generatePalettePDF(pal,cfg),style:{...BP,background:"#2c3e50"}},"📄 Fiche PDF"),
         h("button",{onClick:()=>setModal({t:"qrPal",pal}),style:{...BB}},"📱 QR Code")
       ),
-      h("button",{onClick:()=>sharePalettePDF(pal,cfg,showT),style:{...BS,color:S.blue,marginBottom:10}},"📧 Envoyer / partager le PDF"),
       isAdmin&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
         h("button",{onClick:()=>deletePalette(pal._id),style:{...BS,color:S.danger}},"Supprimer"),
         h("button",{onClick:()=>setModal({t:"editPal",pal}),style:BB},"Modifier")
@@ -2194,7 +2051,7 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
     ),
     h("div",{style:{position:"relative",marginBottom:14}},
       h("span",{style:{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:15}},"🔍"),
-      h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher numero, QR, zone, rack, position ou contenu...",style:{...IS,paddingLeft:38,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})
+      h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher une palette, un article...",style:{...IS,paddingLeft:38,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})
     ),
     filtered.length===0
       ?h("div",{style:{background:S.white,borderRadius:14,padding:"40px 20px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
@@ -2227,12 +2084,14 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
         h("div",{style:{textAlign:"center",padding:"20px 10px"}},
           h("div",{style:{fontSize:14,fontWeight:700,marginBottom:4}},modal.pal?.id),
           h("div",{style:{background:"#f5f5f5",borderRadius:12,padding:"24px",margin:"10px 0",display:"inline-block"}},
-            h("img",{src:modal.pal?.qrImage||makeQRCodeDataURL(modal.pal?.qrData||paletteQRText(modal.pal),320),style:{width:220,height:220,background:"#fff",border:"2px solid #000",borderRadius:8,padding:8,objectFit:"contain"}})
+            h("div",{style:{width:200,height:200,background:"#fff",border:"2px solid #000",borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}},
+              h("div",{style:{fontSize:14,fontWeight:900,letterSpacing:2,color:"#000"}},modal.pal?.id),
+              h("div",{style:{fontSize:10,color:"#666",textAlign:"center",padding:"0 10px"}},modal.pal?.items?.slice(0,3).map(i=>i.nom).join(", ")),
+              h("div",{style:{fontSize:9,color:"#888"}},modal.pal?.zone?"Zone "+modal.pal.zone:"")
+            )
           ),
-          h("div",{style:{fontSize:11,color:S.gray,marginBottom:6}},"Scannez avec l'app pour voir les details"),
-          h("div",{style:{fontSize:11,color:S.gray,marginBottom:14}},paletteLocationText(modal.pal,{hideRack:true})||""),
+          h("div",{style:{fontSize:11,color:S.gray,marginBottom:14}},"Scannez avec l'app pour voir les details"),
           h("button",{onClick:()=>generatePalettePDF(modal.pal,cfg),style:BP},"Generer Fiche PDF"),
-          h("button",{onClick:()=>sharePalettePDF(modal.pal,cfg,showT),style:{...BS,marginTop:8,color:S.blue}},"Partager / envoyer"),
           h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:8}},"Fermer")
         )
       ),
@@ -2246,102 +2105,93 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
 
 // ── LOGIN SCREEN ──────────────────────────────────────────────────────────
 function LoginScreen({cfg,loginCfg,userAccounts,employes,onLogin}){
-  const bgColor=cfg.couleur||S.red;
-  const accounts=getAccountList(userAccounts,employes);
-  const[selected,setSelected]=useState(accounts[0]?.name||"");
-  const[pin,setPin]=useState("");
-  const[err,setErr]=useState("");
-  const[q,setQ]=useState("");
-  const filtered=accounts.filter(acc=>(acc.name||"").toLowerCase().includes((q||"").toLowerCase()));
-  const selectedAcc=accounts.find(a=>a.name===selected) || filtered[0] || null;
+  const bgColor=cfg.couleur||"#c8102e";
+  const [query,setQuery]=useState("");
+  const [sel,setSel]=useState(null);
+  const [pin,setPin]=useState("");
+  const [err,setErr]=useState("");
+  const [loading,setLoading]=useState(false);
 
-  useEffect(()=>{
-    if(selectedAcc && selected!==selectedAcc.name)setSelected(selectedAcc.name);
-  },[selected,selectedAcc]);
+  const accounts=userAccounts&&userAccounts.length>0
+    ?userAccounts
+    :employes.map(e=>({name:e,pin:"0000",role:"user",avatar:"👤"}));
+
+  const filtered=accounts.filter(acc=>!query||acc.name.toLowerCase().includes(query.toLowerCase()));
+  const selected=accounts.find(a=>a.name===sel)||null;
 
   const submit=()=>{
-    if(!selectedAcc){setErr("Aucun compte selectionne.");return;}
-    if((pin||"").length!==4){setErr("Saisissez un PIN a 4 chiffres.");return;}
-    if(pin===selectedAcc.pin){setErr("");onLogin({...selectedAcc});return;}
-    setErr("PIN incorrect.");
-    setTimeout(()=>setPin(""),350);
+    if(!selected){setErr("Selectionnez un compte.");return;}
+    if(!/^\d{4}$/.test(pin)){setErr("Saisissez un PIN a 4 chiffres.");return;}
+    setLoading(true);
+    setTimeout(()=>{
+      if(selected.pin===pin){setErr("");onLogin({...selected});}
+      else{setErr("Code PIN incorrect.");setPin("");}
+      setLoading(false);
+    },180);
   };
 
-  const heroStats=[
-    {label:"Comptes actifs",value:String(accounts.length||0)},
-    {label:"Acces admin",value:accounts.some(a=>a.role==="admin")?"Oui":"Non"},
-    {label:"Support",value:loginCfg?.showSupport!==false?"Actif":"Masque"}
-  ];
-
-  return h("div",{style:{minHeight:"100vh",position:"relative",overflow:"hidden",background:"#0b1220"}},
-    cfg.coverUrl&&h("div",{style:{position:"absolute",inset:0,backgroundImage:"url('"+cfg.coverUrl+"')",backgroundSize:"cover",backgroundPosition:"center",transform:"scale(1.03)",filter:"blur(2px)"}}),
-    h("div",{style:{position:"absolute",inset:0,background:"radial-gradient(circle at top left, "+bgColor+"66 0%, rgba(11,18,32,.96) 42%, rgba(11,18,32,.985) 100%)"}}),
-    h("div",{style:{position:"relative",minHeight:"100vh",padding:"32px 18px",display:"flex",alignItems:"center",justifyContent:"center"}},
-      h("div",{style:{width:"100%",maxWidth:1220,display:"grid",gridTemplateColumns:"minmax(0,1.15fr) minmax(360px,460px)",gap:26,alignItems:"stretch"}},
-        h("section",{style:{color:"#fff",padding:"18px 10px 18px 4px",display:"flex",flexDirection:"column",justifyContent:"space-between"}},
-          h("div",{},
-            h("div",{style:{display:"inline-flex",alignItems:"center",gap:10,padding:"9px 16px",borderRadius:999,background:"rgba(255,255,255,.10)",backdropFilter:"blur(10px)",fontSize:12,fontWeight:800,letterSpacing:1.1}},loginCfg?.badge||"SECURE ACCESS"),
-            h("div",{style:{display:"flex",alignItems:"center",gap:16,marginTop:22}},
-              cfg.logoUrl
-                ?h("img",{src:cfg.logoUrl,style:{width:76,height:76,borderRadius:20,objectFit:"cover",boxShadow:"0 22px 40px rgba(0,0,0,.28)"}})
-                :h("div",{style:{width:76,height:76,borderRadius:20,background:"rgba(255,255,255,.12)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,boxShadow:"0 22px 40px rgba(0,0,0,.22)"}},"✈️"),
-              h("div",{},
-                h("div",{style:{fontSize:13,fontWeight:800,opacity:.82,letterSpacing:.8,textTransform:"uppercase"}},cfg.sousTitre||"Gestion Airside"),
-                h("div",{style:{fontSize:32,fontWeight:900,lineHeight:1.02,letterSpacing:-.9,marginTop:4}},cfg.nomSite||"LUX AIRPORT")
-              )
-            ),
-            h("div",{style:{fontSize:48,fontWeight:900,lineHeight:1.0,letterSpacing:-1.6,maxWidth:700,marginTop:30,marginBottom:14}},loginCfg?.title||"Connexion a l'espace Airside"),
-            h("div",{style:{fontSize:17,lineHeight:1.65,opacity:.92,maxWidth:720}},loginCfg?.subtitle||"Accedez a la plateforme avec votre compte personnel et votre code confidentiel."),
-            h("div",{style:{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(180px,1fr))",gap:12,marginTop:30,maxWidth:820}},
-              heroStats.map((stat,i)=>h("div",{key:i,style:{background:"rgba(255,255,255,.08)",border:"1px solid rgba(255,255,255,.12)",borderRadius:20,padding:"16px 18px",backdropFilter:"blur(10px)"}},
-                h("div",{style:{fontSize:12,opacity:.76,marginBottom:8,textTransform:"uppercase",letterSpacing:.7}},stat.label),
-                h("div",{style:{fontSize:28,fontWeight:900,letterSpacing:-.8}},stat.value)
-              ))
-            ),
-            h("div",{style:{background:"rgba(255,255,255,.08)",border:"1px solid rgba(255,255,255,.12)",borderRadius:24,padding:"18px 20px",marginTop:20,maxWidth:820}},
-              h("div",{style:{fontSize:15,fontWeight:900,marginBottom:8}},loginCfg?.welcomeTitle||"Bienvenue"),
-              h("div",{style:{fontSize:13.5,lineHeight:1.65,opacity:.94}},loginCfg?.welcomeText||"Suivi des outils, des stocks, des kits et de l'entrepot dans une interface securisee.")
-            )
+  return h("div",{style:{minHeight:"100vh",background:"linear-gradient(135deg,"+darken(bgColor)+" 0%,"+bgColor+" 42%,#f5f7fb 42%,#eef2f7 100%)",display:"flex",alignItems:"stretch",justifyContent:"center",padding:"24px",boxSizing:"border-box"}},
+    h("div",{style:{width:"100%",maxWidth:1120,display:"grid",gridTemplateColumns:window.innerWidth>860?"1.1fr .9fr":"1fr",gap:24,alignItems:"stretch"}},
+      h("div",{style:{position:"relative",overflow:"hidden",borderRadius:30,padding:window.innerWidth>860?"42px":"28px 22px",background:"linear-gradient(145deg,rgba(255,255,255,.16),rgba(255,255,255,.06))",border:"1px solid rgba(255,255,255,.18)",boxShadow:"0 24px 80px rgba(0,0,0,.18)",color:"#fff",minHeight:window.innerWidth>860?620:"auto"}},
+        cfg.coverUrl&&h("img",{src:cfg.coverUrl,style:{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",opacity:.18}}),
+        h("div",{style:{position:"absolute",inset:0,background:"radial-gradient(circle at top right, rgba(255,255,255,.22), transparent 38%)"}}),
+        h("div",{style:{position:"relative",zIndex:1,display:"flex",flexDirection:"column",height:"100%"}},
+          h("div",{style:{display:"inline-flex",alignItems:"center",gap:8,alignSelf:"flex-start",padding:"8px 12px",borderRadius:999,background:"rgba(255,255,255,.14)",border:"1px solid rgba(255,255,255,.18)",fontSize:12,fontWeight:800,letterSpacing:.8,textTransform:"uppercase",marginBottom:22}},
+            h("span",{},"✈️"),
+            h("span",{},loginCfg?.badge||"PLATEFORME AIRSIDE")
           ),
-          h("div",{style:{marginTop:28,fontSize:12,opacity:.72}},loginCfg?.footerText||loginCfg?.copyrightLine||"Acces reserve au personnel autorise.")
-        ),
-        h("section",{style:{background:"rgba(255,255,255,.97)",borderRadius:30,padding:"26px 24px 22px",boxShadow:"0 30px 80px rgba(0,0,0,.34)",backdropFilter:"blur(18px)",alignSelf:"center"}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,marginBottom:18}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:14,marginBottom:18}},
+            cfg.logoUrl
+              ?h("img",{src:cfg.logoUrl,style:{width:72,height:72,borderRadius:18,objectFit:"cover",boxShadow:"0 10px 25px rgba(0,0,0,.18)"}})
+              :h("div",{style:{width:72,height:72,borderRadius:18,background:"rgba(255,255,255,.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:34,boxShadow:"0 10px 25px rgba(0,0,0,.14)"}},"✈️"),
             h("div",{},
-              h("div",{style:{fontSize:28,fontWeight:900,color:"#111827",letterSpacing:-.8}},loginCfg?.loginCardTitle||"Se connecter"),
-              h("div",{style:{fontSize:13,color:"#6b7280",marginTop:5,lineHeight:1.5}},loginCfg?.loginCardSubtitle||"Identifiez-vous pour acceder a votre espace personnel.")
-            ),
-            h("div",{style:{padding:"7px 11px",borderRadius:999,background:bgColor+"14",color:bgColor,fontSize:11,fontWeight:800,whiteSpace:"nowrap"}},selectedAcc?.role==="admin"?"COMPTE ADMIN":"COMPTE UTILISATEUR")
-          ),
-          h("div",{style:{fontSize:12,fontWeight:800,color:"#374151",marginBottom:6}},"Utilisateur"),
-          h("input",{value:q,onChange:e=>setQ(e.target.value),placeholder:loginCfg?.userSearchPlaceholder||"Rechercher un collaborateur",style:{...IS,background:"#f8fafc",border:"1.5px solid #d6dbe3",marginBottom:12}}),
-          h("select",{value:selectedAcc?.name||"",onChange:e=>{setSelected(e.target.value);setPin("");setErr("");},style:{...SS,background:"#fff",border:"1.5px solid #d6dbe3",marginBottom:14}},
-            filtered.length===0
-              ?h("option",{value:""},"Aucun compte disponible")
-              :filtered.map(acc=>h("option",{key:acc.name,value:acc.name},acc.name+" - "+(acc.role==="admin"?"Administrateur":"Utilisateur")))
-          ),
-          selectedAcc&&h("div",{style:{display:"flex",alignItems:"center",gap:12,background:"#f8fafc",border:"1px solid #e5e7eb",borderRadius:18,padding:"13px 14px",marginBottom:14}},
-            h("div",{style:{width:48,height:48,borderRadius:16,background:selectedAcc.role==="admin"?"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")":"linear-gradient(135deg,#2563eb,#1d4ed8)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,color:"#fff",flexShrink:0}},selectedAcc.avatar||"👤"),
-            h("div",{style:{minWidth:0}},
-              h("div",{style:{fontSize:14,fontWeight:900,color:"#111827"}},selectedAcc.name),
-              h("div",{style:{fontSize:12,color:"#6b7280",marginTop:3}},selectedAcc.role==="admin"?"Ce compte donne acces au panneau administrateur.":"Compte standard.")
+              h("div",{style:{fontSize:28,fontWeight:900,letterSpacing:-.8,lineHeight:1.1}},cfg.nomSite||"LUX AIRPORT"),
+              h("div",{style:{fontSize:14,opacity:.82,marginTop:6}},cfg.sousTitre||"Gestion Airside")
             )
           ),
-          h("div",{style:{fontSize:12,fontWeight:800,color:"#374151",marginBottom:6}},"Code PIN"),
-          h("input",{type:"password",inputMode:"numeric",maxLength:4,value:pin,onChange:e=>{const clean=(e.target.value||"").replace(/\D/g,"").slice(0,4);setPin(clean);setErr("");},onKeyDown:e=>{if(e.key==="Enter")submit();},placeholder:loginCfg?.pinPlaceholder||"Code PIN a 4 chiffres",style:{...IS,background:"#fff",border:"1.5px solid "+(err?S.danger:"#d6dbe3"),letterSpacing:"6px",fontSize:20,textAlign:"center",fontWeight:800,marginBottom:12}}),
-          err&&h("div",{style:{fontSize:12,color:S.danger,fontWeight:800,marginBottom:12}},err),
-          h("button",{onClick:submit,style:{width:"100%",padding:"14px 16px",background:"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")",color:"#fff",border:"none",borderRadius:16,fontSize:14,fontWeight:800,cursor:"pointer",boxShadow:"0 18px 28px "+bgColor+"33"}},loginCfg?.primaryButtonText||"Connexion securisee"),
-          h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginTop:14}},
-            filtered.slice(0,4).map(acc=>h("button",{key:acc.name,onClick:()=>{setSelected(acc.name);setPin("");setErr("");},style:{border:"1px solid "+(selectedAcc?.name===acc.name?bgColor:"#e5e7eb"),background:selectedAcc?.name===acc.name?bgColor+"10":"#fff",color:"#111827",borderRadius:14,padding:"10px 12px",cursor:"pointer",textAlign:"left"}},
-              h("div",{style:{fontSize:12,fontWeight:800,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},acc.name),
-              h("div",{style:{fontSize:11,color:"#6b7280",marginTop:4}},acc.role==="admin"?"Administrateur":"Utilisateur")
+          h("h1",{style:{fontSize:window.innerWidth>860?42:30,fontWeight:900,lineHeight:1.05,letterSpacing:-1.2,margin:"8px 0 12px"}},loginCfg?.heroTitle||"Connexion"),
+          h("p",{style:{fontSize:15,lineHeight:1.65,maxWidth:520,opacity:.9,marginBottom:24}},loginCfg?.heroSubtitle||"Acces securise a la gestion du materiel et de l'entrepot"),
+          h("div",{style:{display:"grid",gridTemplateColumns:window.innerWidth>860?"repeat(3,1fr)":"1fr",gap:12,marginTop:4}},
+            [
+              ["🔐","Session individuelle","Chaque utilisateur ouvre sa propre session."],
+              ["🧰","Suivi terrain","Accedez aux emprunts, outils, palettes et stocks."],
+              ["⚙️","Administration","Le compte administrateur pilote les acces et la page de login."]
+            ].map(([icon,title,txt])=>h("div",{key:title,style:{background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.14)",borderRadius:18,padding:"14px 15px"}},
+              h("div",{style:{fontSize:20,marginBottom:8}},icon),
+              h("div",{style:{fontSize:13,fontWeight:800,marginBottom:4}},title),
+              h("div",{style:{fontSize:12,lineHeight:1.55,opacity:.86}},txt)
             ))
           ),
-          loginCfg?.showSupport!==false&&h("div",{style:{background:bgColor+"10",border:"1px solid "+bgColor+"22",borderRadius:16,padding:"14px 15px",marginTop:15}},
-            h("div",{style:{fontSize:12,fontWeight:800,color:bgColor,marginBottom:6}},"Assistance"),
-            h("div",{style:{fontSize:12.5,color:"#374151",lineHeight:1.55}},loginCfg?.supportText||"En cas d'oubli du PIN, contactez un administrateur.")
+          h("div",{style:{marginTop:"auto",paddingTop:24}},
+            h("div",{style:{fontSize:18,fontWeight:800,marginBottom:6}},loginCfg?.welcomeTitle||"Bienvenue"),
+            h("div",{style:{fontSize:14,lineHeight:1.65,opacity:.88,maxWidth:560}},loginCfg?.welcomeText||"Consultez vos outils, palettes et stocks avec une interface moderne et securisee."),
+            h("div",{style:{fontSize:11,opacity:.7,marginTop:18}},loginCfg?.footerText||"Acces reserve au personnel autorise")
+          )
+        )
+      ),
+      h("div",{style:{display:"flex",alignItems:"center"}},
+        h("div",{style:{width:"100%",background:"#fff",borderRadius:30,padding:window.innerWidth>860?"34px 30px":"24px 20px",boxShadow:"0 24px 80px rgba(18,32,56,.16)",border:"1px solid rgba(18,32,56,.06)"}},
+          h("div",{style:{fontSize:24,fontWeight:900,letterSpacing:-.6,marginBottom:6}},loginCfg?.cardTitle||"Se connecter"),
+          h("p",{style:{fontSize:13,color:"#667085",lineHeight:1.6,marginBottom:18}},loginCfg?.helpText||"Selectionnez votre compte puis saisissez votre code PIN personnel."),
+          h("label",{style:{display:"block",fontSize:12,fontWeight:800,color:"#344054",marginBottom:8}},"Utilisateur"),
+          h("input",{value:query,onChange:e=>setQuery(e.target.value),placeholder:loginCfg?.searchPlaceholder||"Rechercher un utilisateur...",style:{width:"100%",padding:"13px 14px",border:"1.5px solid #d0d5dd",borderRadius:14,fontSize:14,marginBottom:14,outline:"none",background:"#fff"}}),
+          h("div",{style:{display:"grid",gap:10,maxHeight:220,overflowY:"auto",paddingRight:2,marginBottom:16}},
+            filtered.length===0
+              ?h("div",{style:{padding:"18px 14px",borderRadius:14,background:"#f8fafc",fontSize:13,color:"#667085",textAlign:"center"}},"Aucun utilisateur trouve.")
+              :filtered.map((acc,i)=>h("button",{key:i,onClick:()=>{setSel(acc.name);setErr("");},style:{display:"flex",alignItems:"center",gap:12,width:"100%",padding:"12px 13px",borderRadius:16,border:"1.5px solid "+(sel===acc.name?bgColor:"#e4e7ec"),background:sel===acc.name?bgColor+"12":"#fff",cursor:"pointer",textAlign:"left",boxShadow:sel===acc.name?"0 8px 20px rgba(0,0,0,.06)":"none"}},
+                h("div",{style:{width:46,height:46,borderRadius:14,background:acc.role==="admin"?"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")":"linear-gradient(135deg,#007aff,#005ecb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22,color:"#fff",flexShrink:0}},acc.avatar||"👤"),
+                h("div",{style:{flex:1,minWidth:0}},
+                  h("div",{style:{fontSize:14,fontWeight:800,color:"#101828",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},acc.name),
+                  h("div",{style:{fontSize:12,color:"#667085",marginTop:4}},acc.role==="admin"?"Compte administrateur":"Compte utilisateur")
+                ),
+                sel===acc.name&&h("div",{style:{fontSize:18,color:bgColor,fontWeight:800}},"✓")
+              ))
           ),
-          h("div",{style:{marginTop:14,fontSize:11,color:"#9ca3af",textAlign:"center"}},loginCfg?.copyrightLine||"Lux Airport - Portail Airside")
+          h("label",{style:{display:"block",fontSize:12,fontWeight:800,color:"#344054",marginBottom:8}},"Code PIN"),
+          h("input",{type:"password",inputMode:"numeric",value:pin,onChange:e=>{setPin(e.target.value.replace(/\D/g,"").slice(0,4));setErr("");},onKeyDown:e=>e.key==="Enter"&&submit(),placeholder:loginCfg?.pinPlaceholder||"Code PIN a 4 chiffres",style:{width:"100%",padding:"14px",border:"1.5px solid "+(err?"#f04438":"#d0d5dd"),borderRadius:14,fontSize:18,letterSpacing:6,textAlign:"center",outline:"none",marginBottom:10}}),
+          err&&h("div",{style:{fontSize:12,color:"#f04438",fontWeight:700,marginBottom:12}},err),
+          h("button",{onClick:submit,style:{width:"100%",padding:"14px 16px",border:"none",borderRadius:16,background:"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")",color:"#fff",fontWeight:800,fontSize:15,cursor:"pointer",boxShadow:"0 16px 35px rgba(0,0,0,.16)",opacity:loading ? .8 : 1}},loading?"Connexion...":(loginCfg?.buttonText||"Connexion")),
+          h("div",{style:{marginTop:14,fontSize:11,color:"#667085",lineHeight:1.6,textAlign:"center"}},"Le compte administrateur et les textes de cette page se gerent depuis l'espace Administration.")
         )
       )
     )
@@ -2557,6 +2407,63 @@ function RackVisual3D({warehouseConfig,palettes,onSelectPalette}){
 }
 
 // ── QR CODE + PDF PALETTE ─────────────────────────────────────────────────
+function generatePalettePDF(pal,cfg){
+  try{
+    const{jsPDF}=window.jspdf;const doc=new jsPDF({orientation:"portrait",unit:"mm",format:"a4"});
+    const W=210,H=297;
+    // Header
+    doc.setFillColor(44,62,80);doc.rect(0,0,W,40,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(28);doc.setFont("helvetica","bold");
+    doc.text(pal.id,W/2,22,{align:"center"});
+    doc.setFontSize(10);doc.setFont("helvetica","normal");
+    doc.text((cfg.nomSite||"LUX AIRPORT")+" - Gestion Entrepot",W/2,32,{align:"center"});
+    // QR code zone (large, scannable at 6m)
+    doc.setFillColor(255,255,255);doc.rect(20,50,80,80,"F");
+    doc.setDrawColor(44,62,80);doc.setLineWidth(2);doc.rect(20,50,80,80,"S");
+    doc.setFontSize(8);doc.setTextColor(100,100,100);doc.text("QR CODE",60,138,{align:"center"});
+    // Simulate QR with ID text (large)
+    doc.setFillColor(0,0,0);
+    doc.setFontSize(18);doc.setFont("helvetica","bold");doc.setTextColor(0,0,0);
+    doc.text(pal.id,60,92,{align:"center"});
+    doc.setFontSize(9);doc.setFont("helvetica","normal");doc.setTextColor(80,80,80);
+    doc.text("Scanner pour details",60,100,{align:"center"});
+    // Info box
+    doc.setFillColor(245,245,247);doc.rect(110,50,80,80,"F");
+    doc.setFontSize(9);doc.setFont("helvetica","bold");doc.setTextColor(44,62,80);
+    doc.text("INFORMATIONS",150,60,{align:"center"});
+    doc.setFont("helvetica","normal");doc.setTextColor(60,60,60);
+    let iy=68;
+    const addInfo=(l,v)=>{if(!v)return;doc.setFont("helvetica","bold");doc.text(l+":",112,iy);doc.setFont("helvetica","normal");doc.text(String(v).substring(0,22),150,iy);iy+=8;};
+    addInfo("Cree le",pal.createdAt?.split(" ")[0]||"");
+    addInfo("Par",pal.createdBy||"");
+    addInfo("Provenance",pal.provenance||"");
+    addInfo("Destination",pal.destination||"");
+    // Emplacement
+    if(pal.zone){iy+=2;doc.setFont("helvetica","bold");doc.setTextColor(52,152,219);doc.text("EMPLACEMENT",112,iy);iy+=7;
+      doc.setFont("helvetica","normal");doc.setTextColor(60,60,60);
+      doc.text("Zone: "+pal.zone+(pal.allee?" Allee: "+pal.allee:""),112,iy);iy+=7;
+      if(pal.rack)doc.text("Rack: "+pal.rack+(pal.etagere?" Etage: "+pal.etagere:"")+(pal.position?" Pos: "+pal.position:""),112,iy);
+    }
+    // Content table
+    doc.setFillColor(44,62,80);doc.rect(0,145,W,10,"F");
+    doc.setTextColor(255,255,255);doc.setFontSize(11);doc.setFont("helvetica","bold");
+    doc.text("CONTENU DE LA PALETTE",W/2,152,{align:"center"});
+    let cy=162;
+    (pal.items||[]).forEach((item,i)=>{
+      if(cy>H-20)return;
+      if(i%2===0){doc.setFillColor(248,248,248);doc.rect(10,cy-5,W-20,10,"F");}
+      doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(40,40,40);
+      doc.text((i+1)+". "+item.nom.substring(0,50),15,cy);
+      if(item.qte)doc.text("x"+item.qte,W-20,cy,{align:"right"});
+      cy+=10;
+    });
+    // Footer
+    doc.setFillColor(44,62,80);doc.rect(0,H-15,W,15,"F");
+    doc.setFontSize(8);doc.setFont("helvetica","normal");doc.setTextColor(200,200,200);
+    doc.text(pal.id+" - "+new Date().toLocaleDateString("fr-FR"),W/2,H-6,{align:"center"});
+    doc.save(pal.id+"_fiche.pdf");
+  }catch(e){alert("Erreur PDF: "+e.message);}
+}
 
 ReactDOM.createRoot(document.getElementById("root")).render(React.createElement(App,null));
 </script>
