@@ -40,7 +40,41 @@ input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appeara
 <div id="root"></div>
 <script>
 
-firebase.initializeApp({
+window.onerror = function(msg, src, line, col, err) {
+  document.getElementById('root').innerHTML =
+    '<div style="padding:20px;font-family:monospace;background:#fff;color:#c00">' +
+    '<h2>Erreur JavaScript</h2>' +
+    '<p><b>Message :</b> ' + msg + '</p>' +
+    '<p><b>Ligne :</b> ' + line + '</p>' +
+    '<p><b>Colonne :</b> ' + col + '</p>' +
+    '<p><b>Source :</b> ' + src + '</p>' +
+    '</div>';
+  return false;
+};
+
+window.addEventListener('unhandledrejection', function(e) {
+  document.getElementById('root').innerHTML =
+    '<div style="padding:20px;font-family:monospace;background:#fff;color:#c00">' +
+    '<h2>Erreur Promise</h2>' +
+    '<p>' + (e.reason && e.reason.message ? e.reason.message : e.reason) + '</p>' +
+    '</div>';
+});
+
+// 🔥 Sécurisation Firebase
+try {
+  firebase.initializeApp({
+    apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
+    authDomain:"luxairport-airside.firebaseapp.com",
+    projectId:"luxairport-airside",
+    storageBucket:"luxairport-airside.firebasestorage.app",
+    messagingSenderId:"1073777108600",
+    appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
+  });
+} catch(e) {
+  console.log("Firebase déjà initialisé");
+}
+
+const db = firebase.firestore();
   apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
   authDomain:"luxairport-airside.firebaseapp.com",
   projectId:"luxairport-airside",
