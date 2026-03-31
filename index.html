@@ -16,21 +16,90 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
-:root{--bg:#f2f2f7;--white:#ffffff;--dark:#1c1c1e;--border:#e5e5ea;--gray:#8e8e93;}
-.glass{background:rgba(255,255,255,.12);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.2);}
-.glass-dark{background:rgba(0,0,0,.25);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.15);}
-.glass-card{background:rgba(255,255,255,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,.6);box-shadow:0 8px 32px rgba(0,0,0,.08);}
-*{box-sizing:border-box;margin:0;padding:0;transition:background-color .2s,color .2s;}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f2f2f7;color:#1c1c1e;-webkit-text-size-adjust:100%;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#0f0f1a;color:#1c1c1e;-webkit-text-size-adjust:100%;}
 *{-webkit-tap-highlight-color:transparent;}
-::-webkit-scrollbar{display:none;}
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:transparent;}::-webkit-scrollbar-thumb{background:rgba(255,255,255,.2);border-radius:2px;}
 input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appearance:none;}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-8px)}75%{transform:translateX(8px)}}
-@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes glow{0%,100%{box-shadow:0 0 15px rgba(200,16,46,.3)}50%{box-shadow:0 0 30px rgba(200,16,46,.6)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 .shake{animation:shake .3s ease}
-.row:active{opacity:.7}
 .fi{animation:fadeIn .2s ease}
+.su{animation:slideUp .3s ease}
+
+/* Glassmorphism */
+.glass{
+  background:rgba(255,255,255,.08);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.15);
+}
+.glass-card{
+  background:rgba(255,255,255,.92);
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  border:1px solid rgba(255,255,255,.6);
+  box-shadow:0 8px 32px rgba(0,0,0,.08);
+}
+.glass-dark{
+  background:rgba(0,0,0,.3);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.1);
+}
+.glass-btn{
+  background:rgba(255,255,255,.1);
+  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,.2);
+  box-shadow:0 8px 32px rgba(31,38,135,.37);
+  transition:all .3s ease;
+  color:#fff;
+  font-weight:600;
+  cursor:pointer;
+  position:relative;
+  overflow:hidden;
+}
+.glass-btn:hover{background:rgba(255,255,255,.2);transform:scale(1.02);box-shadow:0 8px 32px rgba(31,38,135,.5);}
+.glass-btn:active{transform:scale(.97);}
+.glass-input{
+  background:rgba(255,255,255,.07);
+  border:1px solid rgba(255,255,255,.2);
+  backdrop-filter:blur(10px);
+  color:#fff;
+  transition:all .3s;
+}
+.glass-input:focus{border-color:rgba(255,255,255,.5);background:rgba(255,255,255,.12);outline:none;box-shadow:0 0 0 3px rgba(255,255,255,.1);}
+.glass-input::placeholder{color:rgba(255,255,255,.4);}
+
+/* App theme - light mode */
+.app-bg{background:#f2f2f7;}
+.card-white{background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.08);}
+
+/* PIN dots */
+.pin-dot{
+  width:14px;height:14px;border-radius:50%;
+  background:rgba(255,255,255,.2);
+  border:2px solid rgba(255,255,255,.4);
+  transition:all .2s;
+}
+.pin-dot.filled{background:#fff;border-color:#fff;box-shadow:0 0 10px rgba(255,255,255,.5);}
+
+/* User card */
+.user-card{
+  background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:18px;
+  transition:all .3s;
+  cursor:pointer;
+  backdrop-filter:blur(10px);
+}
+.user-card:hover{background:rgba(255,255,255,.15);transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.2);}
+.user-card.selected{background:rgba(255,255,255,.2);border-color:rgba(255,255,255,.5);box-shadow:0 0 20px rgba(255,255,255,.1);}
+
+/* Strength bar */
+.strength-segment{height:4px;border-radius:2px;background:rgba(255,255,255,.15);transition:all .3s;}
+.strength-segment.active{background:currentColor;}
 </style>
 </head>
 <body>
@@ -288,7 +357,7 @@ function CamScanner({onDetect}){
 function AppHeader({cfg,lowStock,syncing,isAdmin,isOnline,darkMode,onDarkToggle,onScan,onGlobalSearch,onAlerts,onLogout,currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}){
   const bgColor=cfg.couleur||"#c8102e";
   const visibleNavs=[...navConfig].filter(n=>n.visible).sort((a,b)=>a.order-b.order);
-  return h("div",{style:{background:"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")",paddingTop:"env(safe-area-inset-top,0)",position:"sticky",top:0,zIndex:50,boxShadow:"0 2px 12px rgba(0,0,0,.3)"}},
+  return h("div",{style:{background:"linear-gradient(135deg,"+bgColor+"ee,"+darken(bgColor)+")",paddingTop:"env(safe-area-inset-top,0)",position:"sticky",top:0,zIndex:50,boxShadow:"0 4px 24px rgba(0,0,0,.4)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}},
     h("div",{style:{height:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px"}},
       h("div",{style:{display:"flex",alignItems:"center",gap:10}},
         h("button",{onClick:()=>setMenuOpen(o=>!o),style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:12,padding:"8px 10px",cursor:"pointer",display:"flex",flexDirection:"column",gap:4}},
@@ -1166,9 +1235,12 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
     tab==="entrepotCfg"&&h(WarehouseConfigPanel,{warehouseConfig,onSave:saveWarehouseConfig,showT}),
 
     tab==="comptes"&&h("div",{},
-      h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Comptes utilisateurs"),
-      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:S.blue}},
-        "Les employes selectionneront leur compte sur l'ecran d'accueil et entreront leur PIN a 4 chiffres."
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
+        h("div",{style:{fontSize:14,fontWeight:700}},"Gestion des comptes"),
+        h("span",{style:{fontSize:11,color:S.gray}},(userAccounts||[]).length+" compte(s)")
+      ),
+      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:12,color:S.blue}},
+        "👁️ Les comptes ADMIN sont masques de l'ecran d'accueil. Acces via lien discret uniquement."
       ),
       (userAccounts||[]).map((acc,i)=>h("div",{key:i,style:{background:S.white,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)",display:"flex",alignItems:"center",gap:10}},
         h("div",{style:{width:40,height:40,borderRadius:"50%",background:acc.role==="admin"?S.red:S.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}},acc.avatar||"👤"),
@@ -2120,78 +2192,119 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
 
 
 
-// ── LOGIN SCREEN ──────────────────────────────────────────────────────────
+// ── LOGIN SCREEN (Glassmorphism) ─────────────────────────────────────────
+function PasswordStrength({password}){
+  const checks=[
+    {id:"len",label:"8 caracteres min",met:password.length>=4},
+    {id:"num",label:"Contient un chiffre",met:/[0-9]/.test(password)},
+  ];
+  const strength=checks.filter(c=>c.met).length;
+  const colors=["#ff4d8d","#f59e0b","#22d3ee"];
+  const color=password?colors[Math.min(strength-1,2)]||"#ff4d8d":"rgba(255,255,255,.2)";
+  return h("div",{style:{marginTop:8}},
+    h("div",{style:{display:"flex",gap:4,marginBottom:6}},
+      [0,1,2].map(i=>h("div",{key:i,className:"strength-segment"+(i<strength?" active":""),style:{flex:1,color}}))
+    )
+  );
+}
+
 function LoginScreen({cfg,userAccounts,adminPin,employes,onLogin}){
+  const[step,setStep]=useState("select");// select | pin | adminPin
   const[sel,setSel]=useState(null);
   const[pin,setPin]=useState("");
   const[err,setErr]=useState(false);
+  const[showAdminEntry,setShowAdminEntry]=useState(false);
   const bgColor=cfg.couleur||"#c8102e";
 
-  // Build full list: custom accounts + fallback employes
   const accounts=userAccounts&&userAccounts.length>0
-    ?userAccounts
+    ?userAccounts.filter(a=>a.role!=="admin")// hide admin accounts from main list
     :employes.map(e=>({name:e,pin:"0000",role:"user",avatar:"👤"}));
 
-  const press=d=>{
+  const adminAccounts=userAccounts?.filter(a=>a.role==="admin")||[];
+  // Always allow system admin with adminPin
+
+  const pressPin=d=>{
     const np=pin+d;setPin(np);
     if(np.length===4){
-      // Check pin
+      if(step==="adminPin"){
+        // Check admin accounts
+        const adminAcc=adminAccounts.find(a=>a.pin===np);
+        if(adminAcc){setErr(false);onLogin({...adminAcc});return;}
+        if(np===adminPin){setErr(false);onLogin({name:"Administrateur",pin:np,role:"admin",avatar:"🔐"});return;}
+        setErr(true);setTimeout(()=>{setPin("");setErr(false);},600);
+        return;
+      }
+      // User login
       const acc=accounts.find(a=>a.name===sel);
-      const isAdm=np===adminPin;
-      if(isAdm){setErr(false);onLogin({name:sel||"Admin",pin:np,role:"admin"});return;}
       if(acc&&np===acc.pin){setErr(false);onLogin({...acc});return;}
       setErr(true);setTimeout(()=>{setPin("");setErr(false);},600);
     }
   };
 
-  if(!sel)return h("div",{style:{minHeight:"100vh",background:"linear-gradient(180deg,"+bgColor+" 0%,"+bgColor+"dd 40%,#f2f2f7 40%)",display:"flex",flexDirection:"column",alignItems:"center",padding:"0 20px 40px"}},
-    h("div",{style:{marginTop:50,marginBottom:30,textAlign:"center"}},
+  const bgGrad=`linear-gradient(135deg, ${bgColor} 0%, ${darken(bgColor)} 40%, #0f0f1a 100%)`;
+
+  // Step 1: Select user
+  if(step==="select")return h("div",{style:{minHeight:"100vh",background:bgGrad,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}},
+    // Logo area
+    h("div",{style:{textAlign:"center",marginBottom:32,animation:"float 3s ease-in-out infinite"}},
       cfg.logoUrl
-        ?h("img",{src:cfg.logoUrl,style:{width:80,height:80,borderRadius:18,objectFit:"cover",boxShadow:"0 4px 20px rgba(0,0,0,.3)",marginBottom:12}})
-        :h("svg",{width:80,height:80,viewBox:"0 0 200 200",style:{marginBottom:12}},
-          h("rect",{width:200,height:200,rx:28,fill:"rgba(255,255,255,.2)"}),
-          h("rect",{x:22,y:28,width:26,height:90,rx:7,fill:"white"}),h("rect",{x:22,y:100,width:52,height:18,rx:7,fill:"white"}),
-          h("rect",{x:76,y:28,width:24,height:80,rx:7,fill:"white"}),h("rect",{x:76,y:108,width:50,height:18,rx:7,fill:"white"}),
-          h("rect",{x:102,y:28,width:24,height:80,rx:7,fill:"white"}),
-          h("polygon",{points:"138,28 178,85 158,85 128,42",fill:"rgba(255,255,255,.7)"}),
-          h("polygon",{points:"138,90 178,85 158,142 128,105",fill:"rgba(255,255,255,.4)"})
-        ),
-      h("div",{style:{color:"#fff",fontWeight:900,fontSize:24,letterSpacing:-.5}},cfg.nomSite||"LUX AIRPORT"),
-      h("div",{style:{color:"rgba(255,255,255,.7)",fontSize:13,marginTop:4}},cfg.sousTitre||"Gestion Airside")
+        ?h("img",{src:cfg.logoUrl,style:{width:80,height:80,borderRadius:20,objectFit:"cover",boxShadow:"0 0 40px rgba(255,255,255,.2)",marginBottom:14}})
+        :h("div",{style:{width:80,height:80,borderRadius:20,background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:36,margin:"0 auto 14px",boxShadow:"0 0 40px rgba(255,255,255,.1)",backdropFilter:"blur(10px)"}},"✈️"),
+      h("h1",{style:{color:"#fff",fontWeight:900,fontSize:26,letterSpacing:-.5}},cfg.nomSite||"LUX AIRPORT"),
+      h("p",{style:{color:"rgba(255,255,255,.55)",fontSize:13,marginTop:4}},cfg.sousTitre||"Gestion Airside")
     ),
-    h("div",{className:"glass-card",style:{borderRadius:24,padding:"20px",width:"100%",maxWidth:440}},
-      h("div",{style:{fontSize:16,fontWeight:800,marginBottom:16,textAlign:"center"}},"Qui etes-vous ?"),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
-        accounts.map((acc,i)=>h("button",{key:i,onClick:()=>setSel(acc.name),
-          style:{background:"#f5f5f7",border:"2px solid transparent",borderRadius:16,padding:"16px 10px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
-          h("div",{style:{width:48,height:48,borderRadius:"50%",background:acc.role==="admin"?"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")":"linear-gradient(135deg,#007aff,#005ecb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:22}},acc.avatar||"👤"),
-          h("div",{style:{fontSize:12,fontWeight:700,textAlign:"center",lineHeight:1.2}},acc.name)
-        ))
+    // User selection card
+    h("div",{className:"glass",style:{borderRadius:28,padding:"24px",width:"100%",maxWidth:420,boxShadow:"0 8px 32px rgba(31,38,135,.4)"}},
+      h("h2",{style:{color:"#fff",fontWeight:700,fontSize:18,marginBottom:4,textAlign:"center"}},"Qui etes-vous ?"),
+      h("p",{style:{color:"rgba(255,255,255,.5)",fontSize:12,marginBottom:20,textAlign:"center"}},"Selectionnez votre compte pour continuer"),
+      accounts.length===0
+        ?h("div",{style:{textAlign:"center",padding:"20px",color:"rgba(255,255,255,.5)",fontSize:13}},"Aucun compte - connectez-vous en admin")
+        :h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
+          accounts.map((acc,i)=>h("div",{key:i,className:"user-card",onClick:()=>{setSel(acc.name);setStep("pin");setPin("");},style:{padding:"16px 12px",display:"flex",flexDirection:"column",alignItems:"center",gap:8}},
+            h("div",{style:{width:52,height:52,borderRadius:"50%",background:"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.1))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26,border:"1px solid rgba(255,255,255,.2)"}},acc.avatar||"👤"),
+            h("div",{style:{fontSize:12,fontWeight:700,color:"#fff",textAlign:"center",lineHeight:1.3}},acc.name)
+          ))
+        ),
+      // Admin login button (discreet)
+      h("div",{style:{textAlign:"center",paddingTop:12,borderTop:"1px solid rgba(255,255,255,.1)"}},
+        h("button",{onClick:()=>{setShowAdminEntry(p=>!p);},style:{background:"none",border:"none",color:"rgba(255,255,255,.3)",fontSize:11,cursor:"pointer",fontWeight:500,textDecoration:"underline",textUnderlineOffset:2}},"Acces administrateur"),
+        showAdminEntry&&h("div",{style:{marginTop:12,background:"rgba(255,255,255,.05)",borderRadius:12,padding:"12px"}},
+          adminAccounts.length>0&&h("div",{style:{marginBottom:8}},
+            adminAccounts.map((acc,i)=>h("button",{key:i,onClick:()=>{setSel(acc.name);setStep("adminPin");setPin("");},className:"glass-btn",style:{width:"100%",padding:"10px",borderRadius:12,fontSize:12,marginBottom:6}},
+              acc.avatar||"🔐"," "+acc.name+" (Admin)"
+            ))
+          ),
+          h("button",{onClick:()=>{setSel("Administrateur");setStep("adminPin");setPin("");},className:"glass-btn",style:{width:"100%",padding:"10px",borderRadius:12,fontSize:12}},
+            "🔐 Admin systeme"
+          )
+        )
       )
     )
   );
 
-  return h("div",{style:{minHeight:"100vh",background:"linear-gradient(180deg,"+bgColor+" 0%,"+bgColor+"dd 45%,#f2f2f7 45%)",display:"flex",flexDirection:"column",alignItems:"center",padding:"40px 20px"}},
-    h("div",{style:{textAlign:"center",marginBottom:20}},
-      cfg.logoUrl
-        ?h("img",{src:cfg.logoUrl,style:{width:60,height:60,borderRadius:14,objectFit:"cover",marginBottom:8}})
-        :h("div",{style:{fontSize:50,marginBottom:8}},"✈️"),
-      h("div",{style:{color:"#fff",fontWeight:900,fontSize:18}},cfg.nomSite||"LUX AIRPORT")
-    ),
-    h("div",{style:{background:"#fff",borderRadius:24,padding:"24px 20px",width:"100%",maxWidth:340,boxShadow:"0 8px 40px rgba(0,0,0,.15)"}},
-      h("button",{onClick:()=>{setSel(null);setPin("");},style:{background:"none",border:"none",color:S.gray,fontSize:12,cursor:"pointer",marginBottom:12,display:"flex",alignItems:"center",gap:4}},"← Retour"),
-      h("div",{style:{display:"flex",flexDirection:"column",alignItems:"center",marginBottom:20}},
-        h("div",{style:{width:56,height:56,borderRadius:"50%",background:accounts.find(a=>a.name===sel)?.role==="admin"?"linear-gradient(135deg,"+bgColor+","+darken(bgColor)+")":"linear-gradient(135deg,#007aff,#005ecb)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,marginBottom:8}},accounts.find(a=>a.name===sel)?.avatar||"👤"),
-        h("div",{style:{fontSize:16,fontWeight:800}},sel),
-        h("div",{style:{fontSize:13,color:S.gray}},"Entrez votre PIN")
+  // Step 2: PIN entry
+  const isAdmin=step==="adminPin";
+  const selAcc=isAdmin?adminAccounts.find(a=>a.name===sel):accounts.find(a=>a.name===sel);
+
+  return h("div",{style:{minHeight:"100vh",background:bgGrad,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"20px"}},
+    h("div",{className:"glass su",style:{borderRadius:28,padding:"28px 24px",width:"100%",maxWidth:340,boxShadow:"0 8px 32px rgba(31,38,135,.4)",textAlign:"center"}},
+      // Back button
+      h("button",{onClick:()=>{setStep("select");setSel(null);setPin("");setShowAdminEntry(false);},style:{position:"absolute",top:16,left:16,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",borderRadius:10,padding:"6px 12px",color:"rgba(255,255,255,.7)",fontSize:12,cursor:"pointer"}},"← Retour"),
+      // Avatar
+      h("div",{style:{width:70,height:70,borderRadius:"50%",background:isAdmin?"linear-gradient(135deg,#c8102e,#8b0000)":"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.1))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:30,margin:"10px auto 16px",border:"2px solid rgba(255,255,255,.3)",boxShadow:"0 0 30px rgba(255,255,255,.1)"}},selAcc?.avatar||(isAdmin?"🔐":"👤")),
+      h("h2",{style:{color:"#fff",fontWeight:800,fontSize:18,marginBottom:4}},sel||"Admin"),
+      h("p",{style:{color:"rgba(255,255,255,.5)",fontSize:12,marginBottom:24}},isAdmin?"Code PIN administrateur":"Entrez votre code PIN"),
+      // PIN dots
+      h("div",{className:err?"shake":"",style:{display:"flex",justifyContent:"center",gap:14,marginBottom:28}},
+        [0,1,2,3].map(i=>h("div",{key:i,className:"pin-dot"+(i<pin.length?" filled":"")}))
       ),
-      h("div",{className:err?"shake":"",style:{display:"flex",justifyContent:"center",gap:12,marginBottom:24}},
-        [0,1,2,3].map(i=>h("div",{key:i,style:{width:14,height:14,borderRadius:"50%",background:i<pin.length?bgColor:S.border,transition:"background .15s"}}))
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}},
+      err&&h("div",{style:{color:"#ff4d8d",fontSize:12,marginBottom:14,fontWeight:600}},"Code incorrect, reessayez"),
+      // Numpad
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,maxWidth:220,margin:"0 auto"}},
         [1,2,3,4,5,6,7,8,9,"",0,"<"].map((d,i)=>
-          h("button",{key:i,onClick:()=>d===""?null:d==="<"?setPin(p=>p.slice(0,-1)):press(String(d)),
-            style:{height:58,borderRadius:14,border:"none",background:d===""?"transparent":"#f5f5f7",fontSize:20,fontWeight:600,cursor:d===""?"default":"pointer",boxShadow:d===""?"none":"0 1px 3px rgba(0,0,0,.08)"}},
+          h("button",{key:i,onClick:()=>d===""?null:d==="<"?setPin(p=>p.slice(0,-1)):pressPin(String(d)),
+            className:d===""?"":"glass-btn",
+            style:{height:56,borderRadius:14,fontSize:20,fontWeight:600,cursor:d===""?"default":"pointer",background:d===""?"transparent":undefined}},
             d===""?"":d==="<"?"⌫":d)
         )
       )
