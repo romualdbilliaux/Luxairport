@@ -318,58 +318,97 @@ function SigCanvas({onReady}){
 
 function CamScanner({onDetect}){
   const vr=useRef(null);const cr=useRef(null);const sr=useRef(null);const raf=useRef(null);const scanning=useRef(true);
-  const[manual,setManual]=useState("");const[err,setErr]=useState("");const[ok,setOk]=useState("");const[active,setActive]=useState(false);
+  const[manual,setManual]=useState("");const[err,setErr]=useState("");const[ok,setOk]=useState("");const[active,setActive]=useState(false);const[scanLine,setScanLine]=useState(0);
+
   useEffect(()=>{
-    let stream=null;
+    let stream=null;let lineDir=1;let linePos=0;let lineInterval=null;
+    const stop=()=>{scanning.current=false;cancelAnimationFrame(raf.current);clearInterval(lineInterval);if(stream)stream.getTracks().forEach(t=>t.stop());};
     const start=async()=>{
       try{
-        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1280}}});
+        stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:"environment"},width:{ideal:1920},height:{ideal:1080}}});
         sr.current=stream;const v=vr.current;
-        if(v){v.srcObject=stream;v.setAttribute("playsinline","true");v.setAttribute("muted","true");
-          await v.play().catch(()=>{});setActive(true);setTimeout(()=>requestAnimationFrame(tick),500);}
-      }catch(ex){setErr("Camera non disponible - saisie manuelle disponible");}
+        if(!v)return;
+        v.srcObject=stream;v.playsInline=true;v.muted=true;
+        await v.play();
+        setActive(true);
+        // Animate scan line
+        lineInterval=setInterval(()=>{linePos+=lineDir*3;if(linePos>160)lineDir=-1;if(linePos<0)lineDir=1;setScanLine(linePos);},20);
+        // Try BarcodeDetector first (native, best on iOS 17+)
+        if("BarcodeDetector" in window){
+          const detector=new BarcodeDetector({formats:["qr_code","code_128","ean_13","code_39"]});
+          const detectNative=async()=>{
+            if(!scanning.current)return;
+            try{
+              const codes=await detector.detect(v);
+              if(codes.length>0){const val=codes[0].rawValue;setOk(val);stop();setTimeout(()=>onDetect(val),400);return;}
+            }catch(e){}
+            raf.current=requestAnimationFrame(detectNative);
+          };
+          setTimeout(detectNative,300);
+        } else {
+          // Fallback: jsQR
+          const tick=()=>{
+            if(!scanning.current)return;
+            if(!cr.current||v.readyState<2||v.videoWidth===0){raf.current=requestAnimationFrame(tick);return;}
+            try{
+              const c=cr.current;c.width=v.videoWidth;c.height=v.videoHeight;
+              const ctx=c.getContext("2d",{willReadFrequently:true});
+              ctx.drawImage(v,0,0,c.width,c.height);
+              const img=ctx.getImageData(0,0,c.width,c.height);
+              const code=jsQR(img.data,img.width,img.height,{inversionAttempts:"attemptBoth"});
+              if(code&&code.data){setOk(code.data);stop();setTimeout(()=>onDetect(code.data),400);return;}
+            }catch(e){}
+            raf.current=requestAnimationFrame(tick);
+          };
+          setTimeout(tick,500);
+        }
+      }catch(ex){setErr("Camera non disponible. Saisie manuelle ci-dessous.");}
     };
     start();
-    return()=>{scanning.current=false;cancelAnimationFrame(raf.current);if(stream)stream.getTracks().forEach(t=>t.stop());};
+    return()=>stop();
   },[]);
-  const tick=()=>{
-    if(!scanning.current)return;const v=vr.current;const c=cr.current;
-    if(!v||!c||v.readyState<2||v.videoWidth===0){raf.current=requestAnimationFrame(tick);return;}
-    try{c.width=v.videoWidth;c.height=v.videoHeight;const ctx=c.getContext("2d",{willReadFrequently:true});ctx.drawImage(v,0,0,c.width,c.height);
-      const img=ctx.getImageData(0,0,c.width,c.height);const code=jsQR(img.data,img.width,img.height,{inversionAttempts:"attemptBoth"});
-      if(code&&code.data){setOk(code.data);scanning.current=false;if(sr.current)sr.current.getTracks().forEach(t=>t.stop());setTimeout(()=>onDetect(code.data),500);return;}
-    }catch(ex){}
-    raf.current=requestAnimationFrame(tick);
-  };
+
   return h("div",{},
-    h("div",{style:{position:"relative",background:"#000",borderRadius:14,overflow:"hidden",marginBottom:12,height:220}},
+    h("div",{style:{position:"relative",background:"#000",borderRadius:16,overflow:"hidden",marginBottom:12,height:240}},
       h("video",{ref:vr,style:{width:"100%",height:"100%",objectFit:"cover"},playsInline:true,muted:true,autoPlay:true}),
       h("canvas",{ref:cr,style:{display:"none"}}),
       !ok&&!err&&active&&h("div",{style:{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}},
-        h("div",{style:{width:170,height:170,position:"relative"}},
-          ["tl","tr","bl","br"].map(c=>h("div",{key:c,style:{position:"absolute",width:24,height:24,top:c.startsWith("t")?0:"auto",bottom:c.startsWith("b")?0:"auto",left:c.endsWith("l")?0:"auto",right:c.endsWith("r")?0:"auto",borderTop:c.startsWith("t")?"3px solid #fff":"none",borderBottom:c.startsWith("b")?"3px solid #fff":"none",borderLeft:c.endsWith("l")?"3px solid #fff":"none",borderRight:c.endsWith("r")?"3px solid #fff":"none"}})),
-          h("div",{style:{position:"absolute",bottom:-28,left:"50%",transform:"translateX(-50%)",color:"#fff",fontSize:11,fontWeight:600,whiteSpace:"nowrap"}},"Pointez vers le QR code")
-        )
+        h("div",{style:{width:200,height:200,position:"relative"}},
+          // Corner brackets
+          ...["tl","tr","bl","br"].map(c=>h("div",{key:c,style:{position:"absolute",width:28,height:28,
+            top:c.startsWith("t")?0:"auto",bottom:c.startsWith("b")?0:"auto",
+            left:c.endsWith("l")?0:"auto",right:c.endsWith("r")?0:"auto",
+            borderTop:c.startsWith("t")?"3px solid #fff":"none",borderBottom:c.startsWith("b")?"3px solid #fff":"none",
+            borderLeft:c.endsWith("l")?"3px solid #fff":"none",borderRight:c.endsWith("r")?"3px solid #fff":"none",
+            borderRadius:c==="tl"?"4px 0 0 0":c==="tr"?"0 4px 0 0":c==="bl"?"0 0 0 4px":"0 0 4px 0"}})),
+          // Scan line
+          h("div",{style:{position:"absolute",left:4,right:4,top:scanLine,height:2,background:"rgba(200,16,46,.8)",borderRadius:1,boxShadow:"0 0 8px rgba(200,16,46,.6)"}})
+        ),
+        h("div",{style:{position:"absolute",bottom:12,left:0,right:0,textAlign:"center",color:"#fff",fontSize:11,fontWeight:600,textShadow:"0 1px 3px rgba(0,0,0,.8)"}},"Pointez vers le QR code")
       ),
-      ok&&h("div",{style:{position:"absolute",inset:0,background:"rgba(52,199,89,.9)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:8}},
-        h("div",{style:{fontSize:40}},"✅"),h("div",{style:{color:S.white,fontWeight:800,fontSize:14,padding:"0 20px",textAlign:"center"}},ok)
+      ok&&h("div",{style:{position:"absolute",inset:0,background:"rgba(52,199,89,.92)",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:10}},
+        h("div",{style:{fontSize:52}},"✅"),
+        h("div",{style:{color:"#fff",fontWeight:800,fontSize:15,padding:"0 20px",textAlign:"center",maxWidth:"90%",wordBreak:"break-all"}},ok)
       ),
-      err&&h("div",{style:{position:"absolute",inset:0,background:"#1a1a1a",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,padding:20,textAlign:"center",flexDirection:"column",gap:8}},
-        h("div",{style:{fontSize:28}},"📷"),h("div",{},err)
+      err&&h("div",{style:{position:"absolute",inset:0,background:"#111",display:"flex",alignItems:"center",justifyContent:"center",color:"#fff",fontSize:13,padding:20,textAlign:"center",flexDirection:"column",gap:10}},
+        h("div",{style:{fontSize:36}},"📷"),
+        h("div",{},err)
       )
     ),
     h("div",{style:{display:"flex",gap:8}},
-      h("input",{value:manual,onChange:e=>setManual(e.target.value.toUpperCase()),placeholder:"Saisir ID manuellement...",
-        style:{flex:1,padding:"11px 13px",border:"1.5px solid "+S.border,borderRadius:12,fontSize:14,outline:"none",textTransform:"uppercase"},
-        onKeyDown:e=>e.key==="Enter"&&manual&&onDetect(manual)}),
-      h("button",{onClick:()=>manual&&onDetect(manual),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 16px",fontWeight:700,cursor:"pointer",fontSize:14}},"OK")
+      h("input",{value:manual,onChange:e=>setManual(e.target.value.toUpperCase()),
+        placeholder:"Saisie manuelle (ex: AS-COMM-0001)",
+        style:{flex:1,padding:"11px 13px",border:"1.5px solid "+S.border,borderRadius:12,fontSize:13,outline:"none",textTransform:"uppercase"},
+        onKeyDown:e=>e.key==="Enter"&&manual.trim()&&onDetect(manual.trim())}),
+      h("button",{onClick:()=>manual.trim()&&onDetect(manual.trim()),
+        style:{background:S.red,color:"#fff",border:"none",borderRadius:12,padding:"0 16px",fontWeight:700,cursor:"pointer",fontSize:14}},"OK")
     )
   );
 }
 
 function AppHeader({cfg,lowStock,syncing,isAdmin,isOnline,darkMode,onDarkToggle,onScan,onGlobalSearch,onAlerts,onLogout,currentUser,page,setPage,alertCount,menuOpen,setMenuOpen,navConfig}){
   const bgColor=cfg.couleur||"#c8102e";
-  const visibleNavs=[...navConfig].filter(n=>n.visible).sort((a,b)=>a.order-b.order);
+  const visibleNavs=[...navConfig].filter(n=>n.visible&&!n.hidden).sort((a,b)=>a.order-b.order);
   return h("div",{style:{background:"linear-gradient(135deg,"+bgColor+"ee,"+darken(bgColor)+")",paddingTop:"env(safe-area-inset-top,0)",position:"sticky",top:0,zIndex:50,boxShadow:"0 4px 24px rgba(0,0,0,.4)",backdropFilter:"blur(20px)",WebkitBackdropFilter:"blur(20px)"}},
     h("div",{style:{height:60,display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 14px"}},
       h("div",{style:{display:"flex",alignItems:"center",gap:10}},
@@ -499,9 +538,7 @@ function App(){
   const[menuOpen,setMenuOpen]=useState(false);
   const[currentUser,setCurrentUser]=useState(null);// {name, pin, role: "admin"|"user"}
   const[userAccounts,setUserAccounts]=useState([]);
-  const[warehouseConfig,setWarehouseConfig]=useState({zones:[
-    {id:"A",nom:"Zone A",allees:2,racks:3,etages:3,positions:["G","M","D"]}
-  ]});
+  const[warehouseConfig,setWarehouseConfig]=useState({allees:2,racks:3,etages:3,positions:["G","M","D"]});
   const saveWarehouseConfig=async(wc)=>{setWarehouseConfig(wc);await db.collection("params").doc("config").set({warehouseConfig:wc},{merge:true});showT("Configuration entrepot sauvegardee!");};// {name, pin, role, avatar}
   const[zoomPhoto,setZoomPhoto]=useState(null);
   const[navConfig,setNavConfig]=useState([
@@ -512,7 +549,7 @@ function App(){
     {id:"kits",icon:"🧰",label:"Kits",visible:true,order:4},
     {id:"entrepot",icon:"🏭",label:"Entrepot",visible:true,order:5},
     {id:"rapport",icon:"📊",label:"Rapport",visible:true,order:6},
-    {id:"admin",icon:"🔐",label:"Admin",visible:false,order:7},
+    {id:"admin",icon:"🔐",label:"Admin",visible:false,order:7,hidden:true},
     {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:8},
     {id:"vehicules",icon:"🚗",label:"Vehicules",visible:true,order:9},
   ]);
@@ -696,7 +733,7 @@ function App(){
           h("button",{onClick:()=>setMenuOpen(false),style:{background:"none",border:"none",fontSize:24,cursor:"pointer",color:darkMode?"#fff":"#1c1c1e"}},"×")
         ),
         h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}},
-          [...navConfig].filter(n=>n.visible).sort((a,b)=>a.order-b.order).map(n=>
+          [...navConfig].filter(n=>n.visible&&!n.hidden).sort((a,b)=>a.order-b.order).map(n=>
             h("button",{key:n.id,onClick:()=>{setPage(n.id);setMenuOpen(false);},
               style:{background:page===n.id?(cfg.couleur||S.red)+"22":darkMode?"#2c2c2e":"#f5f5f7",border:"1.5px solid "+(page===n.id?(cfg.couleur||S.red):"transparent"),borderRadius:16,padding:"14px 8px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
               h("span",{style:{fontSize:28}},n.icon),
@@ -1962,23 +1999,21 @@ function PlanningMaintenanceModal({tools,maintenances,onClose}){
 
 // Export to Excel (CSV)
 function exportWarehouseExcel(palettes,warehouseConfig){
-  const rows=[["Zone","Allee","Rack","Etage","Position","Numero Palette","Contenu","Quantites","Provenance","Destination","Cree par","Date"]];
+  const rows=[["Allee","Rack","Etage","Position","Numero Palette","Contenu","Quantites","Provenance","Destination","Cree par","Date"]];
+  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
   // Add occupied cells
   palettes.forEach(p=>{
     const items=(p.items||[]).map(i=>i.nom).join(" | ");
     const qtes=(p.items||[]).map(i=>i.qte||"").join(" | ");
-    rows.push([p.zone||"",p.allee||"",p.rack||"",p.etagere||"",p.position||"",p.id||"",items,qtes,p.provenance||"",p.destination||"",p.createdBy||"",p.createdAt||""]);
+    rows.push([p.allee||"",p.rack||"",p.etagere||"",p.position||"",p.id||"",items,qtes,p.provenance||"",p.destination||"",p.createdBy||"",p.createdAt||""]);
   });
   // Add empty cells
-  const wc=warehouseConfig||{zones:[]};
-  wc.zones.forEach(z=>{
-    Array.from({length:z.allees||1},(_,a)=>String(a+1)).forEach(a=>{
-      Array.from({length:z.racks||1},(_,r)=>String(r+1)).forEach(r=>{
-        Array.from({length:z.etages||1},(_,e)=>String(e+1)).forEach(e=>{
-          (z.positions||["G","M","D"]).forEach(p=>{
-            const occupied=palettes.find(pal=>pal.zone===z.id&&String(pal.allee)===a&&String(pal.rack)===r&&String(pal.etagere)===e&&String(pal.position)===p);
-            if(!occupied)rows.push([z.id,a,r,e,p,"LIBRE","","","","","",""]);
-          });
+  Array.from({length:wc.allees||2},(_,a)=>String(a+1)).forEach(a=>{
+    Array.from({length:wc.racks||3},(_,r)=>String(r+1)).forEach(r=>{
+      Array.from({length:wc.etages||3},(_,e)=>String(e+1)).forEach(e=>{
+        (wc.positions||["G","M","D"]).forEach(p=>{
+          const occupied=palettes.find(pal=>String(pal.allee)===a&&String(pal.rack)===r&&String(pal.etagere)===e&&String(pal.position)===p);
+          if(!occupied)rows.push([a,r,e,p,"LIBRE","","","","","",""]);
         });
       });
     });
@@ -2056,112 +2091,95 @@ function importWarehouseCSV(csv,palettes,onUpdate){
 
 // ── RACK VISUAL 3D PROFESSIONAL ───────────────────────────────────────────
 function RackVisual3D({warehouseConfig,palettes,onSelectPalette}){
-  const[selZone,setSelZone]=useState(null);
-  const[hoveredCell,setHoveredCell]=useState(null);
-  const zones=warehouseConfig?.zones||[];
-  const zoneObj=selZone?zones.find(z=>z.id===selZone):zones[0];
+  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
+  const allees=Array.from({length:wc.allees||2},(_,i)=>i+1);
+  const racks=Array.from({length:wc.racks||3},(_,i)=>i+1);
+  const etages=Array.from({length:wc.etages||3},(_,i)=>(wc.etages||3)-i);
+  const positions=wc.positions||["G","M","D"];
 
-  if(!zoneObj)return h("div",{style:{padding:30,textAlign:"center",color:S.gray,background:S.white,borderRadius:14}},
-    h("div",{style:{fontSize:40,marginBottom:10}},"🏭"),
-    h("div",{style:{fontWeight:700}},"Aucune zone configuree"),
-    h("div",{style:{fontSize:12,color:S.gray,marginTop:4}},"Allez dans Admin → Entrepot pour configurer")
+  const getPal=(a,r,e,p)=>palettes.find(pal=>
+    String(pal.allee)===String(a)&&String(pal.rack)===String(r)&&
+    String(pal.etagere)===String(e)&&String(pal.position)===String(p)
   );
 
-  const allees=Array.from({length:zoneObj.allees||1},(_,i)=>String(i+1));
-  const racks=Array.from({length:zoneObj.racks||1},(_,i)=>String(i+1));
-  const etages=Array.from({length:zoneObj.etages||1},(_,i)=>String(zoneObj.etages-i));
-  const positions=zoneObj.positions||["G","M","D"];
-
-  const getPal=(a,r,e,p)=>palettes.find(pal=>pal.zone===zoneObj.id&&String(pal.allee)===a&&String(pal.rack)===r&&String(pal.etagere)===e&&String(pal.position)===p);
-
-  const totalCells=allees.length*racks.length*etages.length*positions.length;
-  const occupied=palettes.filter(p=>p.zone===zoneObj.id).length;
-  const pct=totalCells>0?Math.round(occupied/totalCells*100):0;
+  const total=allees.length*racks.length*etages.length*positions.length;
+  const occupied=palettes.length;
+  const pct=total>0?Math.round(occupied/total*100):0;
   const pctColor=pct>80?"#e74c3c":pct>50?"#f39c12":"#2ecc71";
 
   return h("div",{},
-    // Zone selector tabs
-    zones.length>1&&h("div",{style:{display:"flex",gap:8,marginBottom:14,overflowX:"auto"}},
-      zones.map(z=>{
-        const zOcc=palettes.filter(p=>p.zone===z.id).length;
-        const zTotal=(z.allees||1)*(z.racks||1)*(z.etages||1)*(z.positions||["G","M","D"]).length;
-        const zPct=zTotal>0?Math.round(zOcc/zTotal*100):0;
-        return h("button",{key:z.id,onClick:()=>setSelZone(z.id),
-          style:{flex:"none",padding:"10px 16px",borderRadius:14,fontSize:12,fontWeight:600,cursor:"pointer",
-            border:"none",background:(selZone===z.id||(selZone===null&&zones[0]===z))?"#1c1c1e":"#f0f0f0",
-            color:(selZone===z.id||(selZone===null&&zones[0]===z))?"#fff":"#666"}},
-          h("div",{style:{fontWeight:700}},z.nom||"Zone "+z.id),
-          h("div",{style:{fontSize:10,marginTop:2,opacity:.7}},zPct+"% occupe")
-        );
-      })
-    ),
-    // Stats header
-    h("div",{style:{background:"#1c1c1e",borderRadius:16,padding:"14px 18px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"}},
-      h("div",{},
-        h("div",{style:{fontSize:15,fontWeight:800,color:"#fff"}},(zoneObj.nom||"Zone "+zoneObj.id)),
-        h("div",{style:{fontSize:11,color:"rgba(255,255,255,.5)",marginTop:4}},occupied+" / "+totalCells+" emplacements")
+    // Stats bar
+    h("div",{style:{background:"#1c1c1e",borderRadius:14,padding:"12px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h("div",{style:{color:"#fff"}},
+        h("div",{style:{fontSize:14,fontWeight:800}},"Plan Entrepot"),
+        h("div",{style:{fontSize:11,color:"rgba(255,255,255,.5)",marginTop:2}},occupied+"/"+total+" emplacements")
       ),
       h("div",{style:{textAlign:"right"}},
-        h("div",{style:{fontSize:32,fontWeight:900,color:pctColor,lineHeight:1}},pct+"%"),
-        h("div",{style:{fontSize:10,color:"rgba(255,255,255,.4)"}},occupied===0?"Vide":occupied===totalCells?"Plein":"En cours")
+        h("div",{style:{fontSize:28,fontWeight:900,color:pctColor}},pct+"%"),
+        h("div",{style:{fontSize:9,color:"rgba(255,255,255,.4)"}},pct===0?"Vide":pct===100?"Plein":"Occupe")
       )
     ),
-    // Capacity bar
-    h("div",{style:{background:"rgba(0,0,0,.06)",borderRadius:8,height:8,marginBottom:16,overflow:"hidden"}},
-      h("div",{style:{height:"100%",width:pct+"%",background:pctColor,borderRadius:8,transition:"width .5s"}})
+    h("div",{style:{height:6,background:"#f0f0f0",borderRadius:3,marginBottom:14}},
+      h("div",{style:{height:"100%",width:pct+"%",background:pctColor,borderRadius:3,transition:"width .5s"}})
     ),
-    // RACK VISUAL - the main part
-    h("div",{style:{overflowX:"auto",paddingBottom:8}},
-      h("div",{style:{minWidth:Math.max(300,allees.length*(racks.length*positions.length*22+24))}},
-        // Column headers - Allees
-        h("div",{style:{display:"flex",marginLeft:36,gap:2,marginBottom:4}},
-          allees.map(a=>h("div",{key:a,style:{flex:1,textAlign:"center",fontSize:9,fontWeight:700,color:S.gray,minWidth:racks.length*positions.length*22}},"ALLEE "+a))
-        ),
-        etages.map(e=>h("div",{key:e,style:{display:"flex",alignItems:"center",gap:2,marginBottom:2}},
-          // Etage label
-          h("div",{style:{width:32,flexShrink:0,textAlign:"center",background:"#2c3e50",color:"#fff",borderRadius:6,padding:"4px 2px",fontSize:9,fontWeight:800}},"E"+e),
-          // Allees
-          allees.map(a=>h("div",{key:a,style:{display:"flex",gap:1,marginRight:4}},
-            racks.map(r=>h("div",{key:r,style:{display:"flex",flexDirection:"column",gap:1}},
+    // Legend
+    h("div",{style:{display:"flex",gap:12,marginBottom:12,flexWrap:"wrap"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("div",{style:{width:16,height:16,background:"#2ecc71",borderRadius:3,border:"1px solid #27ae60"}}),h("span",{style:{fontSize:11,color:S.gray}},"Libre")),
+      h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("div",{style:{width:16,height:16,background:"#e74c3c",borderRadius:3,border:"1px solid #c0392b"}}),h("span",{style:{fontSize:11,color:S.gray}},"Occupe (cliquer)")),
+      h("div",{style:{fontSize:11,color:S.gray}},"G=Gauche M=Milieu D=Droite")
+    ),
+    // Rack visual - allees stacked vertically
+    h("div",{style:{overflowX:"auto"}},
+      h("div",{style:{minWidth:Math.max(300,racks.length*positions.length*26+60)}},
+        allees.map((a,ai)=>h("div",{key:a,style:{marginBottom:16,background:"#f8f8f8",borderRadius:14,padding:"10px",border:"2px solid #e0e0e0"}},
+          // Allee header
+          h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},
+            h("div",{style:{width:32,height:32,borderRadius:8,background:"#2c3e50",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800,flexShrink:0}},"A"+a),
+            h("div",{style:{fontSize:13,fontWeight:700,color:"#2c3e50"}},"Allee "+a),
+            h("div",{style:{flex:1,height:1,background:"#ddd",marginLeft:8}}),
+            h("div",{style:{fontSize:11,color:S.gray}},
+              palettes.filter(p=>String(p.allee)===String(a)).length+" palette(s)"
+            )
+          ),
+          // Racks in this allee
+          h("div",{style:{display:"flex",gap:10}},
+            racks.map(r=>h("div",{key:r,style:{flex:1,background:"#fff",borderRadius:10,border:"1.5px solid #ddd",overflow:"hidden"}},
               // Rack header
-              h("div",{style:{textAlign:"center",fontSize:7,color:"#999",marginBottom:1,letterSpacing:.3}},"R"+r),
-              h("div",{style:{display:"flex",gap:1}},
-                positions.map(p=>{
-                  const pal=getPal(a,r,e,p);
-                  const cellKey=a+r+e+p;
-                  const isHovered=hoveredCell===cellKey;
-                  return h("div",{key:p,
-                    onMouseEnter:()=>setHoveredCell(cellKey),
-                    onMouseLeave:()=>setHoveredCell(null),
-                    onClick:()=>pal&&onSelectPalette(pal),
-                    style:{
-                      width:18,height:28,borderRadius:4,cursor:pal?"pointer":"default",
-                      background:pal?"#e74c3c":"#2ecc71",
-                      border:"1px solid "+(pal?"#c0392b":"#27ae60"),
-                      display:"flex",alignItems:"center",justifyContent:"center",
-                      flexDirection:"column",position:"relative",
-                      transform:isHovered&&pal?"scale(1.1)":"scale(1)",
-                      transition:"transform .15s",
-                      boxShadow:pal&&isHovered?"0 4px 12px rgba(231,76,60,.4)":"none"
+              h("div",{style:{background:"#34495e",padding:"4px 8px",textAlign:"center"}},
+                h("span",{style:{color:"#fff",fontSize:10,fontWeight:800}},"RACK "+r)
+              ),
+              // Etages
+              etages.map(e=>h("div",{key:e,style:{display:"flex",alignItems:"stretch",borderBottom:"1px solid #eee"}},
+                // Etage label
+                h("div",{style:{width:24,background:"#ecf0f1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderRight:"1px solid #ddd"}},
+                  h("span",{style:{fontSize:8,fontWeight:700,color:"#7f8c8d",writingMode:"vertical-rl",transform:"rotate(180deg)"}},e)
+                ),
+                // Positions
+                h("div",{style:{display:"flex",flex:1}},
+                  positions.map((p,pi)=>{
+                    const pal=getPal(a,r,e,p);
+                    return h("div",{key:p,
+                      onClick:()=>pal&&onSelectPalette(pal),
+                      style:{
+                        flex:1,minHeight:32,padding:"2px",
+                        background:pal?"#e74c3c":"#2ecc71",
+                        borderRight:pi<positions.length-1?"1px solid rgba(255,255,255,.4)":"none",
+                        cursor:pal?"pointer":"default",
+                        display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",
+                        transition:"opacity .15s",position:"relative"
+                      },
+                      title:pal?pal.id+" | "+(pal.items||[]).map(i=>i.nom).slice(0,2).join(", "):"Libre "+a+"/R"+r+"/E"+e+"/"+p
                     },
-                    title:pal?pal.id+" | "+(pal.items||[]).map(i=>i.nom).join(", "):"Libre - "+a+"/R"+r+"/E"+e+"/"+p},
-                    pal
-                      ?h("div",{style:{fontSize:5,fontWeight:800,color:"#fff",lineHeight:1.1,textAlign:"center",padding:1}},pal.id.replace("PAL-",""))
-                      :h("div",{style:{fontSize:7,color:"rgba(255,255,255,.6)",fontWeight:600}},p)
-                  );
-                })
-              )
+                      pal?h("div",{style:{fontSize:6,fontWeight:800,color:"#fff",textAlign:"center",lineHeight:1.2,padding:1,wordBreak:"break-all"}},pal.id.replace("PAL-",""))
+                        :h("div",{style:{fontSize:7,color:"rgba(255,255,255,.7)",fontWeight:600}},p)
+                    );
+                  })
+                )
+              ))
             ))
-          ))
+          )
         ))
       )
-    ),
-    // Hover tooltip
-    h("div",{style:{display:"flex",gap:12,marginTop:12,justifyContent:"center",flexWrap:"wrap"}},
-      h("div",{style:{display:"flex",alignItems:"center",gap:4}},h("div",{style:{width:14,height:14,background:"#2ecc71",borderRadius:3}}),h("span",{style:{fontSize:11,color:S.gray}},"Libre")),
-      h("div",{style:{display:"flex",alignItems:"center",gap:4}},h("div",{style:{width:14,height:14,background:"#e74c3c",borderRadius:3}}),h("span",{style:{fontSize:11,color:S.gray}},"Occupe - cliquer pour details")),
-      h("div",{style:{display:"flex",alignItems:"center",gap:4}},h("div",{style:{width:14,height:14,background:"#2c3e50",borderRadius:3}}),h("span",{style:{fontSize:11,color:S.gray}},"Etage")),
-      h("div",{style:{display:"flex",alignItems:"center",gap:4}},h("span",{style:{fontSize:11,color:S.gray}},"G=Gauche M=Milieu D=Droite"))
     )
   );
 }
@@ -2210,8 +2228,8 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
   });
 
   // Stats
-  const wc=warehouseConfig||{zones:[]};
-  const totalCells=wc.zones.reduce((a,z)=>a+(z.allees||1)*(z.racks||1)*(z.etages||1)*(z.positions||["G","M","D"]).length,0);
+  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
+  const totalCells=(wc.allees||2)*(wc.racks||3)*(wc.etages||3)*(wc.positions||["G","M","D"]).length;
   const pct=totalCells>0?Math.round(palettes.length/totalCells*100):0;
 
   // Palette detail view
@@ -2319,12 +2337,13 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
       )
     ),
     // Search + Add
-    view==="palettes"&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},
+    h("div",{style:{display:"flex",gap:8,marginBottom:12}},
       h("div",{style:{position:"relative",flex:1}},
         h("span",{style:{position:"absolute",left:12,top:"50%",transform:"translateY(-50%)",fontSize:14}},"🔍"),
-        h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Numero, contenu, zone, destination...",style:{...IS,paddingLeft:36,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})
+        h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Numero, contenu, allee, destination...",style:{...IS,paddingLeft:36,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})
       ),
-      h("button",{onClick:()=>setModal({t:"newPal"}),style:{background:"#2c3e50",color:"#fff",border:"none",borderRadius:12,padding:"0 16px",fontWeight:700,fontSize:18,cursor:"pointer"}},"+")
+      h("button",{onClick:()=>setModal({t:"scanPal"}),style:{background:"#2c3e50",color:"#fff",border:"none",borderRadius:12,padding:"0 12px",fontSize:18,cursor:"pointer"}},"📷"),
+      view==="palettes"&&h("button",{onClick:()=>setModal({t:"newPal"}),style:{background:"#2c3e50",color:"#fff",border:"none",borderRadius:12,padding:"0 14px",fontWeight:700,fontSize:18,cursor:"pointer"}},"+")
     ),
     // Export buttons
     view==="palettes"&&isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},
@@ -2392,7 +2411,16 @@ function EntrepotPage({isAdmin,showT,cfg,emprunts,tools,genPDF,warehouseConfig,c
     // Modals
     modal&&h("div",{},
       modal.t==="newPal"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:savePalette,onClose:()=>setModal(null)}),
-      modal.t==="editPal"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:(data)=>updatePalette(modal.pal._id,data),onClose:()=>setModal(null)})
+      modal.t==="editPal"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:(data)=>updatePalette(modal.pal._id,data),onClose:()=>setModal(null)}),
+      modal.t==="scanPal"&&h(Modal,{onClose:()=>setModal(null)},
+        h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:14}},"Scanner une palette"),
+        h(CamScanner,{onDetect:raw=>{
+          const pal=palettes.find(p=>p.id===raw.trim().toUpperCase()||raw.includes(p.id));
+          if(pal){setModal(null);setTimeout(()=>setSelPal(pal._id),200);}
+          else{setModal(null);showT("Palette non trouvee: "+raw);}
+        }}),
+        h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:10}},"Annuler")
+      )
     )
   );
 }
@@ -2420,12 +2448,11 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
   const[provenance,setProvenance]=useState("");
   const[destination,setDestination]=useState("");
   const[createdBy,setCreatedBy]=useState(currentUser?.name||"");
-  const zones=(warehouseConfig?.zones)||[];
-  const selZoneObj=zones.find(z=>z.id===zone);
-  const alleesOpts=selZoneObj?Array.from({length:selZoneObj.allees},(_, i)=>String(i+1)):[];
-  const racksOpts=selZoneObj?Array.from({length:selZoneObj.racks},(_, i)=>String(i+1)):[];
-  const etagesOpts=selZoneObj?Array.from({length:selZoneObj.etages},(_, i)=>String(i+1)):[];
-  const positionsOpts=selZoneObj?(selZoneObj.positions||["G","M","D"]):["G","M","D"];
+  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
+  const alleesOpts=Array.from({length:wc.allees||2},(_,i)=>String(i+1));
+  const racksOpts=Array.from({length:wc.racks||3},(_,i)=>String(i+1));
+  const etagesOpts=Array.from({length:wc.etages||3},(_,i)=>String(i+1));
+  const positionsOpts=wc.positions||["G","M","D"];
   const addItem=()=>setItems(p=>[...p,{nom:"",qte:""}]);
   const updItem=(i,k,v)=>setItems(p=>p.map((x,j)=>j===i?{...x,[k]:v}:x));
   const remItem=i=>setItems(p=>p.filter((_,j)=>j!==i));
@@ -2457,25 +2484,20 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
     FL("Emplacement",true),
     h("div",{style:{background:"#f5f5f7",borderRadius:12,padding:"12px",marginBottom:8}},
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Zone"),
-          h("select",{value:zone,onChange:e=>{setZone(e.target.value);setAllee("");setRack("");setEtagere("");setPosition("");},style:{...SS,padding:"8px 10px",fontSize:12}},
-            h("option",{value:""},"-- Zone --"),...zones.map(z=>h("option",{key:z.id,value:z.id},z.nom||"Zone "+z.id))
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Allee"),
+          h("select",{value:allee,onChange:e=>{setAllee(e.target.value);setRack("");setEtagere("");setPosition("");},style:{...SS,padding:"8px 10px",fontSize:12}},
+            h("option",{value:""},"-- Allee --"),...alleesOpts.map(a=>h("option",{key:a,value:a},"Allee "+a))
           )
         ),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Allee"),
-          h("select",{value:allee,onChange:e=>setAllee(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!zone},
-            h("option",{value:""},"-- Allee --"),...alleesOpts.map(a=>h("option",{key:a,value:a},"Allee "+a))
+        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Rack"),
+          h("select",{value:rack,onChange:e=>{setRack(e.target.value);setEtagere("");setPosition("");},style:{...SS,padding:"8px 10px",fontSize:12},disabled:!allee},
+            h("option",{value:""},"-- Rack --"),...racksOpts.map(r=>h("option",{key:r,value:r},"Rack "+r))
           )
         )
       ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}},
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Rack"),
-          h("select",{value:rack,onChange:e=>setRack(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!allee},
-            h("option",{value:""},"-- Rack --"),...racksOpts.map(r=>h("option",{key:r,value:r},"Rack "+r))
-          )
-        ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
         h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Etage"),
-          h("select",{value:etagere,onChange:e=>setEtagere(e.target.value),style:{...SS,padding:"8px 10px",fontSize:12},disabled:!rack},
+          h("select",{value:etagere,onChange:e=>{setEtagere(e.target.value);setPosition("");},style:{...SS,padding:"8px 10px",fontSize:12},disabled:!rack},
             h("option",{value:""},"-- Etage --"),...etagesOpts.map(e2=>h("option",{key:e2,value:e2},"Etage "+e2))
           )
         ),
@@ -2485,7 +2507,7 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
           )
         )
       ),
-      (zone||allee||rack||etagere||position)&&h("div",{style:{marginTop:8}},h(EmplacementBadge,{zone,allee,rack,etagere,position}))
+      (allee||rack||etagere||position)&&h("div",{style:{marginTop:8}},h(EmplacementBadge,{allee,rack,etagere,position}))
     ),
     FL("Photo emplacement"),
     h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"10px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:photoPos?8:14}},"Photo de la position",
@@ -2494,7 +2516,7 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
     photoPos&&h("img",{src:photoPos,style:{width:"100%",borderRadius:10,maxHeight:120,objectFit:"cover",marginBottom:14}}),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
       h("button",{onClick:onClose,style:BS},"Annuler"),
-      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}onSave({id:palId,items:items.filter(x=>x.nom),photos,zone,allee,rack,etagere,position,photoPos,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock"});},style:BB},"Creer la palette")
+      h("button",{onClick:()=>{if(!items[0].nom){alert("Ajoutez au moins un article");return;}onSave({id:palId,items:items.filter(x=>x.nom),photos,allee,rack,etagere,position,photoPos,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock"});},style:BB},"Creer la palette")
     )
   );
 }
@@ -2503,28 +2525,53 @@ function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}
 function generatePalettePDF(pal,cfg){
   try{
     const{jsPDF}=window.jspdf;
-    const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a4"});
-    const W=297,H=210;
-    doc.setFontSize(72);doc.setFont("helvetica","bold");doc.setTextColor(0,0,0);
-    doc.text(pal.id,W/2,55,{align:"center"});
-    doc.setDrawColor(0,0,0);doc.setLineWidth(2);doc.line(10,65,W-10,65);
-    doc.setFontSize(22);doc.setFont("helvetica","bold");
-    doc.text("CONTENU:",12,78);
-    let cy=92;doc.setFont("helvetica","normal");doc.setFontSize(18);
+    // A3 landscape = 420x297mm
+    const doc=new jsPDF({orientation:"landscape",unit:"mm",format:"a3"});
+    const W=420,H=297;
+
+    // Generate QR code as base64 image using qrious
+    let qrDataUrl=null;
+    try{
+      const tempCanvas=document.createElement("canvas");
+      new window.QRious({element:tempCanvas,value:pal.id+(pal.items?"|"+(pal.items.map(i=>i.nom).join(",")):""),size:400,background:"white",foreground:"black",level:"H"});
+      qrDataUrl=tempCanvas.toDataURL("image/png");
+    }catch(e){}
+
+    // Left side - QR Code large
+    if(qrDataUrl){
+      doc.addImage(qrDataUrl,"PNG",15,15,100,100);
+    }
+    doc.setFontSize(10);doc.setFont("helvetica","normal");doc.setTextColor(120,120,120);
+    doc.text("Scanner pour identifier",65,120,{align:"center"});
+
+    // Center - Palette ID huge
+    doc.setFontSize(80);doc.setFont("helvetica","bold");doc.setTextColor(0,0,0);
+    doc.text(pal.id,W/2,65,{align:"center"});
+
+    // Separator line
+    doc.setDrawColor(0,0,0);doc.setLineWidth(1.5);doc.line(125,80,W-15,80);
+
+    // Content - large font
+    doc.setFontSize(24);doc.setFont("helvetica","bold");doc.setTextColor(0,0,0);
+    doc.text("CONTENU:",130,95);
+    let cy=115;doc.setFont("helvetica","normal");doc.setFontSize(20);
     (pal.items||[]).forEach((item,i)=>{
-      if(cy>H-25)return;
-      doc.text((i+1)+". "+item.nom.substring(0,35)+(item.qte?" x"+item.qte:""),12,cy);
-      cy+=14;
+      if(cy>H-40)return;
+      doc.text((i+1)+". "+item.nom.substring(0,40)+(item.qte?" x"+item.qte:""),130,cy);
+      cy+=16;
     });
-    doc.setLineWidth(1);doc.line(10,H-28,W-10,H-28);
-    doc.setFontSize(11);doc.setFont("helvetica","normal");
-    let info="";
-    if(pal.createdBy)info+="Par: "+pal.createdBy+"  ";
-    if(pal.provenance)info+="De: "+pal.provenance+"  ";
-    if(pal.destination)info+="Vers: "+pal.destination+"  ";
-    if(pal.createdAt)info+="Date: "+pal.createdAt.split(" ")[0];
-    doc.text(info,W/2,H-20,{align:"center"});
-    doc.save(pal.id+"_fiche.pdf");
+
+    // Bottom info bar
+    doc.setFillColor(28,28,30);doc.rect(0,H-28,W,28,"F");
+    doc.setFontSize(12);doc.setFont("helvetica","normal");doc.setTextColor(255,255,255);
+    let infoParts=[];
+    if(pal.createdBy)infoParts.push("Par: "+pal.createdBy);
+    if(pal.provenance)infoParts.push("De: "+pal.provenance);
+    if(pal.destination)infoParts.push("Vers: "+pal.destination);
+    if(pal.createdAt)infoParts.push(pal.createdAt.split(" ")[0]);
+    doc.text(infoParts.join("   |   "),W/2,H-14,{align:"center"});
+
+    doc.save(pal.id+"_fiche_A3.pdf");
   }catch(e){alert("Erreur PDF: "+e.message);}
 }
 
@@ -2637,55 +2684,71 @@ function AddUserModal({existing,onSave,onClose}){
 
 // ── WAREHOUSE CONFIG PANEL ────────────────────────────────────────────────
 function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
-  const[zones,setZones]=useState(warehouseConfig?.zones||[]);
-  const[editIdx,setEditIdx]=useState(null);
-  const[form,setForm]=useState({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});
-  const posStr=p=>Array.isArray(p)?p.join(","):p||"G,M,D";
-  const addZone=()=>{
-    if(!form.id||!form.nom){showT("ID et nom requis");return;}
-    if(editIdx!==null){const nz=[...zones];nz[editIdx]=form;setZones(nz);setEditIdx(null);}
-    else setZones(p=>[...p,form]);
-    setForm({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});
-  };
+  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
+  const[allees,setAllees]=useState(wc.allees||2);
+  const[racks,setRacks]=useState(wc.racks||3);
+  const[etages,setEtages]=useState(wc.etages||3);
+  const[positions,setPositions]=useState((wc.positions||["G","M","D"]).join(","));
+  const[newPos,setNewPos]=useState("");
+
+  const posArr=positions.split(",").map(p=>p.trim()).filter(Boolean);
+  const addPos=()=>{if(newPos.trim()&&!posArr.includes(newPos.trim())){setPositions([...posArr,newPos.trim()].join(","));setNewPos("");}};
+  const removePos=(p)=>setPositions(posArr.filter(x=>x!==p).join(","));
+
+  const total=allees*racks*etages*posArr.length;
+
   return h("div",{},
     h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration entrepot"),
-    h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:S.blue}},"Definissez vos zones, allees, racks, etages et positions."),
-    zones.map((z,i)=>h("div",{key:i,style:{background:S.white,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}},
-        h("div",{},
-          h("div",{style:{fontSize:14,fontWeight:700}},z.nom||"Zone "+z.id),
-          h("div",{style:{fontSize:12,color:S.gray,marginTop:2}},z.allees+" allee(s) x "+z.racks+" rack(s) x "+z.etages+" etage(s)"),
-          h("div",{style:{fontSize:11,color:S.gray}},"Positions: "+posStr(z.positions))
-        ),
-        h("div",{style:{display:"flex",gap:6}},
-          h("button",{onClick:()=>{setForm({...z});setEditIdx(i);},style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:8,padding:"5px 9px",fontSize:12,cursor:"pointer"}},"Editer"),
-          h("button",{onClick:()=>setZones(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"5px 9px",fontSize:12,cursor:"pointer"}},"Suppr.")
+    h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:14,fontSize:12,color:S.blue}},
+      "Structure : Allee → Rack → Etage → Position. "+total+" emplacements au total."
+    ),
+    // Stats preview
+    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:16}},
+      [{v:allees,l:"Allees"},{v:racks,l:"Racks"},{v:etages,l:"Etages"},{v:posArr.length,l:"Positions"}].map(x=>
+        h("div",{key:x.l,style:{background:S.white,borderRadius:10,padding:"10px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+          h("div",{style:{fontSize:22,fontWeight:800,color:S.blue}},x.v),
+          h("div",{style:{fontSize:10,color:S.gray,marginTop:2}},x.l)
         )
       )
-    )),
-    h("div",{style:{background:"#f5f5f7",borderRadius:14,padding:"14px",marginBottom:14}},
-      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:10,color:editIdx!==null?S.orange:S.green}},editIdx!==null?"Modifier zone":"Nouvelle zone"),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"ID (ex: A)"),h("input",{value:form.id,onChange:e=>setForm(p=>({...p,id:e.target.value.toUpperCase()})),style:{...IS,padding:"8px"}})),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Nom"),h("input",{value:form.nom,onChange:e=>setForm(p=>({...p,nom:e.target.value})),placeholder:"Zone A...",style:{...IS,padding:"8px"}}))
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:8}},
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Allees"),h("input",{type:"number",min:1,max:20,value:form.allees,onChange:e=>setForm(p=>({...p,allees:parseInt(e.target.value)||1})),style:{...IS,padding:"8px",textAlign:"center"}})),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Racks"),h("input",{type:"number",min:1,max:20,value:form.racks,onChange:e=>setForm(p=>({...p,racks:parseInt(e.target.value)||1})),style:{...IS,padding:"8px",textAlign:"center"}})),
-        h("div",{},h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Etages"),h("input",{type:"number",min:1,max:10,value:form.etages,onChange:e=>setForm(p=>({...p,etages:parseInt(e.target.value)||1})),style:{...IS,padding:"8px",textAlign:"center"}}))
-      ),
-      h("div",{style:{marginBottom:8}},
-        h("label",{style:{fontSize:11,fontWeight:700,color:S.gray,display:"block",marginBottom:3}},"Positions (ex: G,M,D)"),
-        h("input",{value:posStr(form.positions),onChange:e=>setForm(p=>({...p,positions:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})),style:{...IS,padding:"8px"}})
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
-        editIdx!==null&&h("button",{onClick:()=>{setEditIdx(null);setForm({id:"",nom:"",allees:2,racks:3,etages:3,positions:["G","M","D"]});},style:BS},"Annuler"),
-        h("button",{onClick:addZone,style:{...BP,background:editIdx!==null?S.orange:S.green}},editIdx!==null?"Modifier":"Ajouter zone")
+    ),
+    // Config sliders
+    h("div",{style:{background:S.white,borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:12}},"Dimensions"),
+      [["Nombre d'allees",allees,setAllees,1,10],["Racks par allee",racks,setRacks,1,20],["Etages par rack",etages,setEtages,1,10]].map(([l,v,set,min,max])=>
+        h("div",{key:l,style:{marginBottom:12}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",fontSize:12,marginBottom:6}},
+            h("span",{style:{fontWeight:600}},l),
+            h("span",{style:{fontWeight:800,color:S.blue,fontSize:14}},v)
+          ),
+          h("div",{style:{display:"flex",alignItems:"center",gap:10}},
+            h("button",{onClick:()=>set(s=>Math.max(min,s-1)),style:{width:34,height:34,borderRadius:8,border:"1.5px solid "+S.border,background:S.white,fontSize:18,cursor:"pointer",fontWeight:700}},"−"),
+            h("div",{style:{flex:1,height:6,background:S.bg,borderRadius:3,overflow:"hidden"}},
+              h("div",{style:{height:"100%",width:((v-min)/(max-min)*100)+"%",background:S.blue,borderRadius:3}})
+            ),
+            h("button",{onClick:()=>set(s=>Math.min(max,s+1)),style:{width:34,height:34,borderRadius:8,border:"1.5px solid "+S.border,background:S.white,fontSize:18,cursor:"pointer",fontWeight:700}},"+")
+          )
+        )
       )
     ),
-    h("button",{onClick:()=>onSave({zones}),style:BP},"Sauvegarder la configuration")
+    // Positions
+    h("div",{style:{background:S.white,borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:10}},"Positions dans chaque case"),
+      h("div",{style:{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}},
+        posArr.map(p=>h("div",{key:p,style:{display:"flex",alignItems:"center",gap:4,background:"#e8f0fe",borderRadius:20,padding:"4px 10px"}},
+          h("span",{style:{fontSize:12,fontWeight:700,color:S.blue}},p),
+          h("button",{onClick:()=>removePos(p),style:{background:"none",border:"none",color:S.danger,cursor:"pointer",fontSize:14,lineHeight:1,padding:0}},"×")
+        ))
+      ),
+      h("div",{style:{display:"flex",gap:8}},
+        h("input",{value:newPos,onChange:e=>setNewPos(e.target.value.toUpperCase()),placeholder:"Ex: G, M, D, 1, 2...",style:{...IS,flex:1},maxLength:3,
+          onKeyDown:e=>e.key==="Enter"&&addPos()}),
+        h("button",{onClick:addPos,style:{background:S.green,color:"#fff",border:"none",borderRadius:10,padding:"0 14px",fontWeight:700,cursor:"pointer",fontSize:16}},"+")
+      )
+    ),
+    h("button",{onClick:()=>onSave({allees,racks,etages,positions:posArr}),style:BP},"Sauvegarder la configuration")
   );
 }
+
 
 
 // ── USER MANAGEMENT PANEL ────────────────────────────────────────────────
@@ -2693,52 +2756,20 @@ function UserManagementPanel({userAccounts,onSave,setModal,adminPin}){
   const[search,setSearch]=useState("");
   const[filterRole,setFilterRole]=useState("tous");
   const[showPins,setShowPins]=useState({});
-
   const togglePin=i=>setShowPins(p=>({...p,[i]:!p[i]}));
-
   const filtered=(userAccounts||[]).filter(acc=>{
     const q=search.toLowerCase();
-    const matchSearch=!search||acc.name.toLowerCase().includes(q);
-    const matchRole=filterRole==="tous"||(filterRole==="admin"&&acc.role==="admin")||(filterRole==="user"&&acc.role!=="admin");
-    return matchSearch&&matchRole;
+    return(!search||acc.name.toLowerCase().includes(q))&&
+      (filterRole==="tous"||(filterRole==="admin"&&acc.role==="admin")||(filterRole==="user"&&acc.role!=="admin"));
   });
-
-  const resetPin=async(i)=>{
-    if(!confirm("Reinitialiser le PIN de "+(userAccounts[i]?.name)+" a 0000?"))return;
-    const na=[...userAccounts];na[i]={...na[i],pin:"0000"};
-    onSave(na);
-  };
-
-  const toggleActive=(i)=>{
-    const na=[...userAccounts];na[i]={...na[i],active:na[i].active===false?true:false};
-    onSave(na);
-  };
-
-  const deleteUser=(i)=>{
-    if(!confirm("Supprimer "+userAccounts[i]?.name+"?"))return;
-    onSave(userAccounts.filter((_,j)=>j!==i));
-  };
-
   const admins=(userAccounts||[]).filter(a=>a.role==="admin").length;
   const users=(userAccounts||[]).filter(a=>a.role!=="admin").length;
-
   return h("div",{},
-    // Header stats
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:16}},
-      h("div",{style:{background:"#1c1c1e",borderRadius:12,padding:"12px",textAlign:"center",color:"#fff"}},
-        h("div",{style:{fontSize:22,fontWeight:800}},(userAccounts||[]).length),
-        h("div",{style:{fontSize:10,opacity:.6,marginTop:2,textTransform:"uppercase",letterSpacing:.5}},"Total")
-      ),
-      h("div",{style:{background:"#fff1f0",borderRadius:12,padding:"12px",textAlign:"center"}},
-        h("div",{style:{fontSize:22,fontWeight:800,color:S.danger}},admins),
-        h("div",{style:{fontSize:10,color:S.danger,marginTop:2,textTransform:"uppercase",letterSpacing:.5}},"Admins")
-      ),
-      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"12px",textAlign:"center"}},
-        h("div",{style:{fontSize:22,fontWeight:800,color:S.blue}},users),
-        h("div",{style:{fontSize:10,color:S.blue,marginTop:2,textTransform:"uppercase",letterSpacing:.5}},"Users")
-      )
+      h("div",{style:{background:"#1c1c1e",borderRadius:12,padding:"12px",textAlign:"center",color:"#fff"}},h("div",{style:{fontSize:22,fontWeight:800}},(userAccounts||[]).length),h("div",{style:{fontSize:10,opacity:.6,marginTop:2}},"TOTAL")),
+      h("div",{style:{background:"#fff1f0",borderRadius:12,padding:"12px",textAlign:"center"}},h("div",{style:{fontSize:22,fontWeight:800,color:S.danger}},admins),h("div",{style:{fontSize:10,color:S.danger,marginTop:2}},"ADMINS")),
+      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"12px",textAlign:"center"}},h("div",{style:{fontSize:22,fontWeight:800,color:S.blue}},users),h("div",{style:{fontSize:10,color:S.blue,marginTop:2}},"USERS"))
     ),
-    // Search + Add
     h("div",{style:{display:"flex",gap:8,marginBottom:12}},
       h("div",{style:{position:"relative",flex:1}},
         h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:14}},"🔍"),
@@ -2746,47 +2777,39 @@ function UserManagementPanel({userAccounts,onSave,setModal,adminPin}){
       ),
       h("button",{onClick:()=>setModal({t:"addUser"}),style:{background:"#1c1c1e",color:"#fff",border:"none",borderRadius:12,padding:"0 16px",fontWeight:700,fontSize:18,cursor:"pointer"}},"+")
     ),
-    // Role filter
     h("div",{style:{display:"flex",gap:6,marginBottom:14}},
       [["tous","Tous"],["admin","Admins"],["user","Users"]].map(([f,l])=>
         h("button",{key:f,onClick:()=>setFilterRole(f),style:{padding:"6px 14px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(filterRole===f?"#1c1c1e":S.border),background:filterRole===f?"#1c1c1e":S.white,color:filterRole===f?"#fff":S.gray,cursor:"pointer"}},l)
       )
     ),
-    // Info badge
-    h("div",{style:{background:"#e8f0fe",borderRadius:10,padding:"8px 12px",marginBottom:14,fontSize:11,color:S.blue}},
-      "Comptes ADMIN masques de l'ecran de connexion. Acces via lien discret."
-    ),
-    // User cards
-    filtered.length===0?h("div",{style:{padding:"30px",textAlign:"center",color:S.gray,fontSize:13}},"Aucun compte")
+    h("div",{style:{background:"#e8f0fe",borderRadius:10,padding:"8px 12px",marginBottom:14,fontSize:11,color:S.blue}},"Comptes ADMIN masques de l'ecran de connexion."),
+    filtered.length===0?h("div",{style:{padding:"30px",textAlign:"center",color:S.gray}},"Aucun compte")
     :filtered.map((acc,i)=>{
-      const realIdx=(userAccounts||[]).findIndex(a=>a.name===acc.name&&a.pin===acc.pin);
+      const realIdx=(userAccounts||[]).findIndex(a=>a.name===acc.name);
       const isActive=acc.active!==false;
       return h("div",{key:i,style:{background:S.white,borderRadius:16,marginBottom:12,boxShadow:"0 2px 8px rgba(0,0,0,.08)",overflow:"hidden",opacity:isActive?1:.6}},
-        // Card header - avatar + name + role
-        h("div",{style:{background:acc.role==="admin"?"linear-gradient(135deg,#c8102e,#8b0000)":"linear-gradient(135deg,#007aff,#005ecb)",padding:"16px 16px 20px",position:"relative"}},
-          h("div",{style:{display:"flex",alignItems:"center",gap:14}},
-            h("div",{style:{width:56,height:56,borderRadius:"50%",background:"rgba(255,255,255,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,border:"2px solid rgba(255,255,255,.3)",flexShrink:0}},acc.avatar||"👤"),
+        h("div",{style:{background:acc.role==="admin"?"linear-gradient(135deg,#c8102e,#8b0000)":"linear-gradient(135deg,#007aff,#005ecb)",padding:"16px"}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:14,marginBottom:12}},
+            h("div",{style:{width:56,height:56,borderRadius:"50%",background:"rgba(255,255,255,.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,border:"2px solid rgba(255,255,255,.3)"}},acc.avatar||"👤"),
             h("div",{},
               h("div",{style:{fontSize:18,fontWeight:800,color:"#fff"}},acc.name),
-              h("div",{style:{display:"flex",alignItems:"center",gap:6,marginTop:4}},
+              h("div",{style:{display:"flex",gap:6,marginTop:4}},
                 h("span",{style:{background:"rgba(255,255,255,.25)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}},acc.role==="admin"?"ADMIN":"UTILISATEUR"),
                 !isActive&&h("span",{style:{background:"rgba(0,0,0,.3)",color:"#fff",borderRadius:20,padding:"2px 10px",fontSize:10,fontWeight:700}},"INACTIF")
               )
             )
           ),
-          // PIN display
-          h("div",{style:{display:"flex",alignItems:"center",gap:8,marginTop:12,background:"rgba(0,0,0,.15)",borderRadius:10,padding:"8px 12px"}},
-            h("span",{style:{color:"rgba(255,255,255,.6)",fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:.5}},"PIN"),
-            h("span",{style:{color:"#fff",fontSize:14,fontWeight:800,letterSpacing:4,flex:1}},showPins[realIdx]?acc.pin:"●●●●"),
-            h("button",{onClick:()=>togglePin(realIdx),style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:8,padding:"4px 8px",color:"#fff",fontSize:11,cursor:"pointer"}},showPins[realIdx]?"Cacher":"Voir")
+          h("div",{style:{display:"flex",alignItems:"center",gap:8,background:"rgba(0,0,0,.15)",borderRadius:10,padding:"8px 12px"}},
+            h("span",{style:{color:"rgba(255,255,255,.6)",fontSize:11,fontWeight:600}},"PIN"),
+            h("span",{style:{color:"#fff",fontSize:16,fontWeight:800,letterSpacing:6,flex:1}},showPins[realIdx]?acc.pin:"●●●●"),
+            h("button",{onClick:()=>togglePin(realIdx),style:{background:"rgba(255,255,255,.2)",border:"none",borderRadius:8,padding:"4px 10px",color:"#fff",fontSize:11,cursor:"pointer"}},showPins[realIdx]?"Cacher":"Voir")
           )
         ),
-        // Actions
-        h("div",{style:{padding:"12px 16px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}},
-          h("button",{onClick:()=>setModal({t:"editUser",acc,idx:realIdx}),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}},"✏️"),h("div",{},"Modifier")),
-          h("button",{onClick:()=>resetPin(realIdx),style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}},"🔑"),h("div",{},"Reset PIN")),
-          h("button",{onClick:()=>toggleActive(realIdx),style:{background:isActive?"#f5f5f7":"#e6fff0",color:isActive?S.gray:S.green,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}}),h("div",{},isActive?"Desactiver":"Activer")),
-          h("button",{onClick:()=>deleteUser(realIdx),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"8px 6px",fontSize:11,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:16}},"🗑️"),h("div",{},"Supprimer"))
+        h("div",{style:{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:6}},
+          h("button",{onClick:()=>setModal({t:"editUser",acc,idx:realIdx}),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:10,padding:"8px 4px",fontSize:10,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:18,marginBottom:2}},"✏️"),"Modifier"),
+          h("button",{onClick:()=>{if(confirm("Reset PIN de "+acc.name+" a 0000?"))onSave((userAccounts||[]).map((u,j)=>j===realIdx?{...u,pin:"0000"}:u));},style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:10,padding:"8px 4px",fontSize:10,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:18,marginBottom:2}},"🔑"),"Reset"),
+          h("button",{onClick:()=>onSave((userAccounts||[]).map((u,j)=>j===realIdx?{...u,active:u.active===false?true:false}:u)),style:{background:isActive?"#f5f5f7":"#e6fff0",color:isActive?S.gray:S.green,border:"none",borderRadius:10,padding:"8px 4px",fontSize:10,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:18,marginBottom:2}},isActive?"":"✅"),isActive?"Desact.":"Activer"),
+          h("button",{onClick:()=>{if(confirm("Supprimer "+acc.name+"?"))onSave((userAccounts||[]).filter((_,j)=>j!==realIdx));},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"8px 4px",fontSize:10,fontWeight:700,cursor:"pointer",textAlign:"center"}},h("div",{style:{fontSize:18,marginBottom:2}},"🗑️"),"Suppr.")
         )
       );
     }),
