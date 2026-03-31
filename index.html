@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#c8102e">
+<meta name="mobile-web-app-capable" content="yes">
+<title>LUX AIRPORT — Gestion Airside</title>
+<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
+<style>
+:root{--red:#c8102e;--red2:#9b0d22;--blue:#0a84ff;--green:#34c759;--orange:#ff9500;--danger:#ff3b30;--bg:#f2f2f7;--card:#fff;--text:#1c1c1e;--muted:#8e8e93;--border:#e5e5ea;}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--text)}
+button,input,select{font:inherit}
+#app{min-height:100vh}
+.hidden{display:none!important}
+.topbar{position:sticky;top:0;z-index:5;background:linear-gradient(135deg,var(--red),var(--red2));padding:12px 14px;color:#fff;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+.topbar .row{display:flex;gap:10px;align-items:center}
+.logo{width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.16);display:flex;align-items:center;justify-content:center;font-weight:800}
+.card{background:var(--card);border-radius:18px;padding:16px;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.wrap{padding:14px;max-width:1100px;margin:0 auto}
+.grid{display:grid;gap:12px}
+.grid-3{grid-template-columns:repeat(3,1fr)}
+.grid-2{grid-template-columns:repeat(2,1fr)}
+.stat{padding:14px;border-radius:16px;text-align:center;font-weight:800}
+.stat small{display:block;color:var(--muted);font-size:11px;font-weight:600;margin-top:3px}
+.input,.select{width:100%;padding:13px 14px;border:1.5px solid var(--border);border-radius:14px;background:#fff;outline:none}
+.label{display:block;margin:12px 0 6px;font-size:12px;color:var(--muted);font-weight:800;text-transform:uppercase;letter-spacing:.5px}
+.btn{border:0;border-radius:14px;padding:13px 16px;font-weight:800;cursor:pointer}
+.btn-red{background:var(--red);color:#fff}.btn-blue{background:var(--blue);color:#fff}.btn-green{background:var(--green);color:#fff}.btn-white{background:#fff;color:var(--text);border:1.5px solid var(--border)}
+.btn-ghost{background:rgba(255,255,255,.16);color:#fff}
+.tabs{display:flex;gap:8px;overflow:auto;padding-bottom:2px}.tab{white-space:nowrap;padding:10px 16px;border-radius:999px;border:1.5px solid var(--border);background:#fff;font-weight:800}.tab.active{background:var(--red);border-color:var(--red);color:#fff}
+.user-card{border:1.5px solid var(--border);border-radius:18px;padding:14px;background:#fff}
+.badge{display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800}.badge-admin{background:#fff0f0;color:var(--danger)}.badge-user{background:#eef5ff;color:var(--blue)}.badge-off{background:#f2f2f7;color:var(--muted)}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:12px}.muted{color:var(--muted)}
+.pin-box{display:flex;justify-content:center;gap:12px;margin:12px 0 18px}.pin-dot{width:14px;height:14px;border-radius:50%;background:rgba(255,255,255,.18);border:2px solid rgba(255,255,255,.34);transition:.15s}.pin-dot.active{background:#fff;border-color:#fff;transform:scale(1.08)}
+.keypad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.key{height:52px;border-radius:16px;border:0;background:rgba(255,255,255,.14);color:#fff;font-size:20px;font-weight:800}
+.login-page{min-height:100vh;background:linear-gradient(155deg,var(--red) 0%,#bd001d 55%,#4f0012 100%);display:flex;align-items:center;justify-content:center;padding:20px}
+.login-box{width:100%;max-width:420px;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.16);backdrop-filter:blur(16px);border-radius:28px;padding:24px;color:#fff}
+.center{text-align:center}.shake{animation:shake .36s}.mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}.chips{display:flex;flex-wrap:wrap;gap:8px}.chip{padding:6px 12px;border-radius:999px;background:#eef5ff;color:var(--blue);font-weight:800;font-size:12px}.chip button{margin-left:8px;border:0;background:none;color:var(--danger);font-weight:800}
+.toolbar{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.search{flex:1;min-width:220px}.modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:flex;align-items:flex-end;justify-content:center;padding:0;z-index:50}.sheet{width:100%;max-width:520px;max-height:90vh;overflow:auto;background:#fff;border-radius:24px 24px 0 0;padding:18px}
+.rack-row{border:1.5px solid var(--border);border-radius:18px;background:#fff;padding:12px;margin-top:12px}
+.racks{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.rack{border:1.5px solid #d8d8dd;border-radius:16px;overflow:hidden}
+.rack-head{background:#34495e;color:#fff;font-weight:800;text-align:center;padding:12px}
+.grid-rack{display:grid;background:#eef0f2;grid-template-columns:44px repeat(var(--posCount),1fr)}
+.cell,.axis{min-height:38px;display:flex;align-items:center;justify-content:center;border-right:1px solid rgba(255,255,255,.45);border-top:1px solid rgba(255,255,255,.45);font-weight:800;font-size:13px}
+.axis{background:#f0f0f0;color:#6b6b72;font-weight:700}.cell.free{background:#2ecc71;color:#fff}.cell.used{background:#e74c3c;color:#fff}
+.small{font-size:12px}.errorbox{padding:18px;background:#fff;border-radius:18px;color:#b00020;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:90px;background:rgba(28,28,30,.92);color:#fff;padding:10px 16px;border-radius:999px;z-index:60}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-5px)}80%{transform:translateX(5px)}}
+@media (max-width:720px){.grid-3{grid-template-columns:1fr}.grid-2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+(function(){
+const appEl = document.getElementById('app');
+const state = {
+  ready:false,
+  error:null,
+  saving:false,
+  toast:'',
+  modal:null,
+  currentUser:null,
+  adminSystemPin:'0000',
+  loginMode:'select',
+  loginSelected:null,
+  pinBuffer:'',
+  pinError:false,
+  adminReveal:false,
+  adminTab:'comptes',
+  accountsFilter:'all',
+  accountsSearch:'',
+  params:{
+    cfg:{nomSite:'LUX AIRPORT', couleur:'#c8102e', logoText:'Lux'},
+    userAccounts:[{id:id(),name:'Administrateur',pin:'0000',role:'admin',avatar:'🔐',active:true}],
+    warehouseConfig:{allees:2,racks:3,etages:3,positions:['G','M','D']},
+    palettes:[
+      {id:id(),numero:'0004',allee:1,rack:3,etagere:3,position:'M'},
+      {id:id(),numero:'0003',allee:2,rack:3,etagere:3,position:'G'}
+    ]
+  }
+};
+let db=null;
+function id(){return Math.random().toString(36).slice(2,10)}
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"})[m])}
+function showToast(msg){state.toast=msg;render();clearTimeout(showToast.t);showToast.t=setTimeout(()=>{state.toast='';render();},1800)}
+function setError(err){state.error=err&&err.stack?err.stack:String(err);render()}
+window.onerror=(m,s,l,c,e)=>{setError((e&&e.stack)||('Erreur: '+m+'\nSource: '+s+'\nLigne: '+l));return true};
+window.addEventListener('unhandledrejection',e=>setError(e.reason||'Promise rejetée'));
+try{
+  firebase.initializeApp({
+    apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
+    authDomain:"luxairport-airside.firebaseapp.com",
+    projectId:"luxairport-airside",
+    appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
+  });
+  db = firebase.firestore();
+}catch(e){setError(e)}
+async function loadConfig(){
+  const snap = await db.collection('params').doc('config').get();
+  if(snap.exists){
+    const d=snap.data()||{};
+    state.params.cfg = Object.assign({}, state.params.cfg, d.cfg||{});
+    state.params.userAccounts = Array.isArray(d.userAccounts)&&d.userAccounts.length ? d.userAccounts : state.params.userAccounts;
+    state.params.warehouseConfig = Object.assign({}, state.params.warehouseConfig, d.warehouseConfig||{});
+    state.params.palettes = Array.isArray(d.palettes) ? d.palettes : state.params.palettes;
+  }else{
+    await saveConfig(true);
+  }
+}
+async function saveConfig(silent){
+  if(!db) throw new Error('Firestore indisponible');
+  state.saving=true;render();
+  try{
+    await db.collection('params').doc('config').set(state.params,{merge:true});
+    if(!silent) showToast('Sauvegardé');
+  }finally{state.saving=false;render();}
+}
+function activeUsers(){return (state.params.userAccounts||[]).filter(u=>u.active!==false)}
+function visibleLoginUsers(){return activeUsers().filter(u=>u.role!=='admin')}
+function render(){
+  try{
+    if(state.error){
+      appEl.innerHTML='<div class="wrap"><div class="errorbox">'+esc(state.error)+'</div></div>';
+      return;
+    }
+    if(!state.ready){
+      appEl.innerHTML='<div class="login-page"><div class="login-box center"><div style="font-size:32px;margin-bottom:12px">✈️</div><div style="font-size:24px;font-weight:900">Chargement...</div></div></div>';
+      return;
+    }
+    appEl.innerHTML = state.currentUser ? appHtml() : loginHtml();
+    bindCommon();
+    if(state.currentUser) bindApp(); else bindLogin();
+  }catch(e){setError(e)}
+}
+function loginHtml(){
+  const users = visibleLoginUsers();
+  const admins = activeUsers().filter(u=>u.role==='admin');
+  if(state.loginMode==='pin'){
+    const sel=state.loginSelected;
+    return `
+    <div class="login-page"><div class="login-box ${state.pinError?'shake':''}">
+      <div class="center">
+        <div style="font-size:34px;margin-bottom:10px">${sel&&sel.role==='admin'?'🔐':(sel&&sel.avatar)||'👤'}</div>
+        <div style="font-size:22px;font-weight:900">${esc(sel?sel.name:'Admin système')}</div>
+        <div style="opacity:.7;margin-top:4px">Entrez votre PIN</div>
+      </div>
+      <div class="pin-box">${[0,1,2,3].map(i=>`<div class="pin-dot ${i<state.pinBuffer.length?'active':''}"></div>`).join('')}</div>
+      <div class="center" style="min-height:20px;color:#ffd2d2;font-weight:700">${state.pinError?'PIN incorrect':''}</div>
+      <div class="keypad" style="margin-top:10px">${[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map(v=>v===''?'<div></div>':`<button class="key" data-key="${v}">${v}</button>`).join('')}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px">
+        <button class="btn btn-white" id="backSelect">Retour</button>
+        <button class="btn btn-blue" id="clearPin">Effacer</button>
+      </div>
+    </div></div>`;
+  }
+  return `
+  <div class="login-page"><div class="login-box">
+    <div class="center">
+      <div style="width:80px;height:80px;border-radius:22px;background:rgba(255,255,255,.14);display:inline-flex;align-items:center;justify-content:center;font-size:28px;font-weight:900">Lux</div>
+      <div style="font-size:24px;font-weight:900;margin-top:16px">LUX AIRPORT</div>
+      <div style="opacity:.72">Gestion Airside</div>
+    </div>
+    <div class="card" style="margin-top:22px;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.14);color:#fff;box-shadow:none">
+      <div class="center" style="font-size:18px;font-weight:900">Qui êtes-vous ?</div>
+      <div class="center" style="opacity:.7;margin-top:4px">Sélectionnez votre compte</div>
+      <div class="grid grid-2" style="margin-top:16px">$${users.length?users.map(u=>`
+        <button class="btn btn-ghost login-user" data-id="${u.id}" style="padding:14px;height:auto">
+          <div style="font-size:28px">${u.avatar||'👤'}</div>
+          <div style="font-weight:900;margin-top:6px">${esc(u.name)}</div>
+        </button>`).join(''):`<div class="center" style="grid-column:1/-1;opacity:.75;padding:12px 0">Aucun compte — accès admin requis</div>`}
+      </div>
+      <div style="border-top:1px solid rgba(255,255,255,.16);margin-top:16px;padding-top:14px" class="center">
+        <button id="toggleAdminAccess" style="background:none;border:0;color:rgba(255,255,255,.65);text-decoration:underline">Accès administrateur</button>
+        <div class="${state.adminReveal?'':'hidden'}" id="adminList" style="margin-top:12px;display:grid;gap:8px">
+          ${admins.map(u=>`<button class="btn btn-ghost login-user" data-id="${u.id}">${u.avatar||'🔐'} ${esc(u.name)}</button>`).join('')}
+          <button class="btn btn-ghost" id="systemAdminBtn">🔐 Admin système</button>
+        </div>
+      </div>
+    </div>
+  </div></div>`.replace('$','');
+}
+function appHtml(){
+  const cfg = state.params.cfg;
+  const isAdmin = state.currentUser && state.currentUser.role==='admin';
+  return `
+  <div class="topbar">
+    <div class="row">
+      <div class="logo">☰</div>
+      <div class="logo">Lux</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:900;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(cfg.nomSite||'LUX AIRPORT')}</div>
+        <div style="opacity:.7;font-size:12px">${esc(state.currentUser.name)} ${state.saving?'• Sauvegarde...':''}</div>
+      </div>
+      ${isAdmin?`<button class="btn btn-ghost" id="goAdmin">Admin</button>`:''}
+      <button class="btn btn-ghost" id="logoutBtn">Quitter</button>
+    </div>
+  </div>
+  <div class="wrap">${isAdmin?adminHtml():userHtml()}</div>
+  ${state.modal?modalHtml():''}
+  ${state.toast?`<div class="toast">${esc(state.toast)}</div>`:''}`;
+}
+function userHtml(){
+  return `<div class="card"><h2>Bienvenue</h2><p class="muted">Connecté en tant que ${esc(state.currentUser.name)}</p></div>`;
+}
+function adminHtml(){
+  return `
+  <div class="row-between" style="margin-bottom:12px;align-items:flex-start">
+    <div><div style="font-size:18px;font-weight:900">Administration</div><div class="muted">LUX AIRPORT Gestion Airside</div></div>
+    <button class="btn btn-red" id="logoutBtn2">Déconnexion</button>
+  </div>
+  <div class="tabs" style="margin-bottom:14px">
+    <button class="tab ${state.adminTab==='comptes'?'active':''}" data-admin-tab="comptes">Comptes</button>
+    <button class="tab ${state.adminTab==='entrepot'?'active':''}" data-admin-tab="entrepot">Entrepôt</button>
+    <button class="tab ${state.adminTab==='palettes'?'active':''}" data-admin-tab="palettes">Palettes</button>
+  </div>
+  ${state.adminTab==='comptes'?accountsHtml():state.adminTab==='entrepot'?warehouseHtml():palettesHtml()}`;
+}
+function accountsHtml(){
+  const all = state.params.userAccounts||[];
+  const admins = all.filter(u=>u.role==='admin').length;
+  const users = all.filter(u=>u.role!=='admin').length;
+  const q=state.accountsSearch.trim().toLowerCase();
+  const filtered = all.filter(u=>{
+    const okSearch=!q||String(u.name||'').toLowerCase().includes(q);
+    const okRole=state.accountsFilter==='all'||(state.accountsFilter==='admin'&&u.role==='admin')||(state.accountsFilter==='user'&&u.role!=='admin');
+    return okSearch&&okRole;
+  });
+  return `
+  <div class="grid grid-3">
+    <div class="stat" style="background:#111;color:#fff">${all.length}<small>Total</small></div>
+    <div class="stat" style="background:#fff0f0;color:var(--danger)">${admins}<small>Admins</small></div>
+    <div class="stat" style="background:#eef5ff;color:var(--blue)">${users}<small>Users</small></div>
+  </div>
+  <div class="card" style="margin-top:12px">
+    <div class="toolbar">
+      <input class="input search" id="accountsSearch" placeholder="Rechercher un compte..." value="${esc(state.accountsSearch)}">
+      <select class="select" id="accountsFilter" style="max-width:150px">
+        <option value="all" ${state.accountsFilter==='all'?'selected':''}>Tous</option>
+        <option value="admin" ${state.accountsFilter==='admin'?'selected':''}>Admins</option>
+        <option value="user" ${state.accountsFilter==='user'?'selected':''}>Users</option>
+      </select>
+      <button class="btn btn-red" id="addUserBtn">+ Ajouter</button>
+    </div>
+    <div style="margin-top:12px;display:grid;gap:12px">${filtered.map(u=>`
+      <div class="user-card">
+        <div class="row-between">
+          <div style="display:flex;gap:12px;align-items:center">
+            <div style="width:52px;height:52px;border-radius:50%;background:#f4f4f7;display:flex;align-items:center;justify-content:center;font-size:26px">${u.avatar||'👤'}</div>
+            <div>
+              <div style="font-size:18px;font-weight:900">${esc(u.name)}</div>
+              <div style="margin-top:4px">
+                <span class="badge ${u.role==='admin'?'badge-admin':'badge-user'}">${u.role==='admin'?'ADMIN':'USER'}</span>
+                ${u.active===false?'<span class="badge badge-off" style="margin-left:6px">INACTIF</span>':''}
+              </div>
+            </div>
+          </div>
+          <div class="small muted mono">PIN ${state.modal&&state.modal.type==='reveal-pin'&&state.modal.id===u.id?esc(u.pin):'●●●●'}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px">
+          <button class="btn btn-white account-action" data-act="edit" data-id="${u.id}">Modifier</button>
+          <button class="btn btn-white account-action" data-act="pin" data-id="${u.id}">Voir</button>
+          <button class="btn btn-white account-action" data-act="reset" data-id="${u.id}">Reset PIN</button>
+          <button class="btn btn-white account-action" data-act="toggle" data-id="${u.id}">${u.active===false?'Activer':'Désactiver'}</button>
+          <button class="btn btn-white account-action" data-act="delete" data-id="${u.id}">Supprimer</button>
+        </div>
+      </div>`).join('')||'<div class="muted">Aucun compte.</div>'}
+    </div>
+  </div>`;
+}
+function warehouseHtml(){
+  const w=state.params.warehouseConfig;
+  const total=(w.allees||0)*(w.racks||0)*(w.etages||0)*(w.positions||[]).length;
+  const occ=(state.params.palettes||[]).length;
+  const pct=total?Math.round((occ/total)*100):0;
+  return `
+  <div class="card">
+    <div class="row-between"><div><div style="font-size:18px;font-weight:900">Configuration de l'entrepôt</div><div class="muted">Allée → Rack → Étage → Position</div></div><button class="btn btn-blue" id="saveWarehouseBtn">Sauvegarder</button></div>
+    <div class="grid grid-2" style="margin-top:8px">
+      <div><label class="label">Allées</label><input id="whAllees" class="input" type="number" min="1" max="20" value="${w.allees}"></div>
+      <div><label class="label">Racks par allée</label><input id="whRacks" class="input" type="number" min="1" max="20" value="${w.racks}"></div>
+      <div><label class="label">Étages par rack</label><input id="whEtages" class="input" type="number" min="1" max="10" value="${w.etages}"></div>
+      <div><label class="label">Ajouter position</label><div style="display:flex;gap:8px"><input id="newPos" class="input" maxlength="3" placeholder="Ex: G"><button class="btn btn-green" id="addPosBtn">+</button></div></div>
+    </div>
+    <div class="label">Positions actuelles</div>
+    <div class="chips">${(w.positions||[]).map(p=>`<span class="chip">${esc(p)} <button class="remove-pos" data-pos="${esc(p)}">×</button></span>`).join('')}</div>
+    <div class="card" style="margin-top:14px;background:#111;color:#fff"><div class="row-between"><div><div style="font-size:18px;font-weight:900">Plan entrepôt</div><div style="opacity:.7">${occ} / ${total} emplacements occupés</div></div><div style="font-size:42px;font-weight:900;color:#2ecc71">${pct}%</div></div></div>
+    ${racksHtml()}
+  </div>`;
+}
+function palettesHtml(){
+  return `
+  <div class="card">
+    <div class="row-between"><div style="font-size:18px;font-weight:900">Palettes</div><button class="btn btn-red" id="addPaletteBtn">+ Palette</button></div>
+    <div style="margin-top:12px;display:grid;gap:10px">${(state.params.palettes||[]).map(p=>`
+      <div class="user-card row-between">
+        <div><div style="font-weight:900">${esc(p.numero)}</div><div class="muted small">A${p.allee} / R${p.rack} / E${p.etagere} / ${esc(p.position)}</div></div>
+        <div style="display:flex;gap:8px"><button class="btn btn-white palette-edit" data-id="${p.id}">Modifier</button><button class="btn btn-white palette-del" data-id="${p.id}">Supprimer</button></div>
+      </div>`).join('')||'<div class="muted">Aucune palette.</div>'}
+    </div>
+  </div>`;
+}
+function racksHtml(){
+  const w=state.params.warehouseConfig, pallets=state.params.palettes||[];
+  let html='';
+  for(let a=1;a<=w.allees;a++){
+    html += `<div class="rack-row"><div class="row-between" style="margin-bottom:10px"><div style="display:flex;gap:12px;align-items:center"><div style="background:#111;color:#fff;border-radius:14px;padding:12px 14px;font-weight:900">A${a}</div><div style="font-size:20px;font-weight:900">Allée ${a}</div></div><div class="muted">${pallets.filter(p=>Number(p.allee)===a).length} palette(s)</div></div><div class="racks">`;
+    for(let r=1;r<=w.racks;r++){
+      html += `<div class="rack"><div class="rack-head">RACK ${r}</div><div class="grid-rack" style="--posCount:${w.positions.length}"><div class="axis"></div>${w.positions.map(pos=>`<div class="axis">${esc(pos)}</div>`).join('')}`;
+      for(let e=w.etages;e>=1;e--){
+        html += `<div class="axis">${e}</div>`;
+        for(const pos of w.positions){
+          const pal=pallets.find(p=>Number(p.allee)===a&&Number(p.rack)===r&&Number(p.etagere)===e&&String(p.position)===String(pos));
+          html += `<button class="cell ${pal?'used':'free'} rack-cell" data-allee="${a}" data-rack="${r}" data-etagere="${e}" data-position="${esc(pos)}">${pal?esc(pal.numero):esc(pos)}</button>`;
+        }
+      }
+      html += `</div></div>`;
+    }
+    html += `</div></div>`;
+  }
+  return html;
+}
+function modalHtml(){
+  const m=state.modal;
+  if(m.type==='user-form'){
+    const u=m.user||{name:'',pin:'',role:'user',avatar:'👤',active:true};
+    const avatars=['👤','👨','👩','👨‍✈️','👩‍✈️','🧑‍🔧','👷','🧑‍💼','🔐'];
+    return `<div class="modal"><div class="sheet"><div class="center" style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 14px"></div><div style="font-size:20px;font-weight:900">${m.edit?'Modifier le compte':'Nouveau compte'}</div>
+      <label class="label">Avatar</label><div class="chips">${avatars.map(a=>`<button class="btn ${u.avatar===a?'btn-blue':'btn-white'} avatar-pick" data-avatar="${a}" style="padding:10px 12px">${a}</button>`).join('')}</div>
+      <label class="label">Nom</label><input id="userName" class="input" value="${esc(u.name)}">
+      <label class="label">PIN 4 chiffres</label><input id="userPin" class="input mono" maxlength="4" inputmode="numeric" value="${esc(u.pin)}">
+      <label class="label">Rôle</label><select id="userRole" class="select"><option value="user" ${u.role==='user'?'selected':''}>Utilisateur</option><option value="admin" ${u.role==='admin'?'selected':''}>Administrateur</option></select>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px"><button class="btn btn-white" id="closeModal">Annuler</button><button class="btn btn-blue" id="saveUserModal">${m.edit?'Sauvegarder':'Créer'}</button></div>
+    </div></div>`;
+  }
+  if(m.type==='palette-form'){
+    const w=state.params.warehouseConfig;
+    const p=m.palette||{numero:'',allee:1,rack:1,etagere:1,position:w.positions[0]||'G'};
+    return `<div class="modal"><div class="sheet"><div class="center" style="width:40px;height:4px;background:#ddd;border-radius:99px;margin:0 auto 14px"></div><div style="font-size:20px;font-weight:900">${m.edit?'Modifier la palette':'Nouvelle palette'}</div>
+      <label class="label">Numéro PAL</label><input id="palNumero" class="input" value="${esc(p.numero)}">
+      <div class="grid grid-2"><div><label class="label">Allée</label><input id="palAllee" class="input" type="number" min="1" max="${w.allees}" value="${p.allee}"></div><div><label class="label">Rack</label><input id="palRack" class="input" type="number" min="1" max="${w.racks}" value="${p.rack}"></div><div><label class="label">Étage</label><input id="palEtagere" class="input" type="number" min="1" max="${w.etages}" value="${p.etagere}"></div><div><label class="label">Position</label><select id="palPosition" class="select">${w.positions.map(pos=>`<option value="${esc(pos)}" ${String(pos)===String(p.position)?'selected':''}>${esc(pos)}</option>`).join('')}</select></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:16px"><button class="btn btn-white" id="closeModal">Annuler</button><button class="btn btn-blue" id="savePaletteModal">${m.edit?'Sauvegarder':'Créer'}</button></div>
+    </div></div>`;
+  }
+  return '';
+}
+function bindCommon(){
+  document.querySelectorAll('[data-admin-tab]').forEach(b=>b.onclick=()=>{state.adminTab=b.dataset.adminTab;render()});
+  const l=document.getElementById('logoutBtn'); if(l) l.onclick=logout;
+  const l2=document.getElementById('logoutBtn2'); if(l2) l2.onclick=logout;
+  const ga=document.getElementById('goAdmin'); if(ga) ga.onclick=()=>{state.adminTab='comptes';render()};
+  const cm=document.getElementById('closeModal'); if(cm) cm.onclick=()=>{state.modal=null;render()};
+}
+function bindLogin(){
+  document.querySelectorAll('.login-user').forEach(b=>b.onclick=()=>{
+    const u=(state.params.userAccounts||[]).find(x=>x.id===b.dataset.id);
+    state.loginSelected=u||{name:'Admin système',role:'admin',pin:state.adminSystemPin,avatar:'🔐'};
+    state.loginMode='pin'; state.pinBuffer=''; state.pinError=false; render();
+  });
+  const t=document.getElementById('toggleAdminAccess'); if(t) t.onclick=()=>{state.adminReveal=!state.adminReveal;render()};
+  const s=document.getElementById('systemAdminBtn'); if(s) s.onclick=()=>{state.loginSelected={name:'Admin système',role:'admin',pin:state.adminSystemPin,avatar:'🔐'};state.loginMode='pin';state.pinBuffer='';state.pinError=false;render()};
+  const back=document.getElementById('backSelect'); if(back) back.onclick=()=>{state.loginMode='select';state.pinBuffer='';state.pinError=false;render()};
+  const clear=document.getElementById('clearPin'); if(clear) clear.onclick=()=>{state.pinBuffer='';state.pinError=false;render()};
+  document.querySelectorAll('[data-key]').forEach(k=>k.onclick=()=>pinPress(k.dataset.key));
+}
+function pinPress(v){
+  if(v==='⌫'){state.pinBuffer=state.pinBuffer.slice(0,-1);render();return}
+  if(state.pinBuffer.length>=4) return;
+  state.pinBuffer += String(v);
+  if(state.pinBuffer.length===4){
+    const expected = state.loginSelected && state.loginSelected.pin ? String(state.loginSelected.pin) : state.adminSystemPin;
+    if(state.pinBuffer===expected){
+      state.currentUser = state.loginSelected;
+      state.loginMode='select'; state.pinBuffer=''; state.pinError=false;
+      if(state.currentUser.role==='admin') state.adminTab='comptes';
+      render();
+    }else{
+      state.pinError=true; render();
+      setTimeout(()=>{state.pinBuffer='';state.pinError=false;render()},650);
+    }
+  }else render();
+}
+function logout(){state.currentUser=null;state.loginSelected=null;state.loginMode='select';state.pinBuffer='';render()}
+function bindApp(){
+  const addUser=document.getElementById('addUserBtn'); if(addUser) addUser.onclick=()=>{state.modal={type:'user-form',edit:false,user:{avatar:'👤',role:'user',pin:'',name:'',active:true}};render()};
+  const s=document.getElementById('accountsSearch'); if(s) s.oninput=e=>{state.accountsSearch=e.target.value;render()};
+  const f=document.getElementById('accountsFilter'); if(f) f.onchange=e=>{state.accountsFilter=e.target.value;render()};
+  document.querySelectorAll('.account-action').forEach(b=>b.onclick=async()=>{
+    const id=b.dataset.id, act=b.dataset.act; const arr=state.params.userAccounts; const u=arr.find(x=>x.id===id); if(!u) return;
+    if(act==='edit'){state.modal={type:'user-form',edit:true,user:Object.assign({},u)};render();return}
+    if(act==='pin'){state.modal={type:'reveal-pin',id};render(); setTimeout(()=>{state.modal=null;render()},1400); return}
+    if(act==='reset'){u.pin='0000'; await saveConfig(); render(); return}
+    if(act==='toggle'){u.active=u.active===false?true:false; await saveConfig(); render(); return}
+    if(act==='delete'){ if(!confirm('Supprimer '+u.name+' ?')) return; state.params.userAccounts=arr.filter(x=>x.id!==id); await saveConfig(); render(); return }
+  });
+  document.querySelectorAll('.avatar-pick').forEach(b=>b.onclick=()=>{state.modal.user.avatar=b.dataset.avatar;render()});
+  const saveUser=document.getElementById('saveUserModal'); if(saveUser) saveUser.onclick=async()=>{
+    const name=document.getElementById('userName').value.trim();
+    const pin=document.getElementById('userPin').value.replace(/\D/g,'').slice(0,4);
+    const role=document.getElementById('userRole').value;
+    if(!name) return alert('Nom requis');
+    if(pin.length!==4) return alert('PIN de 4 chiffres requis');
+    if(state.modal.edit){
+      const idx=state.params.userAccounts.findIndex(x=>x.id===state.modal.user.id);
+      state.params.userAccounts[idx]=Object.assign({},state.params.userAccounts[idx],{name,pin,role,avatar:state.modal.user.avatar||'👤'});
+    }else{
+      state.params.userAccounts.push({id:id(),name,pin,role,avatar:state.modal.user.avatar||'👤',active:true});
+    }
+    state.modal=null; await saveConfig(); render();
+  };
+  const saveW=document.getElementById('saveWarehouseBtn'); if(saveW) saveW.onclick=async()=>{
+    state.params.warehouseConfig.allees=Math.max(1,parseInt(document.getElementById('whAllees').value||'1',10));
+    state.params.warehouseConfig.racks=Math.max(1,parseInt(document.getElementById('whRacks').value||'1',10));
+    state.params.warehouseConfig.etages=Math.max(1,parseInt(document.getElementById('whEtages').value||'1',10));
+    await saveConfig(); render();
+  };
+  const addPos=document.getElementById('addPosBtn'); if(addPos) addPos.onclick=()=>{
+    const v=(document.getElementById('newPos').value||'').trim().toUpperCase(); if(!v) return; const list=state.params.warehouseConfig.positions; if(!list.includes(v)){list.push(v); render();}
+  };
+  document.querySelectorAll('.remove-pos').forEach(b=>b.onclick=()=>{state.params.warehouseConfig.positions=state.params.warehouseConfig.positions.filter(x=>x!==b.dataset.pos);render()});
+  const addPal=document.getElementById('addPaletteBtn'); if(addPal) addPal.onclick=()=>{state.modal={type:'palette-form',edit:false,palette:null};render()};
+  document.querySelectorAll('.palette-edit').forEach(b=>b.onclick=()=>{const p=state.params.palettes.find(x=>x.id===b.dataset.id); state.modal={type:'palette-form',edit:true,palette:Object.assign({},p)};render()});
+  document.querySelectorAll('.palette-del').forEach(b=>b.onclick=async()=>{if(!confirm('Supprimer cette palette ?')) return; state.params.palettes=state.params.palettes.filter(x=>x.id!==b.dataset.id); await saveConfig(); render()});
+  const savePal=document.getElementById('savePaletteModal'); if(savePal) savePal.onclick=async()=>{
+    const p={numero:document.getElementById('palNumero').value.trim(),allee:+document.getElementById('palAllee').value,rack:+document.getElementById('palRack').value,etagere:+document.getElementById('palEtagere').value,position:document.getElementById('palPosition').value};
+    if(!p.numero) return alert('Numéro requis');
+    if(state.modal.edit){const idx=state.params.palettes.findIndex(x=>x.id===state.modal.palette.id); state.params.palettes[idx]=Object.assign({},state.params.palettes[idx],p)}
+    else{state.params.palettes.push(Object.assign({id:id()},p))}
+    state.modal=null; await saveConfig(); render();
+  };
+  document.querySelectorAll('.rack-cell').forEach(c=>c.onclick=()=>{
+    const found=state.params.palettes.find(p=>String(p.allee)===c.dataset.allee&&String(p.rack)===c.dataset.rack&&String(p.etagere)===c.dataset.etagere&&String(p.position)===c.dataset.position);
+    if(found){state.modal={type:'palette-form',edit:true,palette:Object.assign({},found)};render()}
+    else{state.modal={type:'palette-form',edit:false,palette:{numero:'',allee:+c.dataset.allee,rack:+c.dataset.rack,etagere:+c.dataset.etagere,position:c.dataset.position}};render()}
+  });
+}
+(async function init(){
+  try{ await loadConfig(); state.ready=true; render(); }
+  catch(e){ setError(e); }
+})();
+})();
+</script>
+</body>
+</html>
