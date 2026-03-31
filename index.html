@@ -6,8 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#c8102e">
 <title>LUX AIRPORT — Gestion Airside</title>
-<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js"></script>
@@ -49,6 +49,13 @@ input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appeara
 <body>
 <div id="root"></div>
 <script>
+window.onerror=function(msg,src,line,col,err){
+  document.getElementById('root').innerHTML='<div style="padding:20px;font-family:monospace;color:red;background:#fff"><h2>Erreur</h2><p>'+msg+'</p><p>Ligne: '+line+'</p></div>';
+  return false;
+};
+window.addEventListener('unhandledrejection',function(e){
+  document.getElementById('root').innerHTML='<div style="padding:20px;font-family:monospace;color:red;background:#fff"><h2>Erreur Promise</h2><p>'+e.reason+'</p></div>';
+});
 'use strict';
 // ── FIREBASE ──────────────────────────────────────────────────────────────
 firebase.initializeApp({
