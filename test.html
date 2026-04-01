@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TEST CDN</title>
+</head>
+<body style="font-family:monospace;padding:20px;background:#f5f5f5">
+<h2>Test chargement CDN</h2>
+<div id="results"></div>
+
+<script>
+var results = document.getElementById('results');
+
+function addResult(name, ok, detail) {
+  var div = document.createElement('div');
+  div.style.cssText = 'padding:10px;margin:6px 0;border-radius:8px;background:'+(ok?'#e6fff0':'#fff1f0')+';border:2px solid '+(ok?'#34c759':'#ff3b30');
+  div.innerHTML = (ok?'✅':'❌') + ' <b>' + name + '</b>' + (detail?' — '+detail:'');
+  results.appendChild(div);
+}
+
+// Test chaque CDN manuellement
+var cdns = [
+  {name:'React 18', url:'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js', check:function(){return typeof React !== 'undefined';}},
+  {name:'ReactDOM 18', url:'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js', check:function(){return typeof ReactDOM !== 'undefined';}},
+  {name:'Firebase App 9.6.7', url:'https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js', check:function(){return typeof firebase !== 'undefined';}},
+  {name:'Firebase Firestore 9.6.7', url:'https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js', check:function(){return typeof firebase !== 'undefined' && typeof firebase.firestore !== 'undefined';}},
+  {name:'jsPDF 2.5.1', url:'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', check:function(){return typeof window.jspdf !== 'undefined';}},
+  {name:'QRious 4.0.2', url:'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js', check:function(){return typeof QRious !== 'undefined';}}
+];
+
+var loaded = 0;
+function checkAll() {
+  loaded++;
+  if (loaded >= cdns.length) {
+    cdns.forEach(function(cdn) {
+      try {
+        var ok = cdn.check();
+        addResult(cdn.name, ok, ok ? 'Chargé' : 'MANQUANT');
+      } catch(e) {
+        addResult(cdn.name, false, 'Erreur: ' + e.message);
+      }
+    });
+    // Test Firebase connexion
+    if (typeof firebase !== 'undefined' && typeof firebase.firestore !== 'undefined') {
+      try {
+        firebase.initializeApp({
+          apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
+          projectId:"luxairport-airside",
+          appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
+        });
+        firebase.firestore().collection('params').doc('config').get()
+          .then(function(){addResult('Firebase READ', true, 'Connexion OK');})
+          .catch(function(e){addResult('Firebase READ', false, e.message);});
+      } catch(e) {
+        addResult('Firebase Init', false, e.message);
+      }
+    }
+    // Test React render
+    if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined') {
+      try {
+        var div = document.createElement('div');
+        ReactDOM.createRoot(div).render(React.createElement('span',null,'test'));
+        addResult('React Render', true, 'ReactDOM.createRoot OK');
+      } catch(e) {
+        addResult('React Render', false, e.message);
+      }
+    }
+  }
+}
+
+// Charger les CDNs dynamiquement
+cdns.forEach(function(cdn) {
+  var s = document.createElement('script');
+  s.src = cdn.url;
+  s.crossOrigin = 'anonymous';
+  s.onload = checkAll;
+  s.onerror = function() {
+    addResult(cdn.name + ' LOAD', false, 'Impossible de charger depuis: ' + cdn.url);
+    checkAll();
+  };
+  document.head.appendChild(s);
+});
+</script>
+</body>
+</html>
