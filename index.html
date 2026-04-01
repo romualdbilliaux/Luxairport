@@ -158,6 +158,7 @@ const EMP_DEFAULT=["Jean Dupont","Marie Martin","Pierre Bernard","Sophie Lambert
 const {useState,useEffect,useRef}=React;
 const h=React.createElement;
 const n2=s=>s.replace(/-/g,"").toUpperCase().trim();
+const daysSince=d=>{if(!d)return 0;try{const t=new Date(d.includes("/")?d.split("/").reverse().join("-"):d);return Math.floor((Date.now()-t.getTime())/86400000);}catch(e){return 0;}};
 const now=()=>new Date().toLocaleString('fr-FR');
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
 
@@ -1020,6 +1021,15 @@ function RackVisual({warehouseConfig,palettes,onSelectPalette}){
 
 
 
+function EmplacementBadge({zone,allee,rack,etagere,position}){
+  const parts=[];
+  if(zone)parts.push("Z"+zone);if(allee)parts.push("A"+allee);if(rack)parts.push("R"+rack);if(etagere)parts.push("E"+etagere);if(position)parts.push(position);
+  if(!parts.length)return null;
+  return h("div",{style:{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}},
+    parts.map((p,i)=>h("span",{key:i,style:{background:"#e8f0fe",color:"#007aff",borderRadius:8,padding:"2px 7px",fontSize:10,fontWeight:700}},p))
+  );
+}
+
 function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}){
   const num=String(existingCount+1).padStart(4,"0");
   const palId="PAL-"+num;
@@ -1180,6 +1190,64 @@ function generatePalettePDF(pal,cfg){
 
 
 
+
+function RackVisual3D({warehouseConfig,palettes,onSelectPalette}){
+  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
+  const allees=Array.from({length:wc.allees||2},(_,i)=>i+1);
+  const racks=Array.from({length:wc.racks||3},(_,i)=>i+1);
+  const etages=Array.from({length:wc.etages||3},(_,i)=>(wc.etages||3)-i);
+  const positions=wc.positions||["G","M","D"];
+  const getPal=(a,r,e,p)=>palettes.find(pal=>String(pal.allee)===String(a)&&String(pal.rack)===String(r)&&String(pal.etagere)===String(e)&&String(pal.position)===String(p));
+  const total=allees.length*racks.length*etages.length*positions.length;
+  const occ=palettes.length;
+  const pct=total>0?Math.round(occ/total*100):0;
+  const pc=pct>80?"#e74c3c":pct>50?"#f39c12":"#2ecc71";
+  return h("div",{},
+    h("div",{style:{background:"#1c1c1e",borderRadius:14,padding:"12px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}},
+      h("div",{},h("div",{style:{fontSize:14,fontWeight:800,color:"#fff"}},"Plan Entrepot"),h("div",{style:{fontSize:11,color:"rgba(255,255,255,.5)",marginTop:2}},occ+"/"+total+" emplacements")),
+      h("div",{style:{textAlign:"right"}},h("div",{style:{fontSize:28,fontWeight:900,color:pc}},pct+"%"),h("div",{style:{fontSize:9,color:"rgba(255,255,255,.4)"}},pct===0?"Vide":"Occupe"))
+    ),
+    h("div",{style:{height:6,background:"#f0f0f0",borderRadius:3,marginBottom:12}},h("div",{style:{height:"100%",width:pct+"%",background:pc,borderRadius:3,transition:"width .5s"}})),
+    h("div",{style:{display:"flex",gap:12,marginBottom:12,flexWrap:"wrap"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("div",{style:{width:14,height:14,background:"#2ecc71",borderRadius:3}}),h("span",{style:{fontSize:11,color:"#666"}},"Libre")),
+      h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("div",{style:{width:14,height:14,background:"#e74c3c",borderRadius:3}}),h("span",{style:{fontSize:11,color:"#666"}},"Occupe")),
+      h("span",{style:{fontSize:11,color:"#999"}},"G=Gauche M=Milieu D=Droite")
+    ),
+    h("div",{style:{overflowX:"auto"}},
+      h("div",{style:{minWidth:Math.max(300,racks.length*positions.length*26+60)}},
+        allees.map(a=>h("div",{key:a,style:{marginBottom:16,background:"#f8f8f8",borderRadius:14,padding:"10px",border:"2px solid #e0e0e0"}},
+          h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},
+            h("div",{style:{width:32,height:32,borderRadius:8,background:"#2c3e50",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}},"A"+a),
+            h("div",{style:{fontSize:13,fontWeight:700,color:"#2c3e50"}},"Allee "+a),
+            h("div",{style:{flex:1,height:1,background:"#ddd"}}),
+            h("div",{style:{fontSize:11,color:"#999"}},palettes.filter(p=>String(p.allee)===String(a)).length+" pal.")
+          ),
+          h("div",{style:{display:"flex",gap:8}},
+            racks.map(r=>h("div",{key:r,style:{flex:1,background:"#fff",borderRadius:10,border:"1.5px solid #ddd",overflow:"hidden",minWidth:0}},
+              h("div",{style:{background:"#34495e",padding:"4px 6px",textAlign:"center"}},h("span",{style:{color:"#fff",fontSize:9,fontWeight:800}},"R"+r)),
+              etages.map(e=>h("div",{key:e,style:{display:"flex",alignItems:"stretch",borderBottom:"1px solid #eee"}},
+                h("div",{style:{width:20,background:"#ecf0f1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderRight:"1px solid #ddd"}},
+                  h("span",{style:{fontSize:8,fontWeight:700,color:"#7f8c8d"}},e)
+                ),
+                positions.map((p,pi)=>{
+                  const pal=getPal(a,r,e,p);
+                  return h("div",{key:p,onClick:()=>pal&&onSelectPalette(pal),
+                    style:{flex:1,minHeight:28,background:pal?"#e74c3c":"#2ecc71",
+                      borderRight:pi<positions.length-1?"1px solid rgba(255,255,255,.4)":"none",
+                      cursor:pal?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"},
+                    title:pal?pal.id:"Libre "+a+"/R"+r+"/E"+e+"/"+p},
+                    pal?h("div",{style:{fontSize:6,fontWeight:800,color:"#fff",textAlign:"center",padding:1}},pal.id.replace("PAL-",""))
+                      :h("div",{style:{fontSize:7,color:"rgba(255,255,255,.7)"}},p)
+                  );
+                })
+              ))
+            ))
+          )
+        ))
+      )
+    )
+  );
+}
 
 function EntrepotPage({isAdmin,showT,cfg,warehouseConfig,currentUser}){
   const[palettes,setPalettes]=useState([]);
