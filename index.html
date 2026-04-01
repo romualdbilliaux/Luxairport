@@ -158,7 +158,6 @@ const EMP_DEFAULT=["Jean Dupont","Marie Martin","Pierre Bernard","Sophie Lambert
 const {useState,useEffect,useRef}=React;
 const h=React.createElement;
 const n2=s=>s.replace(/-/g,"").toUpperCase().trim();
-const daysSince=d=>{if(!d)return 0;try{const t=new Date(d.includes("/")?d.split("/").reverse().join("-"):d);return Math.floor((Date.now()-t.getTime())/86400000);}catch(e){return 0;}};
 const now=()=>new Date().toLocaleString('fr-FR');
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
 
@@ -428,7 +427,7 @@ function CamScanner({onDetect}){
 }
 
 // ── HEADER DYNAMIQUE ──────────────────────────────────────────────────────────
-function AppHeader({cfg,lowStock,syncing,isAdmin,onScan,page,setPage}){
+function AppHeader({cfg,lowStock,syncing,isAdmin,onScan,page,setPage,menuOpen,setMenuOpen,currentUser,onLogout,onSearch,onAlerts,alertCount,isOnline,navConfig}){
   const navs=[
     {id:'accueil',l:'🏠',n:'Accueil'},
     {id:'emprunts',l:'📦',n:'Emprunts'},
@@ -445,8 +444,13 @@ function AppHeader({cfg,lowStock,syncing,isAdmin,onScan,page,setPage}){
   return h('div',{style:{background:`linear-gradient(135deg,${bgColor},${darken(bgColor)})`,paddingTop:'env(safe-area-inset-top,0)',position:'sticky',top:0,zIndex:50,boxShadow:'0 2px 12px rgba(0,0,0,.3)'}},
     h('div',{style:{height:62,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 14px'}},
       h('div',{style:{display:'flex',alignItems:'center',gap:10}},
+        h('button',{onClick:()=>setMenuOpen(o=>!o),style:{background:'rgba(255,255,255,.2)',border:'none',borderRadius:10,padding:'8px',cursor:'pointer',display:'flex',flexDirection:'column',gap:4,flexShrink:0}},
+          h('div',{style:{width:18,height:2,background:'#fff',borderRadius:1}}),
+          h('div',{style:{width:14,height:2,background:'#fff',borderRadius:1}}),
+          h('div',{style:{width:18,height:2,background:'#fff',borderRadius:1}})
+        ),
         logoImg
-          ?h('img',{src:logoImg,style:{width:44,height:44,borderRadius:10,objectFit:'cover',flexShrink:0}})
+          ?h('img',{src:logoImg,style:{width:38,height:38,borderRadius:10,objectFit:'cover',flexShrink:0}})
           :h('svg',{width:44,height:44,viewBox:'0 0 200 200',style:{flexShrink:0}},
             h('rect',{width:200,height:200,rx:28,fill:'rgba(255,255,255,.15)'}),
             h('rect',{x:22,y:28,width:26,height:90,rx:7,fill:'white'}),
@@ -468,8 +472,12 @@ function AppHeader({cfg,lowStock,syncing,isAdmin,onScan,page,setPage}){
         )
       ),
       h('div',{style:{display:'flex',gap:6,alignItems:'center'}},
-        lowStock>0&&h('div',{style:{background:'rgba(255,200,0,.25)',borderRadius:20,padding:'4px 9px',color:'#ffe',fontSize:11,fontWeight:700}},'⚠️'+lowStock),
-        h('button',{onClick:onScan,style:{background:'rgba(255,255,255,.2)',border:'none',borderRadius:20,padding:'6px 12px',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}},'📷')
+        (alertCount>0||lowStock>0)&&h('button',{onClick:onAlerts,style:{background:'rgba(255,200,0,.25)',border:'none',borderRadius:20,padding:'4px 9px',color:'#ffe',fontSize:11,fontWeight:700,cursor:'pointer'}},'⚠️'+(alertCount+lowStock)),
+        currentUser&&h('div',{style:{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,.15)',borderRadius:20,padding:'3px 4px 3px 9px'}},
+          h('span',{style:{color:'#fff',fontSize:10,fontWeight:600,maxWidth:55,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},currentUser.name.split(' ')[0]),
+          h('button',{onClick:onLogout,style:{background:'rgba(255,255,255,.25)',border:'none',borderRadius:16,padding:'3px 7px',color:'#fff',fontSize:9,fontWeight:700,cursor:'pointer'}},'Quitter')
+        ),
+        h('button',{onClick:onScan,style:{background:'rgba(255,255,255,.2)',border:'none',borderRadius:20,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}},'📷')
       )
     ),
     h('div',{style:{display:'flex',borderTop:'1px solid rgba(255,255,255,.15)'}},
@@ -1021,15 +1029,6 @@ function RackVisual({warehouseConfig,palettes,onSelectPalette}){
 
 
 
-function EmplacementBadge({zone,allee,rack,etagere,position}){
-  const parts=[];
-  if(zone)parts.push("Z"+zone);if(allee)parts.push("A"+allee);if(rack)parts.push("R"+rack);if(etagere)parts.push("E"+etagere);if(position)parts.push(position);
-  if(!parts.length)return null;
-  return h("div",{style:{display:"flex",gap:4,flexWrap:"wrap",marginTop:4}},
-    parts.map((p,i)=>h("span",{key:i,style:{background:"#e8f0fe",color:"#007aff",borderRadius:8,padding:"2px 7px",fontSize:10,fontWeight:700}},p))
-  );
-}
-
 function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}){
   const num=String(existingCount+1).padStart(4,"0");
   const palId="PAL-"+num;
@@ -1190,64 +1189,6 @@ function generatePalettePDF(pal,cfg){
 
 
 
-
-function RackVisual3D({warehouseConfig,palettes,onSelectPalette}){
-  const wc=warehouseConfig||{allees:2,racks:3,etages:3,positions:["G","M","D"]};
-  const allees=Array.from({length:wc.allees||2},(_,i)=>i+1);
-  const racks=Array.from({length:wc.racks||3},(_,i)=>i+1);
-  const etages=Array.from({length:wc.etages||3},(_,i)=>(wc.etages||3)-i);
-  const positions=wc.positions||["G","M","D"];
-  const getPal=(a,r,e,p)=>palettes.find(pal=>String(pal.allee)===String(a)&&String(pal.rack)===String(r)&&String(pal.etagere)===String(e)&&String(pal.position)===String(p));
-  const total=allees.length*racks.length*etages.length*positions.length;
-  const occ=palettes.length;
-  const pct=total>0?Math.round(occ/total*100):0;
-  const pc=pct>80?"#e74c3c":pct>50?"#f39c12":"#2ecc71";
-  return h("div",{},
-    h("div",{style:{background:"#1c1c1e",borderRadius:14,padding:"12px 16px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}},
-      h("div",{},h("div",{style:{fontSize:14,fontWeight:800,color:"#fff"}},"Plan Entrepot"),h("div",{style:{fontSize:11,color:"rgba(255,255,255,.5)",marginTop:2}},occ+"/"+total+" emplacements")),
-      h("div",{style:{textAlign:"right"}},h("div",{style:{fontSize:28,fontWeight:900,color:pc}},pct+"%"),h("div",{style:{fontSize:9,color:"rgba(255,255,255,.4)"}},pct===0?"Vide":"Occupe"))
-    ),
-    h("div",{style:{height:6,background:"#f0f0f0",borderRadius:3,marginBottom:12}},h("div",{style:{height:"100%",width:pct+"%",background:pc,borderRadius:3,transition:"width .5s"}})),
-    h("div",{style:{display:"flex",gap:12,marginBottom:12,flexWrap:"wrap"}},
-      h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("div",{style:{width:14,height:14,background:"#2ecc71",borderRadius:3}}),h("span",{style:{fontSize:11,color:"#666"}},"Libre")),
-      h("div",{style:{display:"flex",alignItems:"center",gap:5}},h("div",{style:{width:14,height:14,background:"#e74c3c",borderRadius:3}}),h("span",{style:{fontSize:11,color:"#666"}},"Occupe")),
-      h("span",{style:{fontSize:11,color:"#999"}},"G=Gauche M=Milieu D=Droite")
-    ),
-    h("div",{style:{overflowX:"auto"}},
-      h("div",{style:{minWidth:Math.max(300,racks.length*positions.length*26+60)}},
-        allees.map(a=>h("div",{key:a,style:{marginBottom:16,background:"#f8f8f8",borderRadius:14,padding:"10px",border:"2px solid #e0e0e0"}},
-          h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},
-            h("div",{style:{width:32,height:32,borderRadius:8,background:"#2c3e50",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:800}},"A"+a),
-            h("div",{style:{fontSize:13,fontWeight:700,color:"#2c3e50"}},"Allee "+a),
-            h("div",{style:{flex:1,height:1,background:"#ddd"}}),
-            h("div",{style:{fontSize:11,color:"#999"}},palettes.filter(p=>String(p.allee)===String(a)).length+" pal.")
-          ),
-          h("div",{style:{display:"flex",gap:8}},
-            racks.map(r=>h("div",{key:r,style:{flex:1,background:"#fff",borderRadius:10,border:"1.5px solid #ddd",overflow:"hidden",minWidth:0}},
-              h("div",{style:{background:"#34495e",padding:"4px 6px",textAlign:"center"}},h("span",{style:{color:"#fff",fontSize:9,fontWeight:800}},"R"+r)),
-              etages.map(e=>h("div",{key:e,style:{display:"flex",alignItems:"stretch",borderBottom:"1px solid #eee"}},
-                h("div",{style:{width:20,background:"#ecf0f1",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,borderRight:"1px solid #ddd"}},
-                  h("span",{style:{fontSize:8,fontWeight:700,color:"#7f8c8d"}},e)
-                ),
-                positions.map((p,pi)=>{
-                  const pal=getPal(a,r,e,p);
-                  return h("div",{key:p,onClick:()=>pal&&onSelectPalette(pal),
-                    style:{flex:1,minHeight:28,background:pal?"#e74c3c":"#2ecc71",
-                      borderRight:pi<positions.length-1?"1px solid rgba(255,255,255,.4)":"none",
-                      cursor:pal?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center"},
-                    title:pal?pal.id:"Libre "+a+"/R"+r+"/E"+e+"/"+p},
-                    pal?h("div",{style:{fontSize:6,fontWeight:800,color:"#fff",textAlign:"center",padding:1}},pal.id.replace("PAL-",""))
-                      :h("div",{style:{fontSize:7,color:"rgba(255,255,255,.7)"}},p)
-                  );
-                })
-              ))
-            ))
-          )
-        ))
-      )
-    )
-  );
-}
 
 function EntrepotPage({isAdmin,showT,cfg,warehouseConfig,currentUser}){
   const[palettes,setPalettes]=useState([]);
@@ -2457,7 +2398,7 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
   const[pin,setPin]=useState(adminPin);
   const[pin2,setPin2]=useState("");
   const[lCfg,setLCfg]=useState({...cfg});
-  const tabs=[["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["backup","Sauvegarde"],["config","Config"],["perso","Perso"]];
+  const tabs=[["comptes","Comptes"],["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["entrepotCfg","Entrepot"],["backup","Sauvegarde"],["config","Config"],["perso","Perso"]];
   const sortiesParJour=()=>{const map={};emprunts.forEach(e=>{const d=(e.dateDepart||"").split(" ")[0];if(d)map[d]=(map[d]||0)+1;});return Object.entries(map).slice(-7).map(([d,n])=>({d:d.split("/").slice(0,2).join("/"),n}));};
   const sParJ=sortiesParJour();const maxN=Math.max(...sParJ.map(x=>x.n),1);
 
@@ -2625,25 +2566,7 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
 
     tab==="entrepotCfg"&&h(WarehouseConfigPanel,{warehouseConfig,onSave:saveWarehouseConfig,showT}),
 
-    tab==="comptes"&&h("div",{},
-      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}},
-        h("div",{style:{fontSize:14,fontWeight:700}},"Gestion des comptes"),
-        h("span",{style:{fontSize:11,color:S.gray}},(userAccounts||[]).length+" compte(s)")
-      ),
-      h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"10px 14px",marginBottom:12,fontSize:12,color:S.blue}},
-        "👁️ Les comptes ADMIN sont masques de l'ecran d'accueil. Acces via lien discret uniquement."
-      ),
-      (userAccounts||[]).map((acc,i)=>h("div",{key:i,style:{background:S.white,borderRadius:12,padding:"12px 14px",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.08)",display:"flex",alignItems:"center",gap:10}},
-        h("div",{style:{width:40,height:40,borderRadius:"50%",background:acc.role==="admin"?S.red:S.blue,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,flexShrink:0}},acc.avatar||"👤"),
-        h("div",{style:{flex:1}},
-          h("div",{style:{fontSize:14,fontWeight:700}},acc.name),
-          h("div",{style:{fontSize:11,color:S.gray}},acc.role==="admin"?"Admin":"Utilisateur"+" · PIN: "+acc.pin)
-        ),
-        h("button",{onClick:()=>{if(confirm("Supprimer "+acc.name+"?"))saveUserAccounts((userAccounts||[]).filter((_,j)=>j!==i));},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"6px 10px",fontSize:12,cursor:"pointer"}},"🗑️")
-      )),
-      h("button",{onClick:()=>setModal({t:"addUser"}),style:{...BP,marginTop:8}},"+Ajouter un compte")
-    ),
-
+        tab==="comptes"&&h(UserManagementPanel,{userAccounts:userAccounts||[],onSave:saveUserAccounts,setModal}),
     tab==="notifs"&&h("div",{},
       h("div",{style:{background:S.white,borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
         h("div",{style:{fontSize:15,fontWeight:800,marginBottom:12}},"Checklist retour personnalisee"),
@@ -2678,6 +2601,7 @@ function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspect
       )
     ),
 
+    tab==="entrepotCfg"&&h(WarehouseConfigPanel,{warehouseConfig,onSave:saveWarehouseConfig,showT}),
     tab==="backup"&&h("div",{},
       h("div",{style:{background:"linear-gradient(135deg,"+S.red+","+darken(S.red)+")",borderRadius:12,padding:"14px",marginBottom:16}},
         h("div",{style:{color:"#fff",fontWeight:800,fontSize:14,marginBottom:4}},"LUX AIRPORT - Gestion Airside V10"),
