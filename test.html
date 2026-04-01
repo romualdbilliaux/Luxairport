@@ -3,84 +3,106 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>TEST CDN</title>
+<title>DIAGNOSTIC LUX</title>
+<style>
+body{font-family:monospace;padding:16px;background:#1c1c1e;color:#fff;font-size:14px;}
+.ok{background:#1a3a1a;border:1px solid #34c759;color:#34c759;padding:10px;margin:6px 0;border-radius:8px;}
+.err{background:#3a1a1a;border:1px solid #ff3b30;color:#ff3b30;padding:10px;margin:6px 0;border-radius:8px;}
+.info{background:#1a2a3a;border:1px solid #007aff;color:#007aff;padding:10px;margin:6px 0;border-radius:8px;}
+h2{color:#fff;margin-bottom:16px;}
+</style>
 </head>
-<body style="font-family:monospace;padding:20px;background:#f5f5f5">
-<h2>Test chargement CDN</h2>
-<div id="results"></div>
+<body>
+<h2>🔍 Diagnostic LUX AIRPORT</h2>
+<div id="log"></div>
 
 <script>
-var results = document.getElementById('results');
-
-function addResult(name, ok, detail) {
-  var div = document.createElement('div');
-  div.style.cssText = 'padding:10px;margin:6px 0;border-radius:8px;background:'+(ok?'#e6fff0':'#fff1f0')+';border:2px solid '+(ok?'#34c759':'#ff3b30');
-  div.innerHTML = (ok?'✅':'❌') + ' <b>' + name + '</b>' + (detail?' — '+detail:'');
-  results.appendChild(div);
+var log = document.getElementById('log');
+function add(msg, type) {
+  var d = document.createElement('div');
+  d.className = type || 'info';
+  d.textContent = msg;
+  log.appendChild(d);
 }
 
-// Test chaque CDN manuellement
-var cdns = [
-  {name:'React 18', url:'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js', check:function(){return typeof React !== 'undefined';}},
-  {name:'ReactDOM 18', url:'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js', check:function(){return typeof ReactDOM !== 'undefined';}},
-  {name:'Firebase App 9.6.7', url:'https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js', check:function(){return typeof firebase !== 'undefined';}},
-  {name:'Firebase Firestore 9.6.7', url:'https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js', check:function(){return typeof firebase !== 'undefined' && typeof firebase.firestore !== 'undefined';}},
-  {name:'jsPDF 2.5.1', url:'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', check:function(){return typeof window.jspdf !== 'undefined';}},
-  {name:'QRious 4.0.2', url:'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js', check:function(){return typeof QRious !== 'undefined';}}
-];
+// Info device
+add('📱 User Agent: ' + navigator.userAgent.substring(0, 80));
+add('🌐 Online: ' + navigator.onLine);
+add('🔒 Protocol: ' + location.protocol);
+add('📍 URL: ' + location.href);
 
-var loaded = 0;
-function checkAll() {
-  loaded++;
-  if (loaded >= cdns.length) {
-    cdns.forEach(function(cdn) {
-      try {
-        var ok = cdn.check();
-        addResult(cdn.name, ok, ok ? 'Chargé' : 'MANQUANT');
-      } catch(e) {
-        addResult(cdn.name, false, 'Erreur: ' + e.message);
-      }
-    });
-    // Test Firebase connexion
-    if (typeof firebase !== 'undefined' && typeof firebase.firestore !== 'undefined') {
-      try {
-        firebase.initializeApp({
-          apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
-          projectId:"luxairport-airside",
-          appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
-        });
-        firebase.firestore().collection('params').doc('config').get()
-          .then(function(){addResult('Firebase READ', true, 'Connexion OK');})
-          .catch(function(e){addResult('Firebase READ', false, e.message);});
-      } catch(e) {
-        addResult('Firebase Init', false, e.message);
-      }
-    }
-    // Test React render
-    if (typeof React !== 'undefined' && typeof ReactDOM !== 'undefined') {
-      try {
-        var div = document.createElement('div');
-        ReactDOM.createRoot(div).render(React.createElement('span',null,'test'));
-        addResult('React Render', true, 'ReactDOM.createRoot OK');
-      } catch(e) {
-        addResult('React Render', false, e.message);
-      }
-    }
-  }
-}
-
-// Charger les CDNs dynamiquement
-cdns.forEach(function(cdn) {
+// Charger React et tester
+var step = 0;
+function loadScript(url, name, onOk, onFail) {
   var s = document.createElement('script');
-  s.src = cdn.url;
+  s.src = url;
   s.crossOrigin = 'anonymous';
-  s.onload = checkAll;
-  s.onerror = function() {
-    addResult(cdn.name + ' LOAD', false, 'Impossible de charger depuis: ' + cdn.url);
-    checkAll();
-  };
+  s.onload = function() { add('✅ Chargé: ' + name, 'ok'); if(onOk) onOk(); };
+  s.onerror = function(e) { add('❌ ÉCHEC: ' + name + ' — ' + url, 'err'); if(onFail) onFail(); };
   document.head.appendChild(s);
-});
+}
+
+// Charger en séquence pour voir lequel plante
+loadScript(
+  'https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js',
+  'React 18',
+  function() {
+    loadScript(
+      'https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js',
+      'ReactDOM 18',
+      function() {
+        add('⚡ Test React render...', 'info');
+        try {
+          var div = document.createElement('div');
+          ReactDOM.createRoot(div).render(React.createElement('span', null, 'OK'));
+          add('✅ React.createElement + createRoot = OK', 'ok');
+        } catch(e) {
+          add('❌ React render FAIL: ' + e.message, 'err');
+        }
+        loadScript(
+          'https://www.gstatic.com/firebasejs/9.6.7/firebase-app-compat.js',
+          'Firebase App 9.6.7',
+          function() {
+            loadScript(
+              'https://www.gstatic.com/firebasejs/9.6.7/firebase-firestore-compat.js',
+              'Firebase Firestore 9.6.7',
+              function() {
+                add('⚡ Test Firebase init...', 'info');
+                try {
+                  firebase.initializeApp({
+                    apiKey:"AIzaSyDbG6gPczlMloUp3PCm2lcOwPlYLCrE8dg",
+                    authDomain:"luxairport-airside.firebaseapp.com",
+                    projectId:"luxairport-airside",
+                    appId:"1:1073777108600:web:d8df6073e9a04665646f8d"
+                  });
+                  add('✅ Firebase init OK', 'ok');
+                  firebase.firestore().collection('params').doc('config').get()
+                    .then(function(d) { add('✅ Firebase READ OK — doc exists: ' + d.exists, 'ok'); })
+                    .catch(function(e) { add('❌ Firebase READ FAIL: ' + e.message, 'err'); });
+                } catch(e) {
+                  add('❌ Firebase init FAIL: ' + e.message, 'err');
+                }
+                loadScript(
+                  'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+                  'jsPDF 2.5.1',
+                  function() {
+                    loadScript(
+                      'https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js',
+                      'QRious 4.0.2',
+                      function() {
+                        add('🎉 TOUS LES CDNs CHARGÉS — Le problème est ailleurs dans le JS', 'ok');
+                      }
+                    );
+                  }
+                );
+              }
+            );
+          }
+        );
+      }
+    );
+  }
+);
 </script>
 </body>
 </html>
