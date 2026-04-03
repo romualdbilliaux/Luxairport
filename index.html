@@ -1268,7 +1268,6 @@ h("div",{style:{display:"flex",gap:6,overflowX:"auto",marginBottom:16}},
 tabs.map(([id,l])=>h("button",{key:id,onClick:()=>setTab(id),style:{flex:"none",padding:"8px 12px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(tab===id?S.red:S.border),background:tab===id?S.red:S.white,color:tab===id?S.white:"#3c3c43",cursor:"pointer"}},l))
 ),
 
-```
 tab==="stats"&&h("div",{},
   h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}},
     [{n:tools.length,l:"Outils total",c:"#1c1c1e"},{n:emprunts.filter(e=>!e.retour).length,l:"En cours",c:S.blue},{n:emprunts.filter(e=>!e.retour&&daysSince(e.dateDepart)>=1).length,l:"Sortis +24h",c:S.orange},{n:emprunts.length,l:"Total emprunts",c:S.gray},{n:hist.length,l:"Mouvements stock",c:S.green},{n:lowS.length,l:"Stock faible",c:S.danger}].map(x=>
@@ -1445,7 +1444,6 @@ tab==="perso"&&h("div",{},
   ),
   h("button",{onClick:()=>{onSaveCfg({...cfg,...lCfg});showT("Apparence sauvegardée!");},style:BP},"Sauvegarder")
 )
-```
 
 );
 }
@@ -1639,7 +1637,6 @@ return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
 h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg}),
 
-```
 h("div",{style:{padding:"14px 14px 90px"}},
 
   page==="accueil"&&h("div",{className:"fi"},
@@ -1855,7 +1852,6 @@ modal&&h("div",{},
 ),
 
 toast&&h("div",{onClick:()=>setToast(""),style:{position:"fixed",bottom:34,left:"50%",transform:"translateX(-50%)",background:"rgba(28,28,30,.95)",color:S.white,padding:"12px 22px",borderRadius:14,fontSize:14,fontWeight:600,zIndex:999,whiteSpace:"nowrap",boxShadow:"0 4px 20px rgba(0,0,0,.3)",cursor:"pointer"}},toast)
-```
 
 );
 }
