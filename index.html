@@ -234,7 +234,7 @@ palettes.forEach((pal,ri)=>{
 if(y>H-20){addFooter();doc.addPage();pageNum++;addHeader();y=36;doc.setFillColor(rgb.r,rgb.g,rgb.b);doc.rect(8,y,W-16,8,'F');doc.setFontSize(6);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);cx=10;cols.forEach((c,i)=>{doc.text(c,cx,y+5.5);cx+=cws[i];});y+=9;}
 if(ri%2===0){doc.setFillColor(250,250,250);doc.rect(8,y,W-16,8,'F');}
 doc.setFontSize(6);doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);
-const fam=familles.find(f=>f.id===pal.familleId);
+const fam=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);
 const contenu=(pal.items||[]).slice(0,2).map(i=>i.nom.substring(0,12)+(i.qte?'x'+i.qte:'')).join(', ')+((pal.items||[]).length>2?'...':'');
 const emp=pal.emplacementTransit?('TRANSIT-'+pal.transitCase):pal.emplacementSOL?('SOL-'+pal.solAllee+'-'+String(pal.solCase).padStart(2,'0')):(pal.allee&&pal.rack?pal.allee+'-R'+pal.rack+'-E'+(pal.etagere||'?')+'-'+(pal.position||'?'):'—');
 const row=[pal.id,fam?fam.id:'—',contenu,pal.provenance||'—',pal.destination||'—',emp,(pal.createdAt||'').split(' ')[0]||'—',pal.createdBy||'—'];
@@ -252,7 +252,7 @@ addFooter();doc.save('LuxAirport_Stock*'+new Date().toISOString().slice(0,10)+'.
 function exportStockCSV(palettes,familles){
 const headers=['ID Palette','Famille ID','Famille Nom','Contenu','Quantités','Provenance','Destination','Emplacement Rack','Emplacement SOL','Emplacement Transit','Date Création','Créé par','Statut','Notes'];
 const rows=palettes.map(pal=>{
-const fam=familles.find(f=>f.id===pal.familleId);
+const fam=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);
 const contenu=(pal.items||[]).map(i=>i.nom).join(' | ');
 const qtes=(pal.items||[]).map(i=>i.qte||'').join(' | ');
 const empRack=pal.allee&&pal.rack?pal.allee+'-R'+pal.rack+'-E'+(pal.etagere||'?')+'-'+(pal.position||'?'):'';
@@ -790,7 +790,7 @@ h("button",{onClick:()=>onSave({alleeA,alleeB,transitCases}),style:BP},"💾 Sau
 function RackVisual({warehouseConfig,palettes,familles,onSelectPalette}){
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const getPal=(allee,rack,etage,pos)=>palettes.find(p=>p.allee===allee&&String(p.rack)===String(rack)&&String(p.etagere)===String(etage)&&p.position===pos);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f.id===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);return f?f.couleur:null;};
 const renderAllee=(alleeLabel,alleeCfg,color)=>{
 if(!alleeCfg)return null;
 const racks=Array.from({length:alleeCfg.racks||3},(_,i)=>i+1);
@@ -799,7 +799,7 @@ const positions=alleeCfg.positions||["G","M","D"];
 const palInAllee=palettes.filter(p=>p.allee===alleeLabel&&!p.emplacementSOL&&!p.emplacementTransit);
 return h("div",{style:{marginBottom:16,background:"#f8f8f8",borderRadius:14,padding:"10px",border:`2px solid ${color}22`}},
 h("div",{style:{display:"flex",alignItems:"center",gap:8,marginBottom:10}},
-h("div",{style:{width:32,height:32,borderRadius:8,background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,flexShrink:0}},"A"+alleeLabel.slice(-1)),
+h("div",{style:{width:32,height:32,borderRadius:8,background:color,color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,fontWeight:800,flexShrink:0}},alleeLabel),
 h("div",{style:{fontSize:13,fontWeight:700,color}},"Allée "+alleeLabel),
 h("div",{style:{flex:1,height:1,background:"#ddd",marginLeft:4}}),
 h("span",{style:{fontSize:11,color:S.gray}},palInAllee.length+" palette(s)")
@@ -841,7 +841,7 @@ renderAllee("B",wc.alleeB,"#e74c3c")
 // ── VISUEL SOL ────────────────────────────────────────────────────────────────
 function SolVisual({warehouseConfig,palettes,familles,onSelectPalette}){
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f.id===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);return f?f.couleur:null;};
 const renderAlleeSol=(alleeLabel,alleeCfg,color)=>{
 if(!alleeCfg)return null;
 const cases=Array.from({length:alleeCfg.casesSOL||5},(_,i)=>i+1);
@@ -869,7 +869,7 @@ return h("div",{},renderAlleeSol("A",wc.alleeA,"#3498db"),renderAlleeSol("B",wc.
 function TransitVisual({warehouseConfig,palettes,familles,onSelectPalette}){
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const cases=Array.from({length:wc.transitCases||4},(_,i)=>i+1);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);return f?f.couleur:null;};
 return h("div",{style:{background:"#fffbea",borderRadius:14,padding:"12px",border:"2px solid "+S.yellow,marginBottom:12}},
 h("div",{style:{fontSize:14,fontWeight:800,color:S.orange,marginBottom:10}},"⚡ Zone TRANSIT"),
 h("div",{style:{background:"#fff8e6",borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:11,color:S.orange}},"Palettes en attente de départ / arrivée"),
