@@ -320,7 +320,7 @@ useEffect(()=>{navigator.mediaDevices?.getUserMedia({video:{facingMode:'environm
 const tick=()=>{const v=vr.current;const c=cr.current;if(!v||!c||v.readyState<2){raf.current=requestAnimationFrame(tick);return;}const ctx=c.getContext('2d',{willReadFrequently:true});c.width=v.videoWidth;c.height=v.videoHeight;ctx.drawImage(v,0,0,c.width,c.height);const code=window.jsQR&&window.jsQR(ctx.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'dontInvert'});if(code){setOk(code.data);cancelAnimationFrame(raf.current);sr.current?.getTracks().forEach(t=>t.stop());setTimeout(()=>onDetect(code.data),400);return;}raf.current=requestAnimationFrame(tick);};
 return h('div',{},h('div',{style:{position:'relative',background:'#000',borderRadius:14,overflow:'hidden',marginBottom:12,height:200}},h('video',{ref:vr,style:{width:'100%',height:'100%',objectFit:'cover'},playsInline:true,muted:true}),h('canvas',{ref:cr,style:{display:'none'}}),!ok&&!err&&h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}},h('div',{style:{width:160,height:160,border:'3px solid '+S.red,borderRadius:12,boxShadow:'0 0 0 9999px rgba(0,0,0,.5)'}}),h('div',{style:{position:'absolute',bottom:12,color:'#fff',fontSize:11,fontWeight:600}},'Pointez vers le QR code')),ok&&h('div',{style:{position:'absolute',inset:0,background:'rgba(52,199,89,.9)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}},h('div',{style:{fontSize:36}},'✅'),h('div',{style:{color:S.white,fontWeight:800,fontSize:15}},ok)),err&&h('div',{style:{position:'absolute',inset:0,background:'#111',display:'flex',alignItems:'center',justifyContent:'center',color:S.white,fontSize:12,padding:16,textAlign:'center'}},err)),h('div',{style:{display:'flex',gap:8}},h('input',{value:manual,onChange:e=>setManual(e.target.value.toUpperCase()),placeholder:"Saisissez l'ID manuellement...",style:{flex:1,padding:'11px 13px',border:'1.5px solid '+S.border,borderRadius:12,fontSize:14,outline:'none',textTransform:'uppercase'},onKeyDown:e=>e.key==='Enter'&&manual&&onDetect(manual)}),h('button',{onClick:()=>manual&&onDetect(manual),style:{background:S.red,color:S.white,border:'none',borderRadius:12,padding:'0 16px',fontWeight:700,cursor:'pointer',fontSize:14}},'OK')));}
 
-// ═// ══ PARTIE 2/4 — COLLER DIRECTEMENT APRÈS LA PARTIE 1 ══
+
 
 // ── LOGIN ─────────────────────────────────────────────────────────────────────
 function LoginScreen({cfg,userAccounts,adminPin,onLogin}){
@@ -416,11 +416,7 @@ h('button',{onClick:onLogout,style:{background:'rgba(255,255,255,.25)',border:'n
 h('button',{onClick:onScan,style:{background:'rgba(255,255,255,.2)',border:'none',borderRadius:20,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}},'📷')
 )
 ),
-h('div',{style:{display:'flex',borderTop:'1px solid rgba(255,255,255,.15)'}},
-navs.map(n=>h('button',{key:n.id,onClick:()=>setPage(n.id),style:{flex:1,padding:'8px 2px 6px',background:'none',border:'none',cursor:'pointer',borderBottom:`2.5px solid ${page===n.id?'#fff':'transparent'}`,display:'flex',flexDirection:'column',alignItems:'center',gap:1}},
-h('span',{style:{fontSize:page===n.id?17:15}},n.l),
-h('span',{style:{fontSize:8,fontWeight:page===n.id?700:400,color:page===n.id?'#fff':'rgba(255,255,255,.45)'}},n.n)
-))
+
 )
 );
 }
@@ -1245,7 +1241,7 @@ h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:10}},"Annuler")
 );
 }
 
-// ══ PARTIE 4/4 — COLLER DIRECTEMENT APRÈS LA PARTIE 3 ══
+
 
 // ── ADMIN PANEL ───────────────────────────────────────────────────────────────
 function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig}){
