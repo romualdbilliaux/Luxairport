@@ -403,7 +403,7 @@ h("div",{className:"glass su",style:{borderRadius:24,padding:"28px 22px",width:"
 h("button",{onClick:()=>{setStep("select");setPin("");setErr(false);},style:{position:"absolute",top:14,left:14,background:"rgba(255,255,255,.12)",border:"none",borderRadius:10,padding:"6px 12px",color:"rgba(255,255,255,.7)",fontSize:11,cursor:"pointer"}},"← Retour"),
 h("div",{style:{width:64,height:64,borderRadius:"50%",background:selAcc?.role==="admin"?"linear-gradient(135deg,#c8102e,#7b0000)":"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.08))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:28,margin:"8px auto 14px",border:"2px solid rgba(255,255,255,.25)"}},selAcc?.avatar||(selAcc?.role==="admin"?"🔐":"👤")),
 h("h2",{style:{color:"#fff",fontWeight:800,fontSize:17,marginBottom:3}},sel),
-h("p",{style:{color:"rgba(255,255,255,.45)",fontSize:11,marginBottom:24}},selAcc?.role==="admin"||!selAcc?"Code PIN administrateur":"Entrez votre code PIN"),
+h("p",{style:{color:"rgba(255,255,255,.45)",fontSize:11,marginBottom:24}},"Entrez votre code PIN"),
 h("div",{className:err?"shake":"",style:{display:"flex",justifyContent:"center",gap:14,marginBottom:6}},
 [0,1,2,3].map(i=>h("div",{key:i,className:"pin-dot"+(i<pin.length?" active":"")}))
 ),
@@ -418,52 +418,53 @@ h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,maxWidt
 
 // ── APP HEADER ────────────────────────────────────────────────────────────────
 function AppHeader({cfg,lowStock,syncing,isAdmin,onScan,page,setPage,menuOpen,setMenuOpen,currentUser,onLogout,onAlerts,alertCount,navConfig}){
-const navs=[{id:'accueil',l:'🏠',n:'Accueil'},{id:'emprunts',l:'📦',n:'Emprunts'},{id:'inspection',l:'🔧',n:'Inspection'},{id:'stocks',l:'🧤',n:'Stocks'},{id:'rapport',l:'📊',n:'Rapport'},{id:'admin',l:'🔐',n:'Admin'}];
 const bgColor=cfg.couleur||'#c8102e';
-return h('div',{style:{background:`linear-gradient(135deg,${bgColor},${darken(bgColor)})`,paddingTop:'env(safe-area-inset-top,0)',position:'sticky',top:0,zIndex:50,boxShadow:'0 2px 12px rgba(0,0,0,.3)'}},
-h('div',{style:{height:62,display:'flex',alignItems:'center',justifyContent:'space-between',padding:'0 14px'}},
-h('div',{style:{display:'flex',alignItems:'center',gap:10}},
-h('button',{onClick:()=>setMenuOpen(o=>!o),style:{background:'rgba(255,255,255,.2)',border:'none',borderRadius:10,padding:'8px',cursor:'pointer',display:'flex',flexDirection:'column',gap:4,flexShrink:0}},
-h('div',{style:{width:18,height:2,background:'#fff',borderRadius:1}}),h('div',{style:{width:14,height:2,background:'#fff',borderRadius:1}}),h('div',{style:{width:18,height:2,background:'#fff',borderRadius:1}})
-),
-cfg.logoUrl?h('img',{src:cfg.logoUrl,style:{width:38,height:38,borderRadius:10,objectFit:'cover',flexShrink:0}}):h('div',{style:{width:38,height:38,borderRadius:10,background:'rgba(255,255,255,.2)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}},'✈️'),
-h('div',{},
-h('div',{style:{color:'#fff',fontWeight:900,fontSize:16,letterSpacing:-.3}},cfg.nomSite||'LUX AIRPORT'),
-h('div',{style:{color:'rgba(255,255,255,.7)',fontSize:10,marginTop:1,display:'flex',alignItems:'center',gap:4}},
-cfg.sousTitre||'Gestion Airside',
-syncing&&h('span',{style:{background:'rgba(255,255,255,.2)',borderRadius:10,padding:'1px 6px',fontSize:9}},'🔄'),
-!syncing&&h('span',{style:{background:'rgba(52,199,89,.3)',borderRadius:10,padding:'1px 6px',fontSize:9}},'✅'),
-isAdmin&&h('span',{style:{background:'rgba(255,200,0,.3)',borderRadius:10,padding:'1px 6px',fontSize:9}},'🔐')
-)
-)
-),
-h('div',{style:{display:'flex',gap:6,alignItems:'center'}},
-(alertCount>0||lowStock>0)&&h('button',{onClick:onAlerts,style:{background:'rgba(255,200,0,.25)',border:'none',borderRadius:20,padding:'4px 9px',color:'#ffe',fontSize:11,fontWeight:700,cursor:'pointer'}},'⚠️'+(alertCount+lowStock)),
-currentUser&&h('div',{style:{display:'flex',alignItems:'center',gap:4,background:'rgba(255,255,255,.15)',borderRadius:20,padding:'3px 4px 3px 9px'}},
-h('span',{style:{color:'#fff',fontSize:10,fontWeight:600,maxWidth:55,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},currentUser.name.split(' ')[0]),
-h('button',{onClick:onLogout,style:{background:'rgba(255,255,255,.25)',border:'none',borderRadius:16,padding:'3px 7px',color:'#fff',fontSize:9,fontWeight:700,cursor:'pointer'}},'Quitter')
-),
-h('button',{onClick:onScan,style:{background:'rgba(255,255,255,.2)',border:'none',borderRadius:20,padding:'6px 10px',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer'}},'📷')
-)
-),
-h('div',{style:{display:'flex',borderTop:'1px solid rgba(255,255,255,.15)'}},
-navs.map(n=>h('button',{key:n.id,onClick:()=>setPage(n.id),style:{flex:1,padding:'8px 2px 6px',background:'none',border:'none',cursor:'pointer',borderBottom:`2.5px solid ${page===n.id?'#fff':'transparent'}`,display:'flex',flexDirection:'column',alignItems:'center',gap:1}},
-h('span',{style:{fontSize:page===n.id?17:15}},n.l),
-h('span',{style:{fontSize:8,fontWeight:page===n.id?700:400,color:page===n.id?'#fff':'rgba(255,255,255,.45)'}},n.n)
-))
-)
+return h('div',{style:{position:'fixed',top:'env(safe-area-inset-top,0)',left:12,zIndex:90}},
+  h('button',{
+    onClick:()=>setMenuOpen(o=>!o),
+    style:{
+      width:52,height:52,borderRadius:16,border:'none',cursor:'pointer',
+      background:`linear-gradient(135deg,${bgColor},${darken(bgColor)})`,
+      boxShadow:'0 8px 24px rgba(0,0,0,.18)',
+      display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:4
+    }},
+    h('div',{style:{width:22,height:3,background:'#fff',borderRadius:2}}),
+    h('div',{style:{width:16,height:3,background:'#fff',borderRadius:2}}),
+    h('div',{style:{width:22,height:3,background:'#fff',borderRadius:2}})
+  )
 );
 }
 
-function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg}){
+function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg,currentUser,onLogout,onScan,onAlerts,alertCount,lowStock}){
 if(!open)return null;
 const bg=cfg.couleur||S.red;
 const visibleNavs=[...navConfig].filter(n=>n.visible&&!n.hidden).sort((a,b)=>a.order-b.order);
 return h("div",{onClick:onClose,style:{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",zIndex:100,backdropFilter:"blur(4px)"}},
-h("div",{onClick:e=>e.stopPropagation(),style:{position:"absolute",top:0,left:0,width:300,height:"100%",background:"#fff",padding:"60px 16px 30px",overflowY:"auto",boxShadow:"4px 0 32px rgba(0,0,0,.15)"}},
-h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}},
-h("div",{style:{fontSize:16,fontWeight:800}},"Navigation"),
-h("button",{onClick:onClose,style:{background:"none",border:"none",fontSize:24,cursor:"pointer",color:S.dark}},"×")
+h("div",{onClick:e=>e.stopPropagation(),style:{position:"absolute",top:0,left:0,width:320,maxWidth:"86vw",height:"100%",background:"#fff",padding:"54px 16px 24px",overflowY:"auto",boxShadow:"4px 0 32px rgba(0,0,0,.15)"}},
+h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},
+  h("div",{},
+    h("div",{style:{fontSize:18,fontWeight:900,color:bg}},cfg.nomSite||"LUX AIRPORT"),
+    h("div",{style:{fontSize:12,color:S.gray,marginTop:2}},cfg.sousTitre||"Gestion Airside")
+  ),
+  h("button",{onClick:onClose,style:{background:"none",border:"none",fontSize:26,cursor:"pointer",color:S.dark}},"×")
+),
+currentUser&&h("div",{style:{background:"#f7f7f9",borderRadius:16,padding:"12px 14px",marginBottom:14,border:"1px solid #ececf2"}},
+  h("div",{style:{fontSize:12,color:S.gray,marginBottom:3}},"Compte connecté"),
+  h("div",{style:{fontSize:16,fontWeight:800,marginBottom:10}},currentUser.name||"Utilisateur"),
+  h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
+    h("button",{onClick:()=>{onScan&&onScan();onClose();},style:{...BB,padding:"10px",fontSize:13,borderRadius:12}},"📷 Scanner"),
+    h("button",{onClick:()=>{onLogout&&onLogout();onClose();},style:{...BS,padding:"10px",fontSize:13,borderRadius:12}},"Quitter")
+  )
+),
+h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
+  h("button",{onClick:()=>{onAlerts&&onAlerts();onClose();},style:{background:"#fff7e6",border:"1.5px solid #ffe1a3",borderRadius:14,padding:"12px 10px",cursor:"pointer",textAlign:"left"}},
+    h("div",{style:{fontSize:20,marginBottom:4}},"⚠️"),
+    h("div",{style:{fontSize:12,fontWeight:800}},(alertCount||0)+(lowStock||0)+" alerte(s)")
+  ),
+  h("button",{onClick:()=>{setPage("emprunts");onClose();},style:{background:"#eef5ff",border:"1.5px solid #d7e5ff",borderRadius:14,padding:"12px 10px",cursor:"pointer",textAlign:"left"}},
+    h("div",{style:{fontSize:20,marginBottom:4}},"📦"),
+    h("div",{style:{fontSize:12,fontWeight:800}},"Emprunts")
+  )
 ),
 h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}},
 visibleNavs.map(n=>h("button",{key:n.id,onClick:()=>{setPage(n.id);onClose();},style:{background:page===n.id?bg+"18":"#f5f5f7",border:`1.5px solid ${page===n.id?bg:"transparent"}`,borderRadius:16,padding:"14px 8px",cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:6}},
@@ -472,10 +473,8 @@ h("span",{style:{fontSize:10,fontWeight:700,color:page===n.id?bg:S.dark,textAlig
 ))
 )
 )
-);
-}
+);}
 
-// ── MODALS STOCK ──────────────────────────────────────────────────────────────
 function TakeModal({item,cat,employes,defaultPers,onSave,onClose}){
 const[pers,setPers]=useState(defaultPers||"");const[qte,setQte]=useState(1);const[comm,setComm]=useState("");
 return h(Modal,{onClose},
@@ -524,37 +523,69 @@ h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},h("button"
 
 // ── MODALS EMPRUNTS ───────────────────────────────────────────────────────────
 
-function DepModal({emprunts,employes,tools,kits,currentUser,defaultPers,onSave,onClose}){
+function DepModal({emprunts,employes,tools,kits,currentUser,userAccounts,defaultPers,onSave,onClose}){
 const owner=(currentUser?.name||defaultPers||"");
+const otherUsers=(userAccounts||[]).filter(a=>(a.name||"")!==owner&&a.role!=="admin").map(a=>a.name);
 const[search,setSearch]=useState("");const[showScan,setShowScan]=useState(false);const[extraPers,setExtraPers]=useState("");
 const[etat,setEtat]=useState("Bon");const[comm,setComm]=useState("");const[photos,setPhotos]=useState([]);const[sig,setSig]=useState("");
-const[selected,setSelected]=useState([]);
-const availTools=tools.filter(t=>!emprunts.find(e=>e.toolId===t.id&&!e.retour));
-const q=search.trim().toLowerCase();
-const toolResults=(q?availTools.filter(t=>t.nom.toLowerCase().includes(q)||t.id.toLowerCase().includes(q)):availTools).slice(0,12);
-const kitResults=(q?(kits||[]).filter(k=>(k.nom||"").toLowerCase().includes(q)||(k.id||"").toLowerCase().includes(q)):((kits||[]))).slice(0,8);
-const addTool=t=>setSelected(p=>p.find(x=>x.type==="tool"&&x.id===t.id)?p:[...p,{type:"tool",id:t.id,label:t.id+" — "+t.nom,toolIds:[t.id]}]);
-const addKit=k=>setSelected(p=>p.find(x=>x.type==="kit"&&x.id===k.id)?p:[...p,{type:"kit",id:k.id,label:(k.id||"KIT")+" — "+k.nom,toolIds:(k.outils||[]).filter(id=>availTools.find(t=>t.id===id))}]);
-const addScan=raw=>{const id=n2(raw);const t=availTools.find(x=>n2(x.id)===id);if(t){addTool(t);setShowScan(false);return;}const k=(kits||[]).find(x=>n2(x.id||"")===id);if(k){addKit(k);setShowScan(false);return;}alert("QR code inconnu");};
+const[selected,setSelected]=useState([]);const[pickerOpen,setPickerOpen]=useState(false);
+const availTools=(tools||[]).filter(t=>!emprunts.find(e=>e.toolId===t.id&&!e.retour));
+const combinedItems=[
+  ...availTools.map(t=>({kind:"tool",id:t.id,label:t.id+" — "+t.nom,sub:t.nom,toolIds:[t.id],accent:S.blue})),
+  ...((kits||[]).map(k=>({kind:"kit",id:k.id||k._id,label:(k.id||"KIT")+" — "+(k.nom||"Kit"),sub:((k.outils||[]).length||0)+" outil(s)",toolIds:(k.outils||[]).filter(id=>availTools.find(t=>t.id===id)),accent:S.orange})))
+];
+const filteredItems=combinedItems.filter(x=>{
+  const q=search.trim().toLowerCase();
+  return !q || (x.label||"").toLowerCase().includes(q) || (x.sub||"").toLowerCase().includes(q) || (x.id||"").toLowerCase().includes(q);
+}).slice(0,18);
+const toggleItem=item=>setSelected(prev=>prev.find(x=>x.kind===item.kind&&x.id===item.id)?prev.filter(x=>!(x.kind===item.kind&&x.id===item.id)):[...prev,item]);
+const addScan=raw=>{
+  const id=n2(raw);
+  const item=combinedItems.find(x=>n2(x.id||"")===id || x.toolIds.some(tid=>n2(tid)===id));
+  if(item){toggleItem(item);setShowScan(false);setPickerOpen(false);return;}
+  alert("QR code inconnu");
+};
 const allToolIds=[...new Set(selected.flatMap(x=>x.toolIds||[]))];
 const otherTeam=(extraPers&&extraPers!==owner)?[extraPers]:[];
 return h(Modal,{onClose},
 h("div",{style:{background:"linear-gradient(135deg,"+S.blue+",#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"SORTIE MATÉRIEL"),h("div",{style:{fontSize:20,fontWeight:900}},"Départ outil / kit")),
-FL("Recherche matériel *",true),
-h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto",gap:8,alignItems:"center"}},
-  h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher outil ou kit...",style:IS}),
+FL("Outil / kit *",true),
+h("div",{style:{display:"grid",gridTemplateColumns:"1fr auto",gap:8,alignItems:"center",marginBottom:8}},
+  h("button",{onClick:()=>setPickerOpen(v=>!v),style:{...IS,textAlign:"left",display:"flex",alignItems:"center",justifyContent:"space-between",fontWeight:700,cursor:"pointer"}},
+    h("span",{},selected.length?selected.length+" sélection(s)":"Choisir outil ou kit"),
+    h("span",{style:{fontSize:18,color:S.gray}},pickerOpen?"▴":"▾")
+  ),
   h("button",{onClick:()=>setShowScan(v=>!v),style:{width:52,height:48,borderRadius:14,border:"none",background:S.blue,color:"#fff",fontSize:22,cursor:"pointer"}},"📷")
 ),
-showScan&&h("div",{style:{marginTop:10}},h(CamScanner,{onDetect:addScan})),
-h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:10}},
-  h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},"Outils"),toolResults.length===0?h("div",{style:{fontSize:12,color:S.gray,padding:"8px 0"}},"Aucun outil disponible"):toolResults.map(t=>h("div",{key:t.id,onClick:()=>addTool(t),style:{padding:"8px 10px",background:"#f6f8ff",borderRadius:10,marginBottom:6,cursor:"pointer",border:"1px solid #dbe7ff"}},h("div",{style:{fontSize:11,fontWeight:700,color:S.red}},t.id),h("div",{style:{fontSize:12,fontWeight:600}},t.nom.substring(0,34))))),
-  h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},"Kits"),kitResults.length===0?h("div",{style:{fontSize:12,color:S.gray,padding:"8px 0"}},"Aucun kit"):kitResults.map(k=>h("div",{key:k._id||k.id,onClick:()=>addKit(k),style:{padding:"8px 10px",background:"#fff8e6",borderRadius:10,marginBottom:6,cursor:"pointer",border:"1px solid #ffe1a3"}},h("div",{style:{fontSize:11,fontWeight:700,color:S.orange}},k.id||"KIT"),h("div",{style:{fontSize:12,fontWeight:600}},(k.nom||"Kit").substring(0,34)),h("div",{style:{fontSize:10,color:S.gray}},(k.outils||[]).length+" outil(s)"))))
+pickerOpen&&h("div",{style:{background:"#fbfbfd",border:"1.5px solid "+S.border,borderRadius:16,padding:12,marginBottom:10}},
+  h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher outil ou kit...",style:{...IS,marginBottom:10}}),
+  h("div",{style:{maxHeight:240,overflowY:"auto",display:"flex",flexDirection:"column",gap:6}},
+    filteredItems.length===0?h("div",{style:{padding:"12px",textAlign:"center",color:S.gray}},"Aucun résultat")
+    :filteredItems.map(item=>{
+      const active=selected.find(x=>x.kind===item.kind&&x.id===item.id);
+      return h("button",{key:item.kind+"-"+item.id,onClick:()=>toggleItem(item),style:{
+        textAlign:"left",padding:"10px 12px",borderRadius:12,cursor:"pointer",
+        border:`1.5px solid ${active?item.accent:S.border}`,
+        background:active?(item.kind==="kit"?"#fff6e8":"#eef5ff"):"#fff"
+      }},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}},
+          h("div",{},
+            h("div",{style:{fontSize:11,fontWeight:800,color:item.accent,marginBottom:2}},item.kind==="kit"?"KIT":"OUTIL"),
+            h("div",{style:{fontSize:13,fontWeight:700}},item.label),
+            item.sub&&h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},item.sub)
+          ),
+          active&&h("div",{style:{fontSize:18,color:item.accent,fontWeight:800}},"✓")
+        )
+      );
+    })
+  )
 ),
+showScan&&h("div",{style:{marginTop:10,marginBottom:10}},h(CamScanner,{onDetect:addScan})),
 FL("Sélection"),
 selected.length===0?h("div",{style:{padding:"12px",borderRadius:12,background:S.bg,color:S.gray,fontSize:13}},"Aucun matériel sélectionné")
-:h("div",{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},selected.map((s,i)=>h("div",{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:"#eef5ff",borderRadius:12}},h("div",{},h("div",{style:{fontSize:11,fontWeight:700,color:s.type==='kit'?S.orange:S.red}},s.type==="kit"?"KIT":"OUTIL"),h("div",{style:{fontSize:13,fontWeight:700}},s.label),s.type==="kit"&&h("div",{style:{fontSize:10,color:S.gray}},(s.toolIds||[]).length+" outil(s) compris")),h("button",{onClick:()=>setSelected(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"4px 8px",cursor:"pointer"}},"×")))),
-FL("Personne qui retire"),h("input",{value:owner,readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
-FL("Autre personne de l'équipe",true),h("select",{value:extraPers,onChange:e=>setExtraPers(e.target.value),style:SS},h("option",{value:""},"– Aucune –"),...(employes||[]).filter(e=>e!==owner).map(e=>h("option",{key:e,value:e},e))),
+:h("div",{style:{display:"flex",flexDirection:"column",gap:6,marginBottom:8}},selected.map((s,i)=>h("div",{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 12px",background:s.kind==='kit'?'#fff8e6':'#eef5ff',borderRadius:12,border:`1.5px solid ${s.kind==='kit'? '#ffe1a3':'#d7e5ff'}`}},h("div",{},h("div",{style:{fontSize:11,fontWeight:700,color:s.kind==='kit'?S.orange:S.blue}},s.kind==="kit"?"KIT":"OUTIL"),h("div",{style:{fontSize:13,fontWeight:700}},s.label),s.kind==="kit"&&h("div",{style:{fontSize:10,color:S.gray}},(s.toolIds||[]).length+" outil(s) compris")),h("button",{onClick:()=>setSelected(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"4px 8px",cursor:"pointer"}},"×")))),
+FL("Personne"),h("input",{value:owner,readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
+FL("Autre personne de l'équipe",true),h("select",{value:extraPers,onChange:e=>setExtraPers(e.target.value),style:SS},h("option",{value:""},"– Aucune –"),...otherUsers.map(e=>h("option",{key:e,value:e},e))),
 FL("État au départ",true),
 h("div",{style:{display:"flex",gap:8}},["Bon","Moyen","Mauvais"].map(et=>h("button",{key:et,onClick:()=>setEtat(et),style:{flex:1,padding:"10px",borderRadius:12,border:`2px solid ${etat===et?(et==="Bon"?S.green:et==="Moyen"?S.orange:S.danger):S.border}`,background:etat===et?(et==="Bon"?"#e6fff0":et==="Moyen"?"#fff8e6":"#fff1f0"):"#fff",fontWeight:etat===et?700:400,cursor:"pointer",fontSize:13}},et))),
 FL("Commentaire",true),h("textarea",{value:comm,onChange:e=>setComm(e.target.value),placeholder:"Chantier, destination, remarque...",style:{...IS,minHeight:70,resize:"vertical"}}),
@@ -566,6 +597,7 @@ h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14
 )
 );
 }
+
 function RetFindModal({emprunts,onFound,onClose}){
 const encours=emprunts.filter(e=>!e.retour);
 return h(Modal,{onClose},
@@ -580,17 +612,25 @@ h("button",{onClick:onClose,style:{...BS,marginTop:8}},"Annuler")
 function RetCheckModal({onOk,onClose}){
 const[batt,setBatt]=useState(false);const[propre,setPropre]=useState(false);
 return h(Modal,{onClose},
-  h("div",{style:{textAlign:"center",padding:"8px 0 20px"}},
-    h("div",{style:{fontSize:48,marginBottom:12}},"📥"),
-    h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:8}},"Retour d'outil"),
-    h("p",{style:{fontSize:13,color:S.gray,marginBottom:16}},"Confirmez les points ci-dessous avant de poursuivre"),
-    h("label",{style:{display:"flex",alignItems:"center",gap:10,background:"#f7f9fc",padding:"12px 14px",borderRadius:12,marginBottom:10,cursor:"pointer"}},h("input",{type:"checkbox",checked:batt,onChange:e=>setBatt(e.target.checked)}),h("span",{style:{fontWeight:600,textAlign:"left"}},"Avez-vous bien rechargé les batteries ?")),
-    h("label",{style:{display:"flex",alignItems:"center",gap:10,background:"#f7f9fc",padding:"12px 14px",borderRadius:12,marginBottom:16,cursor:"pointer"}},h("input",{type:"checkbox",checked:propre,onChange:e=>setPropre(e.target.checked)}),h("span",{style:{fontWeight:600,textAlign:"left"}},"Le matériel est propre et bien rangé dans les boîtes ?")),
+  h("div",{style:{textAlign:"center",padding:"6px 0 20px"}},
+    h("div",{style:{background:"linear-gradient(135deg,#eef5ff,#fff8e6)",borderRadius:18,padding:"16px 14px",marginBottom:14,border:"1px solid #dfe7ff"}},
+      h("div",{style:{display:"flex",justifyContent:"center",gap:16,alignItems:"center",marginBottom:10}},
+        h("div",{style:{width:78,height:78,borderRadius:18,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 18px rgba(0,0,0,.08)",fontSize:40}},"🔋"),
+        h("div",{style:{fontSize:28,color:S.gray,fontWeight:900}},"?"),
+        h("div",{style:{width:78,height:78,borderRadius:18,background:"#fff",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 6px 18px rgba(0,0,0,.08)",fontSize:40}},"🧰")
+      ),
+      h("div",{style:{fontSize:14,fontWeight:800,marginBottom:4}},"Contrôle avant retour"),
+      h("div",{style:{fontSize:12,color:S.gray,lineHeight:1.45}},"Vérifiez la recharge des batteries et le rangement/nettoyage du matériel avant de confirmer.")
+    ),
+    h("label",{style:{display:"flex",alignItems:"center",gap:10,background:"#f7f9fc",padding:"12px 14px",borderRadius:12,marginBottom:10,cursor:"pointer",textAlign:"left"}},h("input",{type:"checkbox",checked:batt,onChange:e=>setBatt(e.target.checked)}),h("span",{style:{fontWeight:700}},"🔋 Batteries rechargées ?")),
+    h("label",{style:{display:"flex",alignItems:"center",gap:10,background:"#f7f9fc",padding:"12px 14px",borderRadius:12,marginBottom:16,cursor:"pointer",textAlign:"left"}},h("input",{type:"checkbox",checked:propre,onChange:e=>setPropre(e.target.checked)}),h("span",{style:{fontWeight:700}},"🧰 Outils rangés et nettoyés ?")),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!batt||!propre){alert("Veuillez confirmer les deux contrôles");return;}onOk({batteriesRechargees:true,materielPropreEtRange:true});},style:BB},"Continuer →"))
   )
 );}
-function RetModal({empr,tool,employes,currentUser,returnChecks,onSave,onClose}){
+
+function RetModal({empr,tool,employes,currentUser,userAccounts,returnChecks,onSave,onClose}){
 const owner=(currentUser?.name||"");
+const otherUsers=(userAccounts||[]).filter(a=>(a.name||"")!==owner&&a.role!=="admin").map(a=>a.name);
 const[etat,setEtat]=useState("Bon");const[comm,setComm]=useState("");const[extraPers,setExtraPers]=useState("");const[photos,setPhotos]=useState([]);const[sig,setSig]=useState("");
 return h(Modal,{onClose},
 h("div",{style:{background:"linear-gradient(135deg,"+S.green+",#28a745)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"RETOUR"),h("div",{style:{fontSize:18,fontWeight:800}},empr.toolId),h("div",{style:{fontSize:12,opacity:.75,marginTop:2}},"Emprunté par "+empr.personne)),
@@ -598,13 +638,16 @@ returnChecks&&h("div",{style:{background:"#e8f5e9",borderRadius:12,padding:"10px
 FL("État au retour",true),
 h("div",{style:{display:"flex",gap:8,marginBottom:8}},["Bon","Moyen","Mauvais"].map(et=>h("button",{key:et,onClick:()=>setEtat(et),style:{flex:1,padding:"10px",borderRadius:12,border:`2px solid ${etat===et?(et==="Bon"?S.green:et==="Moyen"?S.orange:S.danger):S.border}`,background:etat===et?(et==="Bon"?"#e6fff0":et==="Moyen"?"#fff8e6":"#fff1f0"):"#fff",fontWeight:etat===et?700:400,cursor:"pointer",fontSize:13}},et))),
 FL("Personne qui fait le retour *",true),h("input",{value:owner,readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
-FL("Autre personne de l'équipe",true),h("select",{value:extraPers,onChange:e=>setExtraPers(e.target.value),style:SS},h("option",{value:""},"– Aucune –"),...(employes||[]).filter(e=>e!==owner).map(e=>h("option",{key:e,value:e},e))),
+FL("Autre personne de l'équipe",true),h("select",{value:extraPers,onChange:e=>setExtraPers(e.target.value),style:SS},h("option",{value:""},"– Aucune –"),...otherUsers.map(e=>h("option",{key:e,value:e},e))),
 FL("Photos retour",true),h(PhotoPicker,{photos,onChange:setPhotos,labelText:"Ajouter une ou plusieurs photos"}),
-FL("Commentaire",true),h("textarea",{value:comm,onChange:e=>setComm(e.target.value),placeholder:"Observations, dégâts...",style:{...IS,minHeight:70,resize:"vertical"}}),
+FL("Commentaire retour",true),h("textarea",{value:comm,onChange:e=>setComm(e.target.value),placeholder:"Dommages, remarques...",style:{...IS,minHeight:70,resize:"vertical"}}),
 FL("Signature retour *",true),h(SignaturePad,{value:sig,onChange:setSig,height:150}),
-h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!owner){alert("Utilisateur retour obligatoire");return;}if(!sig){alert("Signature retour obligatoire");return;}onSave(empr._id,{etatRetour:etat,commentaireRetour:comm,photosRetour:photos,signatureRetour:sig,retourPar:owner,autresPersonnesRetour:extraPers&&extraPers!==owner?[extraPers]:[],returnChecks:returnChecks||{},returnReport:{createdAt:now(),retourPar:owner,autresPersonnes:extraPers&&extraPers!==owner?[extraPers]:[],etatRetour:etat,commentaireRetour:comm,photosCount:photos.length,checks:returnChecks||{},toolId:empr.toolId,personneDepart:empr.personne}});},style:BG},"Confirmer retour"))
+h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
+h("button",{onClick:onClose,style:BS},"Annuler"),
+h("button",{onClick:()=>{if(!owner){alert("Utilisateur retour obligatoire");return;}if(!sig){alert("Signature retour obligatoire");return;}onSave(empr._id,{etatRetour:etat,commentaireRetour:comm,photosRetour:photos,signatureRetour:sig,retourPar:owner,autresPersonnesRetour:extraPers&&extraPers!==owner?[extraPers]:[],returnChecks:returnChecks||null,returnReport:{createdAt:now(),retourPar:owner,autresPersonnes:extraPers&&extraPers!==owner?[extraPers]:[],photosCount:photos.length,checks:returnChecks||null}});},style:BG},"Confirmer retour"))
 );
 }
+
 function ModEmpModal({empr,employes,onSave,onClose}){
 const[pers,setPers]=useState(empr.personne||"");const[comm,setComm]=useState(empr.commentaireDepart||"");
 return h(Modal,{onClose},h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:4}},"Modifier l'emprunt"),h("p",{style:{fontSize:12,color:S.gray,marginBottom:16}},empr.toolId),FL("Personne"),h("select",{value:pers,onChange:e=>setPers(e.target.value),style:SS},h("option",{value:""},"– Sélectionner –"),...(employes||[]).map(e=>h("option",{key:e,value:e},e))),FL("Commentaire",true),h("input",{value:comm,onChange:e=>setComm(e.target.value),style:IS}),h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>onSave(empr.id,{personne:pers,commentaireDepart:comm}),style:BB},"Sauvegarder")));
@@ -623,22 +666,24 @@ isAdmin&&empr.returnReport&&h("div",{style:{marginTop:14,background:'#f8f9ff',bo
 h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Fermer"),h("button",{onClick:()=>onPDF(empr,tool),style:BB},"📄 PDF"))
 );
 }
-function MultiScanModal({tools,kits,emprunts,employes,currentUser,isEmp,onSave,onClose}){
+function MultiScanModal({tools,kits,emprunts,employes,currentUser,userAccounts,isEmp,onSave,onClose}){
 const[scanned,setScanned]=useState([]);const[extraPers,setExtraPers]=useState("");const[photos,setPhotos]=useState([]);const[sig,setSig]=useState("");
 const owner=currentUser?.name||"";
+const otherUsers=(userAccounts||[]).filter(a=>(a.name||"")!==owner&&a.role!=="admin").map(a=>a.name);
 const addScan=raw=>{const id=n2(raw);const t=tools.find(x=>n2(x.id)===id&&!isEmp(x.id));if(t&&!scanned.find(s=>s.id===t.id)){setScanned(p=>[...p,{id:t.id,nom:t.nom}]);if(navigator.vibrate)navigator.vibrate(100);return;}const k=(kits||[]).find(x=>n2(x.id||"")===id);if(k&&!scanned.find(s=>s.id===k.id)){setScanned(p=>[...p,{id:k.id,nom:k.nom,type:"kit",toolIds:(k.outils||[]).filter(tid=>!isEmp(tid))}]);if(navigator.vibrate)navigator.vibrate(100);return;}};
 const tids=[...new Set(scanned.flatMap(s=>s.type==="kit"?(s.toolIds||[]):[s.id]))];
 return h(Modal,{onClose},
 h("div",{style:{background:"linear-gradient(135deg,"+S.blue+",#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"SCAN MULTIPLE"),h("div",{style:{fontSize:20,fontWeight:900}},scanned.length+" élément(s) scanné(s)")),
 h("div",{style:{marginTop:12}},h(CamScanner,{onDetect:addScan})),
-scanned.length>0&&h("div",{style:{marginTop:10}},scanned.map((s,i)=>h("div",{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#e6fff0",borderRadius:10,marginBottom:4}},h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.red}},s.type==="kit"?"KIT":s.id),h("div",{style:{fontSize:12,fontWeight:600}},s.nom.substring(0,35))),h("button",{onClick:()=>setScanned(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"4px 8px",fontSize:12,cursor:"pointer"}},"x")))),
-FL("Personne qui retire"),h("input",{value:owner,readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
-FL("Autre personne",true),h("select",{value:extraPers,onChange:e=>setExtraPers(e.target.value),style:SS},h("option",{value:""},"– Aucune –"),...(employes||[]).filter(e=>e!==owner).map(e=>h("option",{key:e,value:e},e))),
+scanned.length>0&&h("div",{style:{marginTop:10}},scanned.map((s,i)=>h("div",{key:i,style:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:s.type==='kit'?'#fff8e6':'#e6fff0',borderRadius:10,marginBottom:4}},h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:s.type==='kit'?S.orange:S.red}},s.type==="kit"?"KIT":s.id),h("div",{style:{fontSize:12,fontWeight:600}},s.nom.substring(0,35))),h("button",{onClick:()=>setScanned(p=>p.filter((_,j)=>j!==i)),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:8,padding:"4px 8px",fontSize:12,cursor:"pointer"}},"x")))),
+FL("Personne"),h("input",{value:owner,readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
+FL("Autre personne",true),h("select",{value:extraPers,onChange:e=>setExtraPers(e.target.value),style:SS},h("option",{value:""},"– Aucune –"),...otherUsers.map(e=>h("option",{key:e,value:e},e))),
 FL("Photos départ",true),h(PhotoPicker,{photos,onChange:setPhotos,labelText:"Ajouter une ou plusieurs photos"}),
 FL("Signature départ *",true),h(SignaturePad,{value:sig,onChange:setSig,height:150}),
 h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(tids.length===0){alert("Scannez des outils ou kits");return;}if(!sig){alert("Signature départ obligatoire");return;}onSave({tids,pers:owner,owner,otherTeam:extraPers&&extraPers!==owner?[extraPers]:[],etat:"Bon",comm:"Scan multiple",photos,sig,selected:scanned});},style:{...BP,background:S.blue}},"Sortir "+tids.length+" outil(s)"))
 );
 }
+
 function InspModal({tool,ins,empr,employes,cfg,maint,onSave,onClose}){
 const[etat,setEtat]=useState(ins?.etat||"");const[tech,setTech]=useState(ins?.tech||"");const[note,setNote]=useState(ins?.note||"");
 return h(Modal,{onClose},
@@ -1737,7 +1782,7 @@ if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>
 
 return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
-h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg}),
+h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg,currentUser,onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage('accueil');},onScan:()=>setModal({t:'scan'}),onAlerts:()=>setModal({t:'alertes'}),alertCount,lowStock:lowS.length}),
 
 h("div",{style:{padding:"14px 14px 90px"}},
 
@@ -1905,9 +1950,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="admin"&&h("div",{className:"fi"},
-    currentUser?.role!=="admin"
-      ?h("div",{style:{textAlign:"center",padding:40}},h("div",{style:{fontSize:56,marginBottom:16}},"🔐"),h("div",{style:{fontSize:18,fontWeight:700,marginBottom:8}},"Accès refusé"))
-      :h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>{setIsAdmin(false);setCurrentUser(null);setPage("accueil");},onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig})
+      h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>{setIsAdmin(false);setCurrentUser(null);setPage("accueil");},onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig})
   )
 ),
 
@@ -1915,10 +1958,10 @@ h("div",{style:{padding:"14px 14px 90px"}},
 modal&&h("div",{},
   modal.t==="scan"&&h(Modal,{onClose:()=>setModal(null)},h("h2",{style:{fontSize:19,fontWeight:800,marginBottom:4}},"Scanner QR Code"),h(CamScanner,{onDetect:scanHandle}),h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:12}},"Fermer")),
   modal.t==="insp"&&h(InspModal,{tool:modal.tool,ins:modal.ins,empr:modal.empr,employes,cfg,maint:maintenances[modal.tool?.id]||{},onSave:saveInsp,onClose:()=>setModal(null)}),
-  modal.t==="dep"&&h(DepModal,{emprunts,employes,tools,defaultPers:currentUser?.name||"",onSave:saveDepart,onClose:()=>setModal(null)}),
+  modal.t==="dep"&&h(DepModal,{emprunts,employes,tools,kits,userAccounts,currentUser,defaultPers:currentUser?.name||"",onSave:saveDepart,onClose:()=>setModal(null)}),
   modal.t==="retFind"&&h(RetFindModal,{emprunts,onFound:id=>{setModal(null);setTimeout(()=>openRetour(id),150);},onClose:()=>setModal(null)}),
-  modal.t==="retCheck"&&h(RetCheckModal,{onOk:()=>setModal({t:"ret",empr:modal.empr,tool:modal.tool}),onClose:()=>setModal(null)}),
-  modal.t==="ret"&&h(RetModal,{empr:modal.empr,tool:modal.tool,employes,onSave:saveRetour,onClose:()=>setModal(null)}),
+  modal.t==="retCheck"&&h(RetCheckModal,{onOk:(checks)=>setModal({t:"ret",empr:modal.empr,tool:modal.tool,returnChecks:checks}),onClose:()=>setModal(null)}),
+  modal.t==="ret"&&h(RetModal,{empr:modal.empr,tool:modal.tool,employes,userAccounts,currentUser,returnChecks:modal.returnChecks,onSave:saveRetour,onClose:()=>setModal(null)}),
   modal.t==="modEmp"&&h(ModEmpModal,{empr:modal.empr,employes,onSave:modEmprunt,onClose:()=>setModal(null)}),
   modal.t==="detEmp"&&h(DetEmpModal,{empr:modal.empr,tool:modal.tool,isAdmin,cfg,onClose:()=>setModal(null),onPDF:(e,t)=>{genPDF("detail",{details:[["Outil",e.toolId],["Personne",e.personne],["Départ",e.dateDepart],["État départ",e.etatDepart],["Note",e.commentaireDepart||""],["Retour",e.retour||"En cours"],["État retour",e.etatRetour||""],["Note retour",e.commentaireRetour||""]]},cfg);}}),
   modal.t==="take"&&h(TakeModal,{item:modal.item,cat:modal.cat,employes,defaultPers:currentUser?.name||"",onSave:takeStock,onClose:()=>setModal(null)}),
@@ -1927,7 +1970,7 @@ modal&&h("div",{},
   modal.t==="csv"&&h(CSVModal,{cat:modal.cat,onImport:importCSV,onClose:()=>setModal(null)}),
   modal.t==="kit"&&h(KitModal,{kit:modal.kit,tools,emprunts,isEmp,onSave:saveKit,onClose:()=>setModal(null)}),
   modal.t==="kitDep"&&h(KitDepModal,{kit:modal.kit,tools,employes,emprunts,isEmp,onSave:saveKitDepart,onClose:()=>setModal(null)}),
-  modal.t==="multiScan"&&h(MultiScanModal,{tools,kits,emprunts,employes,currentUser,isEmp,onSave:saveDepart,onClose:()=>setModal(null)}),
+  modal.t==="multiScan"&&h(MultiScanModal,{tools,kits,emprunts,employes,currentUser,userAccounts,isEmp,onSave:saveDepart,onClose:()=>setModal(null)}),
   modal.t==="globalSearch"&&h(GlobalSearchModal,{tools,cons,vets,emprunts,kits,onClose:()=>setModal(null)}),
   modal.t==="addTool"&&h(AddToolModal,{onSave:async(data)=>{setSyncing(true);const id=data.id.toUpperCase();await fbSet("tools",id,{...data,id});setSyncing(false);setModal(null);showT("Outil ajouté!");},onClose:()=>setModal(null)}),
   modal.t==="editTool"&&h(EditToolModal,{tool:modal.tool,onSave:async(data)=>{setSyncing(true);await fbSet("tools",data.id,data);setSyncing(false);setModal(null);showT("Outil modifié!");},onDelete:async(id)=>{if(!confirm("Supprimer cet outil?"))return;setSyncing(true);await fbDel("tools",id);setSyncing(false);setModal(null);showT("Outil supprimé!");},onClose:()=>setModal(null)}),
