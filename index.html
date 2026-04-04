@@ -129,6 +129,19 @@ transitCases:4
 const FAM_COLORS=['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#ff5722'];
 
 // ── UTILITAIRES ───────────────────────────────────────────────────────────────
+function getWarehouseConfigSafe(warehouseConfig){
+return{
+...WAREHOUSE_DEFAULT,
+...(warehouseConfig||{}),
+alleeA:{...WAREHOUSE_DEFAULT.alleeA,...((warehouseConfig&&warehouseConfig.alleeA)||{})},
+alleeB:{...WAREHOUSE_DEFAULT.alleeB,...((warehouseConfig&&warehouseConfig.alleeB)||{})},
+transitCases:(warehouseConfig&&warehouseConfig.transitCases)||WAREHOUSE_DEFAULT.transitCases
+};
+}
+function findFamilleById(familles,familleId){
+return(familles||[]).find(f=>(f._id||f.id)===familleId)||null;
+}
+
 const {useState,useEffect,useRef,useMemo}=React;
 const h=React.createElement;
 const n2=s=>s.replace(/-/g,"").toUpperCase().trim();
@@ -234,7 +247,7 @@ palettes.forEach((pal,ri)=>{
 if(y>H-20){addFooter();doc.addPage();pageNum++;addHeader();y=36;doc.setFillColor(rgb.r,rgb.g,rgb.b);doc.rect(8,y,W-16,8,'F');doc.setFontSize(6);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);cx=10;cols.forEach((c,i)=>{doc.text(c,cx,y+5.5);cx+=cws[i];});y+=9;}
 if(ri%2===0){doc.setFillColor(250,250,250);doc.rect(8,y,W-16,8,'F');}
 doc.setFontSize(6);doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);
-const fam=familles.find(f=>f.id===pal.familleId);
+const fam=findFamilleById(familles,pal.familleId);
 const contenu=(pal.items||[]).slice(0,2).map(i=>i.nom.substring(0,12)+(i.qte?'x'+i.qte:'')).join(', ')+((pal.items||[]).length>2?'...':'');
 const emp=pal.emplacementTransit?('TRANSIT-'+pal.transitCase):pal.emplacementSOL?('SOL-'+pal.solAllee+'-'+String(pal.solCase).padStart(2,'0')):(pal.allee&&pal.rack?pal.allee+'-R'+pal.rack+'-E'+(pal.etagere||'?')+'-'+(pal.position||'?'):'—');
 const row=[pal.id,fam?fam.id:'—',contenu,pal.provenance||'—',pal.destination||'—',emp,(pal.createdAt||'').split(' ')[0]||'—',pal.createdBy||'—'];
@@ -252,7 +265,7 @@ addFooter();doc.save('LuxAirport_Stock*'+new Date().toISOString().slice(0,10)+'.
 function exportStockCSV(palettes,familles){
 const headers=['ID Palette','Famille ID','Famille Nom','Contenu','Quantités','Provenance','Destination','Emplacement Rack','Emplacement SOL','Emplacement Transit','Date Création','Créé par','Statut','Notes'];
 const rows=palettes.map(pal=>{
-const fam=familles.find(f=>f.id===pal.familleId);
+const fam=findFamilleById(familles,pal.familleId);
 const contenu=(pal.items||[]).map(i=>i.nom).join(' | ');
 const qtes=(pal.items||[]).map(i=>i.qte||'').join(' | ');
 const empRack=pal.allee&&pal.rack?pal.allee+'-R'+pal.rack+'-E'+(pal.etagere||'?')+'-'+(pal.position||'?'):'';
@@ -712,7 +725,7 @@ return h(Modal,{onClose},FL("Avatar"),h("div",{style:{display:"flex",gap:6,flexW
 
 // ── CONFIGURATION ENTREPÔT ────────────────────────────────────────────────────
 function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
-const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const wc=getWarehouseConfigSafe(warehouseConfig);
 const[alleeA,setAlleeA]=useState({...( wc.alleeA||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
 const[alleeB,setAlleeB]=useState({...(wc.alleeB||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
 const[transitCases,setTransitCases]=useState(wc.transitCases||4);
@@ -781,7 +794,7 @@ h("button",{onClick:()=>onSave({alleeA,alleeB,transitCases}),style:BP},"💾 Sau
 
 // ── VISUEL RACK ───────────────────────────────────────────────────────────────
 function RackVisual({warehouseConfig,palettes,familles,onSelectPalette}){
-const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const wc=getWarehouseConfigSafe(warehouseConfig);
 const normAllee=v=>String(v||"").replace(/^allee/i,"").toUpperCase();
 const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>(f._id||f.id)===pal.familleId);return f?f.couleur:null;};
 const getPal=(allee,rack,etage,pos)=>palettes.find(p=>!p.emplacementSOL&&!p.emplacementTransit&&normAllee(p.allee)===normAllee(allee)&&String(p.rack)===String(rack)&&String(p.etagere)===String(etage)&&String(p.position||"").toUpperCase()===String(pos||"").toUpperCase());
@@ -834,7 +847,7 @@ renderAllee("B",wc.alleeB,"#e74c3c")
 
 // ── VISUEL SOL ────────────────────────────────────────────────────────────────
 function SolVisual({warehouseConfig,palettes,familles,onSelectPalette}){
-const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const wc=getWarehouseConfigSafe(warehouseConfig);
 const normAllee=v=>String(v||"").replace(/^allee/i,"").toUpperCase();
 const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>(f._id||f.id)===pal.familleId);return f?f.couleur:null;};
 const renderAlleeSol=(alleeLabel,alleeCfg,color)=>{
@@ -862,9 +875,9 @@ return h("div",{},renderAlleeSol("A",wc.alleeA,"#3498db"),renderAlleeSol("B",wc.
 
 // ── VISUEL TRANSIT ────────────────────────────────────────────────────────────
 function TransitVisual({warehouseConfig,palettes,familles,onSelectPalette}){
-const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const wc=getWarehouseConfigSafe(warehouseConfig);
 const cases=Array.from({length:wc.transitCases||4},(_,i)=>i+1);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=findFamilleById(familles,pal.familleId);return f?f.couleur:null;};
 return h("div",{style:{background:"#fffbea",borderRadius:14,padding:"12px",border:"2px solid "+S.yellow,marginBottom:12}},
 h("div",{style:{fontSize:14,fontWeight:800,color:S.orange,marginBottom:10}},"⚡ Zone TRANSIT"),
 h("div",{style:{background:"#fff8e6",borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:11,color:S.orange}},"Palettes en attente de départ / arrivée"),
@@ -945,7 +958,7 @@ h("button",{onClick:()=>onSave(sel),style:BB},"Associer")
 function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}){
 const num=String(existingCount+1).padStart(4,"0");
 const palId="PAL-"+num;
-const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const wc=getWarehouseConfigSafe(warehouseConfig);
 const[items,setItems]=useState([{nom:"",qte:""}]);
 const[photos,setPhotos]=useState([]);
 const[notes,setNotes]=useState("");
@@ -1071,7 +1084,7 @@ const deletePalette=async id=>{if(!confirm("Supprimer cette palette ?"))return;a
 const saveFamille=async d=>{await fbAdd("familles",{...d,ts:Date.now()});setModal(null);showT("Famille "+d.id+" créée !");};
 const deleteFamille=async id=>{if(!confirm("Supprimer cette famille ?"))return;await fbDel("familles",id);showT("Famille supprimée");};
 
-const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const wc=getWarehouseConfigSafe(warehouseConfig);
 const totalRack=(wc.alleeA?.racks||3)*(wc.alleeA?.etages||3)*(wc.alleeA?.positions||["G","M","D"]).length+(wc.alleeB?.racks||3)*(wc.alleeB?.etages||3)*(wc.alleeB?.positions||["G","M","D"]).length;
 const totalSOL=(wc.alleeA?.casesSOL||5)+(wc.alleeB?.casesSOL||5);
 const totalTransit=wc.transitCases||4;
@@ -1081,11 +1094,11 @@ const pct=totalEmp>0?Math.round(palettes.length/totalEmp*100):0;
 const filtered=palettes.filter(p=>{
 if(!search)return true;
 const q=search.toLowerCase();
-const fam=familles.find(f=>f._id===p.familleId);
+const fam=findFamilleById(familles,p.familleId);
 return p.id?.toLowerCase().includes(q)||(p.items||[]).some(i=>i.nom?.toLowerCase().includes(q))||(p.provenance||"").toLowerCase().includes(q)||(p.destination||"").toLowerCase().includes(q)||(p.createdBy||"").toLowerCase().includes(q)||(fam&&(fam.id.toLowerCase().includes(q)||fam.nom.toLowerCase().includes(q)));
 });
 
-const getFamille=pal=>familles.find(f=>f._id===pal.familleId);
+const getFamille=pal=>findFamilleById(familles,pal.familleId);
 const getEmpLabel=pal=>{
 if(pal.emplacementTransit)return"TRANSIT-"+String(pal.transitCase).padStart(2,"0");
 if(pal.emplacementSOL)return"SOL-"+pal.solAllee+"-"+String(pal.solCase).padStart(2,"0");
