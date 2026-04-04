@@ -16,6 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f2f2f7;color:#1c1c1e;}
@@ -129,20 +130,6 @@ transitCases:4
 };
 const FAM_COLORS=['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#ff5722'];
 
-function getMergedWarehouseConfig(raw){
-const base={alleeA:{racks:3,etages:3,positions:["G","M","D"],casesSOL:5},alleeB:{racks:3,etages:3,positions:["G","M","D"],casesSOL:5},solA:{cases:5},solB:{cases:5},transitCases:4};
-const w=raw||{};
-return {
-  ...base,...w,
-  alleeA:{...base.alleeA,...(w.alleeA||{})},
-  alleeB:{...base.alleeB,...(w.alleeB||{})},
-  solA:{...base.solA,cases:(w.solA&&w.solA.cases)||w.alleeA?.casesSOL||base.solA.cases,...(w.solA||{})},
-  solB:{...base.solB,cases:(w.solB&&w.solB.cases)||w.alleeB?.casesSOL||base.solB.cases,...(w.solB||{})}
-};
-}
-function famMatchId(f){return (f&& (f._id||f.id))||"";}
-
-
 // ── UTILITAIRES ───────────────────────────────────────────────────────────────
 const {useState,useEffect,useRef,useMemo}=React;
 const h=React.createElement;
@@ -249,7 +236,7 @@ palettes.forEach((pal,ri)=>{
 if(y>H-20){addFooter();doc.addPage();pageNum++;addHeader();y=36;doc.setFillColor(rgb.r,rgb.g,rgb.b);doc.rect(8,y,W-16,8,'F');doc.setFontSize(6);doc.setFont('helvetica','bold');doc.setTextColor(255,255,255);cx=10;cols.forEach((c,i)=>{doc.text(c,cx,y+5.5);cx+=cws[i];});y+=9;}
 if(ri%2===0){doc.setFillColor(250,250,250);doc.rect(8,y,W-16,8,'F');}
 doc.setFontSize(6);doc.setFont('helvetica','normal');doc.setTextColor(30,30,30);
-const fam=familles.find(f=>famMatchId(f)===pal.familleId);
+const fam=familles.find(f=>f.id===pal.familleId);
 const contenu=(pal.items||[]).slice(0,2).map(i=>i.nom.substring(0,12)+(i.qte?'x'+i.qte:'')).join(', ')+((pal.items||[]).length>2?'...':'');
 const emp=pal.emplacementTransit?('TRANSIT-'+pal.transitCase):pal.emplacementSOL?('SOL-'+pal.solAllee+'-'+String(pal.solCase).padStart(2,'0')):(pal.allee&&pal.rack?pal.allee+'-R'+pal.rack+'-E'+(pal.etagere||'?')+'-'+(pal.position||'?'):'—');
 const row=[pal.id,fam?fam.id:'—',contenu,pal.provenance||'—',pal.destination||'—',emp,(pal.createdAt||'').split(' ')[0]||'—',pal.createdBy||'—'];
@@ -267,7 +254,7 @@ addFooter();doc.save('LuxAirport_Stock*'+new Date().toISOString().slice(0,10)+'.
 function exportStockCSV(palettes,familles){
 const headers=['ID Palette','Famille ID','Famille Nom','Contenu','Quantités','Provenance','Destination','Emplacement Rack','Emplacement SOL','Emplacement Transit','Date Création','Créé par','Statut','Notes'];
 const rows=palettes.map(pal=>{
-const fam=familles.find(f=>famMatchId(f)===pal.familleId);
+const fam=familles.find(f=>f.id===pal.familleId);
 const contenu=(pal.items||[]).map(i=>i.nom).join(' | ');
 const qtes=(pal.items||[]).map(i=>i.qte||'').join(' | ');
 const empRack=pal.allee&&pal.rack?pal.allee+'-R'+pal.rack+'-E'+(pal.etagere||'?')+'-'+(pal.position||'?'):'';
@@ -332,8 +319,8 @@ function CamScanner({onDetect}){
 const vr=useRef(null);const cr=useRef(null);const sr=useRef(null);const raf=useRef(null);
 const[manual,setManual]=useState('');const[err,setErr]=useState('');const[ok,setOk]=useState('');
 useEffect(()=>{navigator.mediaDevices?.getUserMedia({video:{facingMode:'environment'}}).then(s=>{sr.current=s;if(vr.current){vr.current.srcObject=s;vr.current.play();vr.current.onloadedmetadata=tick;}}).catch(()=>setErr('Caméra non disponible'));return()=>{cancelAnimationFrame(raf.current);sr.current?.getTracks().forEach(t=>t.stop());};},[]);
-const tick=()=>{const v=vr.current;const c=cr.current;if(!v||!c||v.readyState<2){raf.current=requestAnimationFrame(tick);return;}const ctx=c.getContext('2d',{willReadFrequently:true});c.width=v.videoWidth;c.height=v.videoHeight;ctx.drawImage(v,0,0,c.width,c.height);const code=window.jsQR&&window.jsQR(ctx.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'dontInvert'});if(code){setOk(code.data);cancelAnimationFrame(raf.current);sr.current?.getTracks().forEach(t=>t.stop());return;}raf.current=requestAnimationFrame(tick);};
-return h('div',{},h('div',{style:{position:'relative',background:'#000',borderRadius:14,overflow:'hidden',marginBottom:12,height:200}},h('video',{ref:vr,style:{width:'100%',height:'100%',objectFit:'cover'},playsInline:true,muted:true}),h('canvas',{ref:cr,style:{display:'none'}}),!ok&&!err&&h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}},h('div',{style:{width:160,height:160,border:'3px solid '+S.red,borderRadius:12,boxShadow:'0 0 0 9999px rgba(0,0,0,.5)'}}),h('div',{style:{position:'absolute',bottom:12,color:'#fff',fontSize:11,fontWeight:600}},'Pointez vers le QR code')),ok&&h('div',{style:{position:'absolute',inset:0,background:'rgba(0,0,0,.78)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:10,padding:12}},h('div',{style:{fontSize:36}},'✅'),h('div',{style:{color:S.white,fontWeight:800,fontSize:15,textAlign:"center"}},ok),h('button',{onClick:()=>onDetect(ok),style:{background:S.green,color:S.white,border:"none",borderRadius:12,padding:"10px 16px",fontWeight:800,cursor:"pointer"}},'Ouvrir le contenu')),err&&h('div',{style:{position:'absolute',inset:0,background:'#111',display:'flex',alignItems:'center',justifyContent:'center',color:S.white,fontSize:12,padding:16,textAlign:'center'}},err)),h('div',{style:{display:'flex',gap:8}},h('input',{value:manual,onChange:e=>setManual(e.target.value.toUpperCase()),placeholder:"Saisissez l'ID manuellement...",style:{flex:1,padding:'11px 13px',border:'1.5px solid '+S.border,borderRadius:12,fontSize:14,outline:'none',textTransform:'uppercase'},onKeyDown:e=>e.key==='Enter'&&manual&&onDetect(manual)}),h('button',{onClick:()=>manual&&onDetect(manual),style:{background:S.red,color:S.white,border:'none',borderRadius:12,padding:'0 16px',fontWeight:700,cursor:'pointer',fontSize:14}},'OK')));}
+const tick=()=>{const v=vr.current;const c=cr.current;if(!v||!c||v.readyState<2){raf.current=requestAnimationFrame(tick);return;}const ctx=c.getContext('2d',{willReadFrequently:true});c.width=v.videoWidth;c.height=v.videoHeight;ctx.drawImage(v,0,0,c.width,c.height);const code=window.jsQR&&window.jsQR(ctx.getImageData(0,0,c.width,c.height).data,c.width,c.height,{inversionAttempts:'dontInvert'});if(code){setOk(code.data);cancelAnimationFrame(raf.current);sr.current?.getTracks().forEach(t=>t.stop());setTimeout(()=>onDetect(code.data),400);return;}raf.current=requestAnimationFrame(tick);};
+return h('div',{},h('div',{style:{position:'relative',background:'#000',borderRadius:14,overflow:'hidden',marginBottom:12,height:200}},h('video',{ref:vr,style:{width:'100%',height:'100%',objectFit:'cover'},playsInline:true,muted:true}),h('canvas',{ref:cr,style:{display:'none'}}),!ok&&!err&&h('div',{style:{position:'absolute',inset:0,display:'flex',alignItems:'center',justifyContent:'center',pointerEvents:'none'}},h('div',{style:{width:160,height:160,border:'3px solid '+S.red,borderRadius:12,boxShadow:'0 0 0 9999px rgba(0,0,0,.5)'}}),h('div',{style:{position:'absolute',bottom:12,color:'#fff',fontSize:11,fontWeight:600}},'Pointez vers le QR code')),ok&&h('div',{style:{position:'absolute',inset:0,background:'rgba(52,199,89,.9)',display:'flex',alignItems:'center',justifyContent:'center',flexDirection:'column',gap:8}},h('div',{style:{fontSize:36}},'✅'),h('div',{style:{color:S.white,fontWeight:800,fontSize:15}},ok)),err&&h('div',{style:{position:'absolute',inset:0,background:'#111',display:'flex',alignItems:'center',justifyContent:'center',color:S.white,fontSize:12,padding:16,textAlign:'center'}},err)),h('div',{style:{display:'flex',gap:8}},h('input',{value:manual,onChange:e=>setManual(e.target.value.toUpperCase()),placeholder:"Saisissez l'ID manuellement...",style:{flex:1,padding:'11px 13px',border:'1.5px solid '+S.border,borderRadius:12,fontSize:14,outline:'none',textTransform:'uppercase'},onKeyDown:e=>e.key==='Enter'&&manual&&onDetect(manual)}),h('button',{onClick:()=>manual&&onDetect(manual),style:{background:S.red,color:S.white,border:'none',borderRadius:12,padding:'0 16px',fontWeight:700,cursor:'pointer',fontSize:14}},'OK')));}
 
 function PhotoPicker({photos,onChange,labelText='Ajouter photos'}){
   const addFiles=files=>{Array.from(files||[]).forEach(f=>{const r=new FileReader();r.onload=ev=>onChange([...(photos||[]),ev.target.result]);r.readAsDataURL(f);});};
@@ -377,7 +364,7 @@ const[err,setErr]=useState(false);
 const[showAdmin,setShowAdmin]=useState(false);
 const bg=cfg.couleur||S.red;
 const users=(userAccounts||[]);
-const admins=(userAccounts||[]).filter(a=>a.role==="admin");
+const admins=[];
 const pressPin=d=>{
 if(pin.length>=4)return;
 const np=pin+d;setPin(np);
@@ -397,19 +384,12 @@ h("p",{style:{color:"rgba(255,255,255,.5)",fontSize:12}},"Gestion Airside")
 h("div",{className:"glass",style:{borderRadius:24,padding:22,width:"100%",maxWidth:400,boxShadow:"0 8px 40px rgba(0,0,0,.3)"}},
 h("p",{style:{color:"rgba(255,255,255,.8)",fontWeight:700,fontSize:15,marginBottom:4,textAlign:"center"}},"Qui êtes-vous ?"),
 h("p",{style:{color:"rgba(255,255,255,.4)",fontSize:11,marginBottom:18,textAlign:"center"}},"Sélectionnez votre compte"),
-users.length===0?h("p",{style:{color:"rgba(255,255,255,.4)",textAlign:"center",padding:"20px 0",fontSize:13}},"Aucun compte — accès admin requis")
-:h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
+users.length===0?h("p",{style:{color:"rgba(255,255,255,.4)",textAlign:"center",padding:"20px 0",fontSize:13}},"Aucun compte")
+:h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}},
 users.map((acc,i)=>h("div",{key:i,className:"user-card",onClick:()=>{setSel(acc.name);setSelAcc(acc);setStep("pin");setPin("");},style:{padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:8}},
 h("div",{style:{width:48,height:48,borderRadius:"50%",background:"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.08))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,border:"1px solid rgba(255,255,255,.2)"}},acc.avatar||"👤"),
 h("span",{style:{color:"#fff",fontSize:11,fontWeight:700,textAlign:"center",lineHeight:1.3}},acc.name)
 ))
-),
-h("div",{style:{borderTop:"1px solid rgba(255,255,255,.1)",paddingTop:12,textAlign:"center"}},
-h("button",{onClick:()=>setShowAdmin(p=>!p),style:{background:"none",border:"none",color:"rgba(255,255,255,.22)",fontSize:10,cursor:"pointer",textDecoration:"underline"}},"Accès administrateur"),
-showAdmin&&h("div",{style:{marginTop:10,display:"flex",flexDirection:"column",gap:6}},
-admins.map((acc,i)=>h("button",{key:i,className:"glass",onClick:()=>{setSel(acc.name);setSelAcc(acc);setStep("pin");setPin("");},style:{width:"100%",padding:"10px",borderRadius:12,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",border:"none"}},acc.avatar||"🔐"," "+acc.name)),
-h("button",{className:"glass",onClick:()=>{setSel("Admin Système");setSelAcc(null);setStep("pin");setPin("");},style:{width:"100%",padding:"10px",borderRadius:12,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",border:"none"}},"🔐 Admin système")
-)
 )
 )
 );
@@ -549,7 +529,7 @@ return h(Modal,{onClose},
 h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:4}},"Import CSV/Excel"),
 h("p",{style:{fontSize:12,color:S.gray,marginBottom:8}},"Format: Numéro;Denomination;Quantite;Reference;Fournisseur;Emplacement"+(cat==="vets"?";Taille;Type":"")),
 h("textarea",{value:txt,onChange:e=>setTxt(e.target.value),placeholder:"Collez le contenu CSV ici...",style:{...IS,minHeight:120,resize:"vertical",fontSize:11,fontFamily:"monospace"}}),
-h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"12px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:14,marginTop:8}},"📂 Choisir un fichier .csv",h("input",{type:"file",accept:".csv,.txt",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setTxt(ev.target.result);r.readAsText(f,'utf-8');}})),
+h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"12px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:14,marginTop:8}},"📂 Choisir un fichier .csv / .xlsx",h("input",{type:"file",accept:".csv,.txt,.xlsx,.xls",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(!f)return;const name=(f.name||"").toLowerCase();if(name.endsWith(".xlsx")||name.endsWith(".xls")){const r=new FileReader();r.onload=ev=>{try{const wb=window.XLSX.read(ev.target.result,{type:"array"});const ws=wb.Sheets[wb.SheetNames[0]];setTxt(window.XLSX.utils.sheet_to_csv(ws,{FS:";"}));}catch(err){alert("Fichier Excel invalide");}};r.readAsArrayBuffer(f);}else{const r=new FileReader();r.onload=ev=>setTxt(ev.target.result);r.readAsText(f,"utf-8");}}})),
 h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!txt.trim()){alert("Aucune donnée");return;}onImport(txt,cat);},style:BB},"Importer"))
 );
 }
@@ -883,7 +863,7 @@ return h(Modal,{onClose},FL("Avatar"),h("div",{style:{display:"flex",gap:6,flexW
 
 // ── CONFIGURATION ENTREPÔT ────────────────────────────────────────────────────
 function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
-const wc=getMergedWarehouseConfig(warehouseConfig);
+const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const[alleeA,setAlleeA]=useState({...( wc.alleeA||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
 const[alleeB,setAlleeB]=useState({...(wc.alleeB||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
 const[transitCases,setTransitCases]=useState(wc.transitCases||4);
@@ -946,23 +926,15 @@ h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12,color:S.orange}},"⚡
 h("div",{style:{background:"#fff8e6",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:S.orange}},"Zone séparée — palettes en attente de départ/arrivée"),
 h(SliderRow,{label:"Nombre de cases transit",val:transitCases,set:setTransitCases,min:1,max:20})
 ),
-h("div",{style:{background:"#fff",borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,.08)",borderLeft:"4px solid "+S.green}},
-h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10,color:S.green}},"🟩 Sol séparé du rack"),
-h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
-  h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:8}},"Cases sol A"),h("input",{type:"number",value:alleeA.casesSOL||wc.solA?.cases||5,onChange:e=>setAlleeA(c=>({...c,casesSOL:Math.max(1,Number(e.target.value||1))})),style:IS})),
-  h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:8}},"Cases sol B"),h("input",{type:"number",value:alleeB.casesSOL||wc.solB?.cases||5,onChange:e=>setAlleeB(c=>({...c,casesSOL:Math.max(1,Number(e.target.value||1))})),style:IS}))
-),
-h("div",{style:{fontSize:11,color:S.gray,marginTop:8}},"Les cases au sol sont gérées séparément des racks pour plus de souplesse.")
-),
-h("button",{onClick:()=>onSave({alleeA:{...alleeA,casesSOL:undefined},alleeB:{...alleeB,casesSOL:undefined},solA:{cases:alleeA.casesSOL||wc.solA?.cases||5},solB:{cases:alleeB.casesSOL||wc.solB?.cases||5},transitCases}),style:BP},"💾 Sauvegarder la configuration")
+h("button",{onClick:()=>onSave({alleeA,alleeB,transitCases}),style:BP},"💾 Sauvegarder la configuration")
 );
 }
 
 // ── VISUEL RACK ───────────────────────────────────────────────────────────────
 function RackVisual({warehouseConfig,palettes,familles,onSelectPalette}){
-const wc=getMergedWarehouseConfig(warehouseConfig);
+const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const getPal=(allee,rack,etage,pos)=>palettes.find(p=>p.allee===allee&&String(p.rack)===String(rack)&&String(p.etagere)===String(etage)&&p.position===pos);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>famMatchId(f)===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f.id===pal.familleId);return f?f.couleur:null;};
 const renderAllee=(alleeLabel,alleeCfg,color)=>{
 if(!alleeCfg)return null;
 const racks=Array.from({length:alleeCfg.racks||3},(_,i)=>i+1);
@@ -1012,8 +984,8 @@ renderAllee("B",wc.alleeB,"#e74c3c")
 
 // ── VISUEL SOL ────────────────────────────────────────────────────────────────
 function SolVisual({warehouseConfig,palettes,familles,onSelectPalette}){
-const wc=getMergedWarehouseConfig(warehouseConfig);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>famMatchId(f)===pal.familleId);return f?f.couleur:null;};
+const wc=warehouseConfig||WAREHOUSE_DEFAULT;
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f.id===pal.familleId);return f?f.couleur:null;};
 const renderAlleeSol=(alleeLabel,alleeCfg,color)=>{
 if(!alleeCfg)return null;
 const cases=Array.from({length:alleeCfg.casesSOL||5},(_,i)=>i+1);
@@ -1034,14 +1006,14 @@ pal&&h("div",{style:{fontSize:6,color:"rgba(255,255,255,.8)",marginTop:2,textAli
 )
 );
 };
-return h("div",{},renderAlleeSol("A",{casesSOL:wc.solA?.cases||wc.alleeA?.casesSOL||5},"#3498db"),renderAlleeSol("B",{casesSOL:wc.solB?.cases||wc.alleeB?.casesSOL||5},"#e74c3c"));
+return h("div",{},renderAlleeSol("A",wc.alleeA,"#3498db"),renderAlleeSol("B",wc.alleeB,"#e74c3c"));
 }
 
 // ── VISUEL TRANSIT ────────────────────────────────────────────────────────────
 function TransitVisual({warehouseConfig,palettes,familles,onSelectPalette}){
-const wc=getMergedWarehouseConfig(warehouseConfig);
+const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const cases=Array.from({length:wc.transitCases||4},(_,i)=>i+1);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>famMatchId(f)===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId);return f?f.couleur:null;};
 return h("div",{style:{background:"#fffbea",borderRadius:14,padding:"12px",border:"2px solid "+S.yellow,marginBottom:12}},
 h("div",{style:{fontSize:14,fontWeight:800,color:S.orange,marginBottom:10}},"⚡ Zone TRANSIT"),
 h("div",{style:{background:"#fff8e6",borderRadius:8,padding:"6px 10px",marginBottom:10,fontSize:11,color:S.orange}},"Palettes en attente de départ / arrivée"),
@@ -1119,17 +1091,15 @@ h("button",{onClick:()=>onSave(sel),style:BB},"Associer")
 }
 
 // ── MODAL PALETTE ─────────────────────────────────────────────────────────────
-function PaletteModal({existingCount,warehouseConfig,currentUser,cfg,familles,onCreateFam,onSave,onClose}){
+function PaletteModal({existingCount,warehouseConfig,currentUser,cfg,onSave,onClose}){
 const num=String(existingCount+1).padStart(4,"0");
 const palId="PAL-"+num;
-const wc=getMergedWarehouseConfig(warehouseConfig);
+const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const[items,setItems]=useState([{nom:"",qte:""}]);
 const[photos,setPhotos]=useState([]);
 const[notes,setNotes]=useState("");
 const[provenance,setProvenance]=useState("");
 const[destination,setDestination]=useState("");
-const[familleId,setFamilleId]=useState("");
-const[newFamille,setNewFamille]=useState("");
 const[createdBy,setCreatedBy]=useState(currentUser?.name||"");
 const[empType,setEmpType]=useState("rack");
 const[allee,setAllee]=useState("");const[rack,setRack]=useState("");const[etagere,setEtagere]=useState("");const[position,setPosition]=useState("");
@@ -1139,8 +1109,8 @@ const[transitCase,setTransitCase]=useState(1);
 const racksOpts=allee?Array.from({length:(allee==="A"?wc.alleeA:wc.alleeB)?.racks||3},(_,i)=>String(i+1)):[];
 const etagesOpts=rack?Array.from({length:(allee==="A"?wc.alleeA:wc.alleeB)?.etages||3},(_,i)=>String(i+1)):[];
 const posOpts=allee?((allee==="A"?wc.alleeA:wc.alleeB)?.positions||["G","M","D"]):[];
-const solCasesA=Array.from({length:wc.solA?.cases||5},(_,i)=>i+1);
-const solCasesB=Array.from({length:wc.solB?.cases||5},(_,i)=>i+1);
+const solCasesA=Array.from({length:wc.alleeA?.casesSOL||5},(_,i)=>i+1);
+const solCasesB=Array.from({length:wc.alleeB?.casesSOL||5},(_,i)=>i+1);
 const transitCases=Array.from({length:wc.transitCases||4},(_,i)=>i+1);
 
 const addItem=()=>setItems(p=>[...p,{nom:"",qte:""}]);
@@ -1160,25 +1130,8 @@ h("div",{style:{fontSize:10,fontWeight:700,opacity:.7,textTransform:"uppercase",
 h("div",{style:{fontSize:28,fontWeight:900,letterSpacing:2}},palId)
 ),
 FL("Créé par"),h("input",{value:createdBy,onChange:e=>setCreatedBy(e.target.value),style:IS}),
-FL("Famille",true),
-h("select",{value:familleId,onChange:e=>setFamilleId(e.target.value),style:SS},
-  h("option",{value:""},"– Sélectionner –"),
-  ...((familles||[]).map(f=>h("option",{key:famMatchId(f),value:famMatchId(f)},(f.nom||famMatchId(f)))))
-),
-h("div",{style:{display:"flex",gap:8,marginTop:8,marginBottom:2}},
-  h("input",{value:newFamille,onChange:e=>setNewFamille(e.target.value),placeholder:"Nouvelle famille",style:{...IS,flex:1}}),
-  h("button",{onClick:async()=>{const nom=newFamille.trim();if(!nom||!onCreateFam)return;const id="FAM-"+Date.now();const couleur=FAM_COLORS[Math.floor(Math.random()*FAM_COLORS.length)];await onCreateFam({_id:id,id,nom,couleur});setFamilleId(id);setNewFamille("");},style:{...BB,width:"auto",padding:"0 14px"}},"+")
-),
-FL("Provenance"),
-h("select",{value:provenance,onChange:e=>setProvenance(e.target.value),style:SS},
-  h("option",{value:""},"– Sélectionner –"),
-  ...((cfg?.provenanceOptions||[]).map(v=>h("option",{key:v,value:v},v)))
-),
-FL("Destination"),
-h("select",{value:destination,onChange:e=>setDestination(e.target.value),style:SS},
-  h("option",{value:""},"– Sélectionner –"),
-  ...((cfg?.destinationOptions||[]).map(v=>h("option",{key:v,value:v},v)))
-),
+FL("Provenance"),h("select",{value:provenance,onChange:e=>setProvenance(e.target.value),style:SS},h("option",{value:""},"Sélectionner..."),...((cfg?.warehouseOrigins||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).map(v=>h("option",{key:v,value:v},v)))),
+FL("Destination"),h("select",{value:destination,onChange:e=>setDestination(e.target.value),style:SS},h("option",{value:""},"Sélectionner..."),...((cfg?.warehouseDestinations||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).map(v=>h("option",{key:v,value:v},v)))),
 FL("Notes",true),h("textarea",{value:notes,onChange:e=>setNotes(e.target.value),placeholder:"Observations, informations complémentaires...",style:{...IS,minHeight:50,resize:"vertical"}}),
 FL("Contenu *"),
 items.map((item,i)=>h("div",{key:i,style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}},
@@ -1234,7 +1187,7 @@ h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:16
 h("button",{onClick:onClose,style:BS},"Annuler"),
 h("button",{onClick:()=>{
 if(!items.filter(x=>x.nom).length){alert("Ajoutez au moins un article");return;}
-const data={id:palId,items:items.filter(x=>x.nom),photos,notes,provenance,destination,familleId,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock"};
+const data={id:palId,items:items.filter(x=>x.nom),photos,notes,provenance,destination,createdBy,createdAt:new Date().toLocaleString("fr-FR"),statut:"En stock"};
 if(empType==="rack"){Object.assign(data,{allee,rack,etagere,position,emplacementSOL:false,emplacementTransit:false});}
 else if(empType==="sol"){Object.assign(data,{emplacementSOL:true,solAllee,solCase,emplacementTransit:false,allee:"",rack:"",etagere:"",position:""});}
 else if(empType==="transit"){Object.assign(data,{emplacementTransit:true,transitCase,emplacementSOL:false,allee:"",rack:"",etagere:"",position:""});}
@@ -1248,6 +1201,8 @@ onSave(data);
 // ── PAGE ENTREPÔT ─────────────────────────────────────────────────────────────
 function EntrepotPage({isAdmin,showT,cfg,warehouseConfig,currentUser}){
 const[palettes,setPalettes]=useState([]);
+const[originsTxt,setOriginsTxt]=useState((cfg?.warehouseOrigins||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
+const[destsTxt,setDestsTxt]=useState((cfg?.warehouseDestinations||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
 const[familles,setFamilles]=useState([]);
 const[search,setSearch]=useState("");
 const[view,setView]=useState("palettes");
@@ -1266,8 +1221,9 @@ const updatePalette=async(id,d)=>{await db.collection("palettes").doc(id).set(d,
 const deletePalette=async id=>{if(!confirm("Supprimer cette palette ?"))return;await fbDel("palettes",id);setSelPal(null);showT("Supprimée");};
 const saveFamille=async d=>{await fbAdd("familles",{...d,ts:Date.now()});setModal(null);showT("Famille "+d.id+" créée !");};
 const deleteFamille=async id=>{if(!confirm("Supprimer cette famille ?"))return;await fbDel("familles",id);showT("Famille supprimée");};
+const saveFlows=async()=>{const warehouseOrigins=originsTxt.split("\n").map(s=>s.trim()).filter(Boolean);const warehouseDestinations=destsTxt.split("\n").map(s=>s.trim()).filter(Boolean);await db.collection("params").doc("config").set({cfg:{...(cfg||{}),warehouseOrigins,warehouseDestinations}},{merge:true});showT("Provenances / destinations enregistrées");};
 
-const wc=getMergedWarehouseConfig(warehouseConfig);
+const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const totalRack=(wc.alleeA?.racks||3)*(wc.alleeA?.etages||3)*(wc.alleeA?.positions||["G","M","D"]).length+(wc.alleeB?.racks||3)*(wc.alleeB?.etages||3)*(wc.alleeB?.positions||["G","M","D"]).length;
 const totalSOL=(wc.alleeA?.casesSOL||5)+(wc.alleeB?.casesSOL||5);
 const totalTransit=wc.transitCases||4;
@@ -1348,8 +1304,8 @@ zoomImg&&h("div",{onClick:()=>setZoomImg(null),style:{position:"fixed",inset:0,b
 modal&&h("div",{},
 modal.t==="qr"&&h(Modal,{onClose:()=>setModal(null)},h("div",{style:{textAlign:"center"}},h(QRCodeDisplay,{text:modal.pal?.id,size:220,label:modal.pal?.id}),h("button",{onClick:()=>generatePalettePDF(modal.pal,cfg,getFamille(modal.pal)),style:{...BP,marginBottom:8,marginTop:14}},"Générer Fiche PDF A4"),h("button",{onClick:()=>setModal(null),style:BS},"Fermer"))),
 modal.t==="assocFam"&&h(AssocierFamilleModal,{palette:modal.pal,familles,onSave:async famId=>{await db.collection("palettes").doc(modal.pal._id).set({familleId:famId||null},{merge:true});setModal(null);showT("Famille mise à jour !");},onClose:()=>setModal(null)}),
-modal.t==="editEmp"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,familles,onCreateFam:saveFamille,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
-modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,familles,onCreateFam:saveFamille,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)})
+modal.t==="editEmp"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
+modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)})
 )
 );
 }
@@ -1369,6 +1325,14 @@ h("button",{key:v,onClick:()=>setView(v),style:{flex:"none",padding:"9px 12px",b
 h("div",{style:{display:"flex",gap:8,marginBottom:12}},
 h("button",{onClick:()=>exportStockPDF(palettes,familles,cfg),style:{flex:1,padding:"10px",borderRadius:12,background:"#e74c3c",color:"#fff",border:"none",fontWeight:700,fontSize:12,cursor:"pointer"}},"📄 PDF Stock"),
 h("button",{onClick:()=>exportStockCSV(palettes,familles),style:{flex:1,padding:"10px",borderRadius:12,background:"#27ae60",color:"#fff",border:"none",fontWeight:700,fontSize:12,cursor:"pointer"}},"📊 Excel/CSV")
+),
+isAdmin&&view==="palettes"&&h("div",{style:{background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)"}},
+  h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10}},"Réglages palettes — Provenances / Destinations"),
+  h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+    h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},"Provenances"),h("textarea",{value:originsTxt,onChange:e=>setOriginsTxt(e.target.value),style:{...IS,minHeight:120,resize:"vertical"},placeholder:"Une provenance par ligne"})),
+    h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},"Destinations"),h("textarea",{value:destsTxt,onChange:e=>setDestsTxt(e.target.value),style:{...IS,minHeight:120,resize:"vertical"},placeholder:"Une destination par ligne"}))
+  ),
+  h("button",{onClick:saveFlows,style:{...BB,marginTop:10}},"Enregistrer")
 ),
 h("div",{style:{display:"flex",gap:8,marginBottom:12}},
 h("div",{style:{position:"relative",flex:1}},
@@ -1423,8 +1387,8 @@ h("button",{onClick:()=>deleteFamille(fam._id),style:{background:"#fff1f0",color
 })
 ),
 modal&&h("div",{},
-modal.t==="new"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,familles,onCreateFam:saveFamille,onSave:savePalette,onClose:()=>setModal(null)}),
-modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,familles,onCreateFam:saveFamille,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
+modal.t==="new"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:savePalette,onClose:()=>setModal(null)}),
+modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
 modal.t==="newFam"&&h(FamilleModal,{existingCount:familles.length,familles,onSave:saveFamille,onClose:()=>setModal(null)}),
 modal.t==="editFam"&&h(FamilleModal,{existingCount:familles.length,familles,existingFam:modal.fam,onSave:async d=>{await db.collection("familles").doc(modal.fam._id).set(d,{merge:true});setModal(null);showT("Famille modifiée !");},onClose:()=>setModal(null)}),
 modal.t==="assocFam"&&h(AssocierFamilleModal,{palette:modal.pal,familles,onSave:async famId=>{await db.collection("palettes").doc(modal.pal._id).set({familleId:famId||null},{merge:true});setModal(null);showT("Famille mise à jour !");},onClose:()=>setModal(null)}),
@@ -1601,24 +1565,6 @@ tab==="config"&&h("div",{},
   h("button",{onClick:()=>{if(pin.length!==4){showT("PIN doit avoir 4 chiffres");return;}if(pin!==pin2){showT("PIN ne correspondent pas");return;}onSaveAdmin(pin,emps);onSaveCfg({...cfg,...lCfg});},style:{...BP,marginTop:4}},"Sauvegarder tout")
 ),
 
-
-tab==="config"&&h("div",{},
-  h("div",{style:{background:"#fff",borderRadius:14,padding:"14px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)"}},
-    h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10}},"Messages équipe / Accueil"),
-    [0,1,2].map(i=>h("textarea",{key:i,value:(lCfg.teamMessages||["","",""])[i]||"",onChange:e=>{const msgs=[...((lCfg.teamMessages)||["","",""])];msgs[i]=e.target.value;setLCfg(c=>({...c,teamMessages:msgs}));},placeholder:"Message équipe "+(i+1),style:{...IS,minHeight:62,resize:"vertical",marginBottom:8}})),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8}},
-      h("div",{},FL("Provenances"),h("textarea",{value:(lCfg.provenanceOptions||[]).join("\n"),onChange:e=>setLCfg(c=>({...c,provenanceOptions:e.target.value.split(/\n+/).map(x=>x.trim()).filter(Boolean)})),style:{...IS,minHeight:110,resize:"vertical"}})),
-      h("div",{},FL("Destinations"),h("textarea",{value:(lCfg.destinationOptions||[]).join("\n"),onChange:e=>setLCfg(c=>({...c,destinationOptions:e.target.value.split(/\n+/).map(x=>x.trim()).filter(Boolean)})),style:{...IS,minHeight:110,resize:"vertical"}}))
-    ),
-    h("button",{onClick:()=>onSaveCfg(lCfg),style:{...BP,marginTop:10}},"Sauvegarder l'accueil")
-  ),
-  h("div",{style:{background:"#fff",borderRadius:14,padding:"14px",boxShadow:"0 1px 4px rgba(0,0,0,.08)"}},
-    h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10,color:S.danger}},"Inspection"),
-    h("div",{style:{fontSize:12,color:S.gray,marginBottom:10}},"Réinitialise les inspections et conserve l'historique dans les rapports."),
-    h("button",{onClick:async()=>{if(!confirm('Réinitialiser toutes les inspections ?'))return; const snap=await db.collection('inspections').get(); await Promise.all(snap.docs.map(d=>d.ref.delete())); showT('Inspections réinitialisées');},style:{background:'#fff1f0',color:S.danger,border:'none',borderRadius:12,padding:'12px 14px',fontWeight:800,cursor:'pointer'}},"Réinitialiser l'inspection")
-  )
-),
-
 tab==="perso"&&h("div",{},
   h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration du menu"),
   h("div",{style:{background:S.white,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
@@ -1671,7 +1617,7 @@ const[vets,setVets]=useState(VET_DEFAULT);
 const[hist,setHist]=useState([]);
 const[employes,setEmployes]=useState(EMP_DEFAULT);
 const[adminPin,setAdminPin]=useState("0000");
-const[cfg,setCfg]=useState({nomSite:"LUX AIRPORT",sousTitre:"Gestion Airside",couleur:"#c8102e",emailResp:"responsable@luxairport.lu",logoUrl:"",coverUrl:"",provenanceOptions:["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"],destinationOptions:["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"],teamMessages:["","",""]});
+const[cfg,setCfg]=useState({nomSite:"LUX AIRPORT",sousTitre:"Gestion Airside",couleur:"#c8102e",emailResp:"responsable@luxairport.lu",logoUrl:"",coverUrl:""});
 const[maintenances,setMaintenances]=useState({});
 const[kits,setKits]=useState([]);
 const[modal,setModal]=useState(null);
@@ -1680,9 +1626,8 @@ const[darkMode,setDarkMode]=useState(()=>{const hh=new Date().getHours();return 
 const[menuOpen,setMenuOpen]=useState(false);
 const[currentUser,setCurrentUser]=useState(null);
 const[userAccounts,setUserAccounts]=useState([]);
-const[warehouseConfig,setWarehouseConfig]=useState(getMergedWarehouseConfig(WAREHOUSE_DEFAULT));
+const[warehouseConfig,setWarehouseConfig]=useState(WAREHOUSE_DEFAULT);
 const[toast,setToast]=useState("");
-const[reportHist,setReportHist]=useState([]);
 const[syncing,setSyncing]=useState(false);
 const[toolSearch,setToolSearch]=useState("");
 const[toolF,setToolF]=useState("tous");
@@ -1694,7 +1639,6 @@ const[navConfig,setNavConfig]=useState([
 {id:"emprunts",icon:"📦",label:"Emprunts",visible:true,order:1},
 {id:"inspection",icon:"🔧",label:"Inspection",visible:true,order:2},
 {id:"stocks",icon:"🧤",label:"Stocks",visible:true,order:3},
-{id:"kits",icon:"🧰",label:"Kits",visible:false,order:4,hidden:true},
 {id:"entrepot",icon:"🏭",label:"Entrepôt",visible:true,order:5},
 {id:"rapport",icon:"📊",label:"Rapport",visible:true,order:6},
 {id:"admin",icon:"🔐",label:"Admin",visible:false,order:7,hidden:true},
@@ -1702,8 +1646,6 @@ const[navConfig,setNavConfig]=useState([
 {id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:9},
 ]);
 
-
-useEffect(()=>{const u=db.collection("reportHist").orderBy("ts","desc").limit(300).onSnapshot(s=>setReportHist(s.docs.map(d=>({...d.data(),_id:d.id}))));return()=>u&&u();},[]);
 useEffect(()=>{
 const handleOnline=()=>setIsOnline(true);
 const handleOffline=()=>setIsOnline(false);
@@ -1722,9 +1664,9 @@ const p=parSnap.data();
 if(p.employes)setEmployes(p.employes);
 if(p.adminPin)setAdminPin(p.adminPin);
 if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));
-if(p.navConfig)setNavConfig(p.navConfig);
+if(p.navConfig)setNavConfig((p.navConfig||[]).filter(n=>n.id!=="kits"));
 if(p.userAccounts)setUserAccounts(p.userAccounts);
-if(p.warehouseConfig)setWarehouseConfig(getMergedWarehouseConfig(p.warehouseConfig));
+if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);
 }
 const load=async(fn)=>{try{return await Promise.race([fn(),new Promise(r=>setTimeout(()=>r(null),4000))]);}catch(e){return null;}};
 const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,toolsSnap,maintSnap,kitsSnap]=await Promise.all([
@@ -1779,7 +1721,8 @@ const c=cons.find(x=>n2(x.id)===id);if(c){setModal(null);setTimeout(()=>setModal
 const v=vets.find(x=>n2(x.id)===id);if(v){setModal(null);setTimeout(()=>setModal({t:"take",item:v,cat:"vets"}),200);return;}
 showT("ID non trouvé: "+raw);
 };
-const saveInsp=async(id,data)=>{setSyncing(true);await fbSet("inspections",id,{...data,date:now()});await fbAdd("reportHist",{type:"inspection",toolId:id,date:now(),etat:data.etat||"",tech:data.tech||currentUser?.name||"",commentaire:data.commentaire||""});setSyncing(false);setModal(null);showT("Inspection enregistrée!");};
+const saveInsp=async(id,data)=>{setSyncing(true);await fbSet("inspections",id,{...data,date:now()});await fbAdd("inspectionReports",{toolId:id,...data,date:now(),ts:Date.now()});setSyncing(false);setModal(null);showT("Inspection enregistrée!");};
+const resetInspections=async()=>{if(!confirm("Réinitialiser toutes les inspections ?"))return;setSyncing(true);const snap=await db.collection("inspections").get();for(const d of snap.docs){await d.ref.delete();}setSyncing(false);showT("Inspections réinitialisées");};
 const saveMaint=async(toolId,data)=>{setSyncing(true);await fbSet("maintenances",toolId,{...data,updatedAt:now()});setSyncing(false);setModal(null);showT("Maintenance mise à jour!");};
 const saveDepart=async data=>{
 setSyncing(true);
@@ -1859,7 +1802,7 @@ const stockList=(stockTab==="cons"?cons:vets).filter(i=>{const q=stockQ.toLowerC
 const empList=empF==="tous"?emprunts:empF==="encours"?emprunts.filter(e=>!e.retour):emprunts.filter(e=>e.retour);
 
 if(!ready)return h(Spinner,null);
-if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);if(user.role==="admin"){setIsAdmin(true);setPage("admin");}}});
+if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);setIsAdmin(user.role==="admin");setPage("accueil");}});
 
 return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
@@ -1886,6 +1829,14 @@ h("div",{style:{padding:"14px 14px 90px"}},
     outilsLongs.length>0&&h("div",{style:{background:"#e8f0fe",border:"1px solid #c7d7f9",borderRadius:12,padding:"12px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:S.blue}},"Outils sortis depuis +24h: "+outilsLongs.length),
     st.ma>0&&h("div",{style:{background:"#fff1f0",border:"1px solid #ffccc7",borderRadius:12,padding:"12px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:S.danger}},"Outils en mauvais état: "+st.ma),
     lowS.length>0&&h("div",{style:{background:"#fff8e6",border:"1px solid #ffe8a3",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:13,fontWeight:600,color:S.orange}},"Stock faible: "+lowS.length+" article(s)"),
+(cfg.teamMessage1||cfg.teamMessage2)&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr",gap:8,marginBottom:14}},
+  cfg.teamMessage1&&h("div",{style:{background:"#fff",borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,.07)",borderLeft:"4px solid "+S.red}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:4}},"Message équipe 1"),h("div",{style:{fontSize:13,fontWeight:600,color:S.dark,whiteSpace:"pre-wrap"}},cfg.teamMessage1)),
+  cfg.teamMessage2&&h("div",{style:{background:"#fff",borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 4px rgba(0,0,0,.07)",borderLeft:"4px solid "+S.blue}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:4}},"Message équipe 2"),h("div",{style:{fontSize:13,fontWeight:600,color:S.dark,whiteSpace:"pre-wrap"}},cfg.teamMessage2))
+),
+isAdmin&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}},
+  h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||""); if(v===null)return; await saveCfg({...cfg,teamMessage1:v});},style:{...BO,padding:"12px",fontSize:13}},"✏️ Message 1"),
+  h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||""); if(v===null)return; await saveCfg({...cfg,teamMessage2:v});},style:{...BO,padding:"12px",fontSize:13}},"✏️ Message 2")
+),
     h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},
       h("button",{onClick:()=>setPage("inspection"),style:BP},"🔧 Inspecter"),
       h("button",{onClick:()=>setModal({t:"dep"}),style:BB},"📤 Sortir outil")
@@ -1906,7 +1857,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="emprunts"&&h("div",{className:"fi"},
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour")),
+    h("div",{style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 1fr 1fr":"1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour"),isAdmin&&h("button",{onClick:()=>setPage("kits"),style:{...BG,padding:"12px",fontSize:13}},"🧰 Gérer kits")),
     h("div",{style:{display:"flex",gap:8,marginBottom:14,overflowX:"auto"}},[["tous","Tous"],["encours","En cours"],["retournes","Retournés"]].map(([f,l])=>h("button",{key:f,onClick:()=>setEmpF(f),style:{flex:"none",padding:"7px 14px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(empF===f?S.red:S.border),background:empF===f?S.red:S.white,color:empF===f?S.white:"#3c3c43",cursor:"pointer"}},l))),
     empList.length===0?h("div",{style:{padding:28,textAlign:"center",color:S.gray}},"Aucun emprunt")
     :[...empList].reverse().map(e=>{
@@ -1931,9 +1882,10 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="inspection"&&h("div",{className:"fi"},
+    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},h("button",{onClick:resetInspections,style:{...BO,flex:1,padding:"11px",fontSize:13}},"🔄 Réinitialiser inspections"),h("button",{onClick:()=>setPage("rapport"),style:{...BG,flex:1,padding:"11px",fontSize:13}},"📊 Rapports")),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
       h("div",{style:{position:"relative",flex:1}},h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:15}},"🔍"),h("input",{value:toolSearch,onChange:e=>setToolSearch(e.target.value),placeholder:"ID, nom, marque...",style:{width:"100%",padding:"11px 14px 11px 36px",border:"none",borderRadius:12,fontSize:14,background:S.white,outline:"none",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})),
-      
+      h("button",{onClick:()=>setModal({t:"scan"}),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 14px",fontSize:20,cursor:"pointer"}},"📷")
     ),
     isAdmin&&h("button",{onClick:()=>setModal({t:"addTool"}),style:{...BG,marginBottom:10,fontSize:13}},"+ Ajouter un outil"),
     h("div",{style:{display:"flex",gap:7,overflowX:"auto",marginBottom:14}},[["tous","Tous"],["attente","À faire"],["ok","OK"],["moyen","Moyen"],["mauvais","NOK"],["sorti","Sorti"],["rep","🔨 Rép."],["HILTI","HILTI"],["MAKITA","MAKITA"]].map(([f,l])=>h("button",{key:f,onClick:()=>setToolF(f),style:{flex:"none",padding:"7px 13px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(toolF===f?S.red:S.border),background:toolF===f?S.red:S.white,color:toolF===f?S.white:"#3c3c43",cursor:"pointer"}},l))),
@@ -1964,10 +1916,10 @@ h("div",{style:{padding:"14px 14px 90px"}},
   page==="stocks"&&h("div",{className:"fi"},
     h("div",{style:{display:"flex",gap:8,marginBottom:12}},
       h("div",{style:{position:"relative",flex:1}},h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:15}},"🔍"),h("input",{value:stockQ,onChange:e=>setStockQ(e.target.value),placeholder:"Rechercher...",style:{width:"100%",padding:"11px 14px 11px 36px",border:"none",borderRadius:12,fontSize:14,background:S.white,outline:"none",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})),
-      
+      h("button",{onClick:()=>setModal({t:"scan"}),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 14px",fontSize:20,cursor:"pointer"}},"📷")
     ),
     h("div",{style:{display:"flex",background:S.border,borderRadius:12,padding:3,marginBottom:14}},[["cons","📦 Consommables"],["vets","🧤 EPI/Vêtements"]].map(([tb,lb])=>h("button",{key:tb,onClick:()=>{setStockTab(tb);setStockQ("");},style:{flex:1,padding:"9px",borderRadius:10,border:"none",background:stockTab===tb?S.white:"transparent",color:stockTab===tb?S.dark:S.gray,fontWeight:stockTab===tb?700:500,fontSize:13,cursor:"pointer",boxShadow:stockTab===tb?"0 1px 3px rgba(0,0,0,.1)":"none"}},lb))),
-    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},h("button",{onClick:()=>setModal({t:"addCons",cat:stockTab}),style:{...BG,flex:1,padding:"10px",fontSize:13}},"+Ajouter"),h("button",{onClick:()=>setModal({t:"csv",cat:stockTab}),style:{...BO,flex:1,padding:"10px",fontSize:13}},"📥 Import CSV")),
+    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},h("button",{onClick:()=>setModal({t:"addCons",cat:stockTab}),style:{...BG,flex:1,padding:"10px",fontSize:13}},"+Ajouter"),h("button",{onClick:()=>setModal({t:"csv",cat:stockTab}),style:{...BO,flex:1,padding:"10px",fontSize:13}},"📥 Import Excel/CSV")),
     stockList.length===0?h("div",{style:{padding:28,textAlign:"center",color:S.gray}},"Aucun article")
     :stockList.map(item=>{
       const low=item.stock<=item.min;
@@ -1975,7 +1927,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
         h("div",{style:{padding:"13px 16px"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}},
             h("div",{style:{minWidth:0,flex:1}},h("div",{style:{fontSize:10,fontWeight:700,color:S.red}},item.id),h("div",{style:{fontSize:14,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},item.nom),item.taille&&h("div",{style:{fontSize:11,color:S.gray}},"T."+item.taille+" — "+item.fournisseur)),
-            h("div",{style:{textAlign:"right",flexShrink:0}},h("div",{style:{fontSize:24,fontWeight:800,color:low?S.danger:S.green,lineHeight:1}},item.stock),h("div",{style:{fontSize:10,color:S.gray}},"pcs"))
+            h("div",{style:{display:"flex",alignItems:"center",gap:10,flexShrink:0}},h(QRCodeDisplay,{text:item.id,size:48}),h("div",{style:{textAlign:"right"}},h("div",{style:{fontSize:24,fontWeight:800,color:low?S.danger:S.green,lineHeight:1}},item.stock),h("div",{style:{fontSize:10,color:S.gray}},"pcs")))
           ),
           low&&h("div",{style:{background:"#fff1f0",borderRadius:8,padding:"6px 10px",marginTop:8,fontSize:12,color:S.danger,fontWeight:600}},"Stock faible — min: "+item.min),
           h("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
@@ -1989,7 +1941,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
     })
   ),
 
-  false&&h("div",{className:"fi"},
+  page==="kits"&&h("div",{className:"fi"},
     h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},h("div",{style:{fontSize:17,fontWeight:800}},"Kits d'outils"),isAdmin&&h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}},"+Kit")),
     kits.length===0?h("div",{style:{background:S.white,borderRadius:14,padding:"40px 20px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:48,marginBottom:12}},"🧰"),h("div",{style:{fontSize:16,fontWeight:700,marginBottom:8}},"Aucun kit"),h("button",{onClick:()=>setModal({t:"kit"}),style:BP},"+Créer le premier kit"))
     :kits.map(kit=>{
@@ -2013,9 +1965,8 @@ h("div",{style:{padding:"14px 14px 90px"}},
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
         h("button",{onClick:()=>{const rows=tools.map(t=>{const ins=inspections[t.id]||{};const em=isEmp(t.id);return[t.id,t.nom.substring(0,18),t.marque||"",em?"Sorti":(ins.etat||"Attente"),ins.tech||""];});genPDF("insp",{stats:[{n:st.ok,l:"OK",c:"#34c759"},{n:st.mo,l:"Moyen",c:"#ff9500"},{n:st.ma,l:"NOK",c:"#ff3b30"},{n:st.so,l:"Sortis",c:"#007aff"}],headers:["ID","Outil","Marque","État","Tech"],rows},cfg);},style:{...BP,padding:"12px",fontSize:13}},"Inspections"),
         h("button",{onClick:()=>{genPDF("emp",{stats:[{n:emprunts.length,l:"Total",c:"#1c1c1e"},{n:emprunts.filter(e=>!e.retour).length,l:"En cours",c:"#007aff"},{n:emprunts.filter(e=>e.retour).length,l:"Retournés",c:"#34c759"},{n:sortiesJ,l:"Auj.",c:"#ff9500"}],headers:["Outil","Personne","Départ","Retour"],rows:emprunts.map(e=>[e.toolId,e.personne,e.dateDepart,e.retour||"En cours"])},cfg);},style:{...BB,padding:"12px",fontSize:13}},"Emprunts"),
-        h("button",{onClick:()=>{const allItems=[...cons,...vets];genPDF("stock",{stats:[{n:allItems.length,l:"Total",c:"#1c1c1e"},{n:allItems.filter(i=>i.stock>i.min).length,l:"OK",c:"#34c759"},{n:lowS.length,l:"Faible",c:"#ff3b30"},{n:allItems.reduce((a,i)=>a+i.stock,0),l:"Total pcs",c:"#007aff"}],headers:["ID","Article","Stock","Min","Statut"],rows:allItems.map(i=>[i.id,i.nom.substring(0,16),i.stock,i.min,i.stock<=i.min?"FAIBLE":"OK"])},cfg);},style:{...BS,padding:"12px",fontSize:13}},"Stocks"),
-        h("button",{onClick:()=>{genPDF("hist",{headers:["Article","Qté","Action","Personne","Date"],rows:hist.map(hh=>[hh.nom.substring(0,14),hh.qte,hh.action||"sortie",hh.personne,hh.date])},cfg);},style:{...BS,padding:"12px",fontSize:13,color:S.red}},"Historique"),
-        h("button",{onClick:()=>{genPDF("hist",{headers:["Type","ID","État","Tech","Date"],rows:reportHist.map(r=>[r.type||"rapport",r.toolId||"",r.etat||"",r.tech||"",r.date||""])},cfg);},style:{...BS,padding:"12px",fontSize:13}},"Hist. rapports")
+        h("button",{onClick:()=>{const allItems=[...cons,...vets];genPDF("stock",{stats:[{n:allItems.length,l:"Total",c:"#1c1c1e"},{n:allItems.filter(i=>i.stock>i.min).length,l:"OK",c:"#34c759"},{n:lowS.length,l:"Faible",c:"#ff3b30"},{n:allItems.reduce((a,i)=>a+i.stock,0),l:"Total pcs",c:"#007aff"}],headers:["ID","Article","Stock","Min","Statut"],rows:allItems.map(i=>[i.id,i.nom.substring(0,16),i.stock,i.min,i.stock<=i.min?"FAIBLE":"OK"])},cfg);},style:{...BG,padding:"12px",fontSize:13}},"Stocks"),
+        h("button",{onClick:()=>{genPDF("hist",{headers:["Article","Qté","Action","Personne","Date"],rows:hist.map(hh=>[hh.nom.substring(0,14),hh.qte,hh.action||"sortie",hh.personne,hh.date])},cfg);},style:{...BO,padding:"12px",fontSize:13}},"Historique")
       )
     )
   ),
