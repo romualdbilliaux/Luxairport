@@ -16,6 +16,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f2f2f7;color:#1c1c1e;}
@@ -128,17 +129,6 @@ alleeB:{racks:3,etages:3,positions:["G","M","D"],casesSOL:5},
 transitCases:4
 };
 const FAM_COLORS=['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#ff5722'];
-
-const P2_DEFAULT_CONFIG={
-  remorque:"Remorque gazole P2",
-  mats:[
-    {id:"MAT-1",nom:"Mât 1"},
-    {id:"MAT-2",nom:"Mât 2"},
-    {id:"MAT-3",nom:"Mât 3"},
-    {id:"MAT-4",nom:"Mât 4"}
-  ]
-};
-
 
 // ── UTILITAIRES ───────────────────────────────────────────────────────────────
 const {useState,useEffect,useRef,useMemo}=React;
@@ -373,8 +363,8 @@ const[pin,setPin]=useState("");
 const[err,setErr]=useState(false);
 const[showAdmin,setShowAdmin]=useState(false);
 const bg=cfg.couleur||S.red;
-const users=(userAccounts||[]).filter(a=>a.role!=="admin");
-const admins=(userAccounts||[]).filter(a=>a.role==="admin");
+const users=(userAccounts||[]);
+const admins=[];
 const pressPin=d=>{
 if(pin.length>=4)return;
 const np=pin+d;setPin(np);
@@ -394,19 +384,12 @@ h("p",{style:{color:"rgba(255,255,255,.5)",fontSize:12}},"Gestion Airside")
 h("div",{className:"glass",style:{borderRadius:24,padding:22,width:"100%",maxWidth:400,boxShadow:"0 8px 40px rgba(0,0,0,.3)"}},
 h("p",{style:{color:"rgba(255,255,255,.8)",fontWeight:700,fontSize:15,marginBottom:4,textAlign:"center"}},"Qui êtes-vous ?"),
 h("p",{style:{color:"rgba(255,255,255,.4)",fontSize:11,marginBottom:18,textAlign:"center"}},"Sélectionnez votre compte"),
-users.length===0?h("p",{style:{color:"rgba(255,255,255,.4)",textAlign:"center",padding:"20px 0",fontSize:13}},"Aucun compte — accès admin requis")
-:h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
+users.length===0?h("p",{style:{color:"rgba(255,255,255,.4)",textAlign:"center",padding:"20px 0",fontSize:13}},"Aucun compte")
+:h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}},
 users.map((acc,i)=>h("div",{key:i,className:"user-card",onClick:()=>{setSel(acc.name);setSelAcc(acc);setStep("pin");setPin("");},style:{padding:"14px 10px",display:"flex",flexDirection:"column",alignItems:"center",gap:8}},
 h("div",{style:{width:48,height:48,borderRadius:"50%",background:"linear-gradient(135deg,rgba(255,255,255,.25),rgba(255,255,255,.08))",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,border:"1px solid rgba(255,255,255,.2)"}},acc.avatar||"👤"),
 h("span",{style:{color:"#fff",fontSize:11,fontWeight:700,textAlign:"center",lineHeight:1.3}},acc.name)
 ))
-),
-h("div",{style:{borderTop:"1px solid rgba(255,255,255,.1)",paddingTop:12,textAlign:"center"}},
-h("button",{onClick:()=>setShowAdmin(p=>!p),style:{background:"none",border:"none",color:"rgba(255,255,255,.22)",fontSize:10,cursor:"pointer",textDecoration:"underline"}},"Accès administrateur"),
-showAdmin&&h("div",{style:{marginTop:10,display:"flex",flexDirection:"column",gap:6}},
-admins.map((acc,i)=>h("button",{key:i,className:"glass",onClick:()=>{setSel(acc.name);setSelAcc(acc);setStep("pin");setPin("");},style:{width:"100%",padding:"10px",borderRadius:12,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",border:"none"}},acc.avatar||"🔐"," "+acc.name)),
-h("button",{className:"glass",onClick:()=>{setSel("Admin Système");setSelAcc(null);setStep("pin");setPin("");},style:{width:"100%",padding:"10px",borderRadius:12,fontSize:12,fontWeight:600,color:"#fff",cursor:"pointer",border:"none"}},"🔐 Admin système")
-)
 )
 )
 );
@@ -546,7 +529,7 @@ return h(Modal,{onClose},
 h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:4}},"Import CSV/Excel"),
 h("p",{style:{fontSize:12,color:S.gray,marginBottom:8}},"Format: Numéro;Denomination;Quantite;Reference;Fournisseur;Emplacement"+(cat==="vets"?";Taille;Type":"")),
 h("textarea",{value:txt,onChange:e=>setTxt(e.target.value),placeholder:"Collez le contenu CSV ici...",style:{...IS,minHeight:120,resize:"vertical",fontSize:11,fontFamily:"monospace"}}),
-h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"12px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:14,marginTop:8}},"📂 Choisir un fichier .csv",h("input",{type:"file",accept:".csv,.txt",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setTxt(ev.target.result);r.readAsText(f,'utf-8');}})),
+h("label",{style:{display:"block",border:"2px dashed "+S.border,borderRadius:12,padding:"12px",textAlign:"center",cursor:"pointer",fontSize:13,color:S.gray,marginBottom:14,marginTop:8}},"📂 Choisir un fichier .csv / .xlsx",h("input",{type:"file",accept:".csv,.txt,.xlsx,.xls",style:{display:"none"},onChange:e=>{const f=e.target.files[0];if(!f)return;const name=(f.name||"").toLowerCase();if(name.endsWith(".xlsx")||name.endsWith(".xls")){const r=new FileReader();r.onload=ev=>{try{const wb=window.XLSX.read(ev.target.result,{type:"array"});const ws=wb.Sheets[wb.SheetNames[0]];setTxt(window.XLSX.utils.sheet_to_csv(ws,{FS:";"}));}catch(err){alert("Fichier Excel invalide");}};r.readAsArrayBuffer(f);}else{const r=new FileReader();r.onload=ev=>setTxt(ev.target.result);r.readAsText(f,"utf-8");}}})),
 h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!txt.trim()){alert("Aucune donnée");return;}onImport(txt,cat);},style:BB},"Importer"))
 );
 }
@@ -879,15 +862,19 @@ return h(Modal,{onClose},FL("Avatar"),h("div",{style:{display:"flex",gap:6,flexW
 // ══ PARTIE 3/4 — COLLER DIRECTEMENT APRÈS LA PARTIE 2 ══
 
 // ── CONFIGURATION ENTREPÔT ────────────────────────────────────────────────────
-function WarehouseConfigPanel({warehouseConfig,onSave,showT}){
+function WarehouseConfigPanel({warehouseConfig,onSave,showT,cfg,onSaveCfg}){
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const[alleeA,setAlleeA]=useState({...( wc.alleeA||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
 const[alleeB,setAlleeB]=useState({...(wc.alleeB||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
+const[solA,setSolA]=useState((wc.alleeA&&wc.alleeA.casesSOL)||5);
+const[solB,setSolB]=useState((wc.alleeB&&wc.alleeB.casesSOL)||5);
 const[transitCases,setTransitCases]=useState(wc.transitCases||4);
 const[newPosA,setNewPosA]=useState("");
 const[newPosB,setNewPosB]=useState("");
-const totalA=alleeA.racks*alleeA.etages*alleeA.positions.length+alleeA.casesSOL;
-const totalB=alleeB.racks*alleeB.etages*alleeB.positions.length+alleeB.casesSOL;
+const[originsTxt,setOriginsTxt]=useState((cfg?.warehouseOrigins||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
+const[destsTxt,setDestsTxt]=useState((cfg?.warehouseDestinations||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
+const totalA=alleeA.racks*alleeA.etages*alleeA.positions.length+solA;
+const totalB=alleeB.racks*alleeB.etages*alleeB.positions.length+solB;
 const total=totalA+totalB+transitCases;
 
 const SliderRow=({label,val,set,min=1,max=20})=>h("div",{style:{marginBottom:14}},
@@ -902,10 +889,9 @@ h("button",{onClick:()=>set(v=>Math.min(max,v+1)),style:{width:36,height:36,bord
 const AlleeCfg=({label,cfg,setCfg,newPos,setNewPos,color})=>{
 const addPos=()=>{const p=newPos.trim().toUpperCase();if(p&&!cfg.positions.includes(p)){setCfg(c=>({...c,positions:[...c.positions,p]}));setNewPos("");}};
 return h("div",{style:{background:"#fff",borderRadius:14,padding:"16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)",borderLeft:`4px solid ${color}`}},
-h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12,color}},"🏭 "+label),
+h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12,color}},"🏗️ "+label),
 h(SliderRow,{label:"Racks",val:cfg.racks,set:v=>setCfg(c=>({...c,racks:typeof v==="function"?v(c.racks):v})),min:1,max:20}),
 h(SliderRow,{label:"Étages par rack",val:cfg.etages,set:v=>setCfg(c=>({...c,etages:typeof v==="function"?v(c.etages):v})),min:1,max:10}),
-h(SliderRow,{label:"Cases au sol",val:cfg.casesSOL,set:v=>setCfg(c=>({...c,casesSOL:typeof v==="function"?v(c.casesSOL):v})),min:1,max:50}),
 h("div",{style:{marginBottom:4}},
 h("div",{style:{fontSize:12,fontWeight:700,marginBottom:8}},"Positions dans chaque case"),
 h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},
@@ -920,30 +906,52 @@ h("button",{onClick:addPos,style:{...BG,width:"auto",padding:"0 14px",fontSize:1
 )
 ),
 h("div",{style:{background:"#e8f0fe",borderRadius:8,padding:"8px 12px",marginTop:8,fontSize:11,color:S.blue}},
-`${cfg.racks} racks × ${cfg.etages} étages × ${cfg.positions.length} pos. + ${cfg.casesSOL} cases sol = ${cfg.racks*cfg.etages*cfg.positions.length+cfg.casesSOL} emplacements`
+`${cfg.racks} racks × ${cfg.etages} étages × ${cfg.positions.length} positions = ${cfg.racks*cfg.etages*cfg.positions.length} emplacements rack`
 )
 );
+};
+
+const saveFlows=async()=>{
+  if(!onSaveCfg)return;
+  const warehouseOrigins=originsTxt.split("\n").map(s=>s.trim()).filter(Boolean);
+  const warehouseDestinations=destsTxt.split("\n").map(s=>s.trim()).filter(Boolean);
+  await onSaveCfg({...cfg,warehouseOrigins,warehouseDestinations});
+  showT&&showT("Provenances / destinations enregistrées");
 };
 
 return h("div",{},
 h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12}},"Configuration entrepôt"),
 h("div",{style:{background:"linear-gradient(135deg,#2c3e50,#3498db)",borderRadius:12,padding:"14px",marginBottom:14,color:"#fff",textAlign:"center"}},
 h("div",{style:{fontSize:28,fontWeight:900}},total),
-h("div",{style:{fontSize:11,opacity:.7,marginTop:2}},"emplacements totaux"),
-h("div",{style:{display:"flex",justifyContent:"center",gap:16,marginTop:8,fontSize:11}},
-h("span",{style:{opacity:.8}},"Allée A: "+totalA),
-h("span",{style:{opacity:.8}},"Allée B: "+totalB),
-h("span",{style:{opacity:.8}},"Transit: "+transitCases)
+h("div",{style:{fontSize:11,opacity:.75,marginTop:2}},"emplacements totaux"),
+h("div",{style:{display:"flex",justifyContent:"center",gap:16,marginTop:8,fontSize:11,flexWrap:"wrap"}},
+h("span",{style:{opacity:.85}},"Rack A: "+(alleeA.racks*alleeA.etages*alleeA.positions.length)),
+h("span",{style:{opacity:.85}},"Rack B: "+(alleeB.racks*alleeB.etages*alleeB.positions.length)),
+h("span",{style:{opacity:.85}},"Sol: "+(solA+solB)),
+h("span",{style:{opacity:.85}},"Transit: "+transitCases)
 )
 ),
-h(AlleeCfg,{label:"Allée A",cfg:alleeA,setCfg:setAlleeA,newPos:newPosA,setNewPos:setNewPosA,color:"#3498db"}),
-h(AlleeCfg,{label:"Allée B",cfg:alleeB,setCfg:setAlleeB,newPos:newPosB,setNewPos:setNewPosB,color:"#e74c3c"}),
-h("div",{style:{background:"#fff",borderRadius:14,padding:"16px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,.08)",borderLeft:"4px solid "+S.yellow}},
-h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12,color:S.orange}},"⚡ Zone TRANSIT"),
-h("div",{style:{background:"#fff8e6",borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:S.orange}},"Zone séparée — palettes en attente de départ/arrivée"),
+h(AlleeCfg,{label:"Zone racks — Allée A",cfg:alleeA,setCfg:setAlleeA,newPos:newPosA,setNewPos:setNewPosA,color:"#3498db"}),
+h(AlleeCfg,{label:"Zone racks — Allée B",cfg:alleeB,setCfg:setAlleeB,newPos:newPosB,setNewPos:setNewPosB,color:"#e74c3c"}),
+h("div",{style:{background:"#fff",borderRadius:14,padding:"16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)",borderLeft:"4px solid #2ecc71"}},
+h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12,color:S.green}},"🏭 Palettes au sol — gestion séparée"),
+h(SliderRow,{label:"Cases au sol allée A",val:solA,set:setSolA,min:1,max:80}),
+h(SliderRow,{label:"Cases au sol allée B",val:solB,set:setSolB,min:1,max:80}),
+h("div",{style:{background:"#e6fff0",borderRadius:8,padding:"8px 12px",marginTop:8,fontSize:11,color:S.green}},`Total palettes au sol: ${solA+solB}`)
+),
+h("div",{style:{background:"#fff",borderRadius:14,padding:"16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)",borderLeft:"4px solid "+S.yellow}},
+h("div",{style:{fontSize:14,fontWeight:800,marginBottom:12,color:S.orange}},"⚡ Zone transit"),
 h(SliderRow,{label:"Nombre de cases transit",val:transitCases,set:setTransitCases,min:1,max:20})
 ),
-h("button",{onClick:()=>onSave({alleeA,alleeB,transitCases}),style:BP},"💾 Sauvegarder la configuration")
+h("div",{style:{background:"#fff",borderRadius:14,padding:"16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.08)"}},
+h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10}},"Réglages palettes — Provenances / Destinations"),
+h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
+h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},"Provenances"),h("textarea",{value:originsTxt,onChange:e=>setOriginsTxt(e.target.value),style:{...IS,minHeight:120,resize:"vertical"},placeholder:"Une provenance par ligne"})),
+h("div",{},h("div",{style:{fontSize:12,fontWeight:700,marginBottom:6}},"Destinations"),h("textarea",{value:destsTxt,onChange:e=>setDestsTxt(e.target.value),style:{...IS,minHeight:120,resize:"vertical"},placeholder:"Une destination par ligne"}))
+),
+h("button",{onClick:saveFlows,style:{...BB,marginTop:10}},"Enregistrer provenances / destinations")
+),
+h("button",{onClick:()=>onSave({alleeA:{...alleeA,casesSOL:solA},alleeB:{...alleeB,casesSOL:solB},transitCases}),style:BP},"💾 Sauvegarder la configuration entrepôt")
 );
 }
 
@@ -1108,7 +1116,7 @@ h("button",{onClick:()=>onSave(sel),style:BB},"Associer")
 }
 
 // ── MODAL PALETTE ─────────────────────────────────────────────────────────────
-function PaletteModal({existingCount,warehouseConfig,currentUser,onSave,onClose}){
+function PaletteModal({existingCount,warehouseConfig,currentUser,cfg,onSave,onClose}){
 const num=String(existingCount+1).padStart(4,"0");
 const palId="PAL-"+num;
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
@@ -1147,8 +1155,8 @@ h("div",{style:{fontSize:10,fontWeight:700,opacity:.7,textTransform:"uppercase",
 h("div",{style:{fontSize:28,fontWeight:900,letterSpacing:2}},palId)
 ),
 FL("Créé par"),h("input",{value:createdBy,onChange:e=>setCreatedBy(e.target.value),style:IS}),
-FL("Provenance"),h("input",{value:provenance,onChange:e=>setProvenance(e.target.value),placeholder:"Fournisseur, chantier...",style:IS}),
-FL("Destination"),h("input",{value:destination,onChange:e=>setDestination(e.target.value),placeholder:"Client, zone livraison...",style:IS}),
+FL("Provenance"),h("select",{value:provenance,onChange:e=>setProvenance(e.target.value),style:SS},h("option",{value:""},"Sélectionner..."),...((cfg?.warehouseOrigins||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).map(v=>h("option",{key:v,value:v},v)))),
+FL("Destination"),h("select",{value:destination,onChange:e=>setDestination(e.target.value),style:SS},h("option",{value:""},"Sélectionner..."),...((cfg?.warehouseDestinations||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).map(v=>h("option",{key:v,value:v},v)))),
 FL("Notes",true),h("textarea",{value:notes,onChange:e=>setNotes(e.target.value),placeholder:"Observations, informations complémentaires...",style:{...IS,minHeight:50,resize:"vertical"}}),
 FL("Contenu *"),
 items.map((item,i)=>h("div",{key:i,style:{display:"flex",gap:8,marginBottom:8,alignItems:"center"}},
@@ -1218,6 +1226,8 @@ onSave(data);
 // ── PAGE ENTREPÔT ─────────────────────────────────────────────────────────────
 function EntrepotPage({isAdmin,showT,cfg,warehouseConfig,currentUser}){
 const[palettes,setPalettes]=useState([]);
+const[originsTxt,setOriginsTxt]=useState((cfg?.warehouseOrigins||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
+const[destsTxt,setDestsTxt]=useState((cfg?.warehouseDestinations||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
 const[familles,setFamilles]=useState([]);
 const[search,setSearch]=useState("");
 const[view,setView]=useState("palettes");
@@ -1236,6 +1246,7 @@ const updatePalette=async(id,d)=>{await db.collection("palettes").doc(id).set(d,
 const deletePalette=async id=>{if(!confirm("Supprimer cette palette ?"))return;await fbDel("palettes",id);setSelPal(null);showT("Supprimée");};
 const saveFamille=async d=>{await fbAdd("familles",{...d,ts:Date.now()});setModal(null);showT("Famille "+d.id+" créée !");};
 const deleteFamille=async id=>{if(!confirm("Supprimer cette famille ?"))return;await fbDel("familles",id);showT("Famille supprimée");};
+const saveFlows=async()=>{const warehouseOrigins=originsTxt.split("\n").map(s=>s.trim()).filter(Boolean);const warehouseDestinations=destsTxt.split("\n").map(s=>s.trim()).filter(Boolean);await db.collection("params").doc("config").set({cfg:{...(cfg||{}),warehouseOrigins,warehouseDestinations}},{merge:true});showT("Provenances / destinations enregistrées");};
 
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const totalRack=(wc.alleeA?.racks||3)*(wc.alleeA?.etages||3)*(wc.alleeA?.positions||["G","M","D"]).length+(wc.alleeB?.racks||3)*(wc.alleeB?.etages||3)*(wc.alleeB?.positions||["G","M","D"]).length;
@@ -1286,7 +1297,7 @@ pal.destination&&h("div",{style:{background:"rgba(255,255,255,.15)",borderRadius
 h("div",{style:{background:"#fff",borderRadius:14,padding:"14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,.08)"}},
 h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
 h("div",{style:{fontSize:12,fontWeight:700,color:S.gray,textTransform:"uppercase",letterSpacing:.5}},"Emplacement"),
-h("button",{onClick:()=>setModal({t:"editEmp",pal}),style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700}},"Modifier")
+h("button",{onClick:()=>setModal({t:"editEmp",pal}),style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:8,padding:"5px 10px",fontSize:11,cursor:"pointer",fontWeight:700}},"📍 Modifier l'emplacement")
 ),
 h("div",{style:{background:pal.emplacementTransit?"#fffbea":pal.emplacementSOL?"#e6fff0":"#e8f0fe",borderRadius:10,padding:"10px 14px",display:"inline-flex",alignItems:"center",gap:8}},
 h("span",{style:{fontSize:18}},pal.emplacementTransit?"⚡":pal.emplacementSOL?"🏭":"🏗️"),
@@ -1318,8 +1329,8 @@ zoomImg&&h("div",{onClick:()=>setZoomImg(null),style:{position:"fixed",inset:0,b
 modal&&h("div",{},
 modal.t==="qr"&&h(Modal,{onClose:()=>setModal(null)},h("div",{style:{textAlign:"center"}},h(QRCodeDisplay,{text:modal.pal?.id,size:220,label:modal.pal?.id}),h("button",{onClick:()=>generatePalettePDF(modal.pal,cfg,getFamille(modal.pal)),style:{...BP,marginBottom:8,marginTop:14}},"Générer Fiche PDF A4"),h("button",{onClick:()=>setModal(null),style:BS},"Fermer"))),
 modal.t==="assocFam"&&h(AssocierFamilleModal,{palette:modal.pal,familles,onSave:async famId=>{await db.collection("palettes").doc(modal.pal._id).set({familleId:famId||null},{merge:true});setModal(null);showT("Famille mise à jour !");},onClose:()=>setModal(null)}),
-modal.t==="editEmp"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
-modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)})
+modal.t==="editEmp"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
+modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)})
 )
 );
 }
@@ -1393,8 +1404,8 @@ h("button",{onClick:()=>deleteFamille(fam._id),style:{background:"#fff1f0",color
 })
 ),
 modal&&h("div",{},
-modal.t==="new"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:savePalette,onClose:()=>setModal(null)}),
-modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
+modal.t==="new"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:savePalette,onClose:()=>setModal(null)}),
+modal.t==="edit"&&h(PaletteModal,{existingCount:palettes.length,warehouseConfig,currentUser,cfg,onSave:d=>updatePalette(modal.pal._id,d),onClose:()=>setModal(null)}),
 modal.t==="newFam"&&h(FamilleModal,{existingCount:familles.length,familles,onSave:saveFamille,onClose:()=>setModal(null)}),
 modal.t==="editFam"&&h(FamilleModal,{existingCount:familles.length,familles,existingFam:modal.fam,onSave:async d=>{await db.collection("familles").doc(modal.fam._id).set(d,{merge:true});setModal(null);showT("Famille modifiée !");},onClose:()=>setModal(null)}),
 modal.t==="assocFam"&&h(AssocierFamilleModal,{palette:modal.pal,familles,onSave:async famId=>{await db.collection("palettes").doc(modal.pal._id).set({familleId:famId||null},{merge:true});setModal(null);showT("Famille mise à jour !");},onClose:()=>setModal(null)}),
@@ -1409,14 +1420,14 @@ h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:10}},"Annuler")
 // ══ PARTIE 4/4 — COLLER DIRECTEMENT APRÈS LA PARTIE 3 ══
 
 // ── ADMIN PANEL ───────────────────────────────────────────────────────────────
-function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig,p2Config,p2Tours,saveP2Config,saveP2Tour,delP2Tour,setPage}){
+function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig}){
 const[tab,setTab]=useState("stats");
 const[emps,setEmps]=useState([...employes]);
 const[newE,setNewE]=useState("");
 const[pin,setPin]=useState(adminPin);
 const[pin2,setPin2]=useState("");
 const[lCfg,setLCfg]=useState({...cfg});
-const tabs=[["comptes","Comptes"],["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["matsmobile","Mâts mobile"],["entrepotCfg","Entrepôt"],["backup","Backup"],["config","Config"],["perso","Perso"]];
+const tabs=[["comptes","Comptes"],["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["entrepotCfg","Entrepôt"],["backup","Backup"],["config","Config"],["perso","Perso"]];
 const sortiesParJour=()=>{const map={};emprunts.forEach(e=>{const d=(e.dateDepart||"").split(" ")[0];if(d)map[d]=(map[d]||0)+1;});return Object.entries(map).slice(-7).map(([d,n])=>({d:d.split("/").slice(0,2).join("/"),n}));};
 const sParJ=sortiesParJour();const maxN=Math.max(...sParJ.map(x=>x.n),1);
 
@@ -1446,13 +1457,6 @@ tab==="stats"&&h("div",{},
         h("div",{style:{width:"100%",height:Math.max(4,x.n/maxN*60)+"px",background:S.red,borderRadius:"4px 4px 0 0",opacity:.8}}),
         h("div",{style:{fontSize:9,color:S.gray}},x.d)
       ))
-    )
-  ),
-  h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)",marginBottom:14}},
-    h("div",{style:{fontSize:14,fontWeight:700,marginBottom:10}},"Gestion mâts mobile"),
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}},
-      h("div",{},h("div",{style:{fontSize:22,fontWeight:900,color:S.red}},String((p2Tours||[]).length)),h("div",{style:{fontSize:11,color:S.gray}},"tournées enregistrées")),
-      h("button",{onClick:()=>setPage&&setPage("matsmobile"),style:{...BP,width:"auto",padding:"10px 14px"}},"Ouvrir")
     )
   ),
   h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
@@ -1529,9 +1533,7 @@ tab==="maint"&&h("div",{},
   modal&&modal.t==="maintEdit"&&h(MaintModal,{toolId:modal.toolId,toolNom:modal.toolNom,maint:modal.maint,onSave:saveMaint,onClose:()=>setModal(null)})
 ),
 
-tab==="matsmobile"&&h(P2AdminPanel,{p2Config,p2Tours,onSaveConfig:saveP2Config,onOpenTour:(tour)=>setModal({t:"p2Tour",tour}),onEditTour:(tour)=>setModal({t:"p2Tour",tour}),onDeleteTour:delP2Tour}),
-
-tab==="entrepotCfg"&&h(WarehouseConfigPanel,{warehouseConfig,onSave:saveWarehouseConfig,showT}),
+tab==="entrepotCfg"&&h(WarehouseConfigPanel,{warehouseConfig,onSave:saveWarehouseConfig,showT,cfg,onSaveCfg}),
 
 tab==="backup"&&h("div",{},
   h("div",{style:{background:"linear-gradient(135deg,"+S.red+","+darken(S.red)+")",borderRadius:12,padding:"14px",marginBottom:16,color:"#fff"}},
@@ -1618,185 +1620,6 @@ tab==="perso"&&h("div",{},
 );
 }
 
-
-function P2AdminPanel({p2Config,p2Tours,onSaveConfig,onOpenTour,onEditTour,onDeleteTour}){
-  const[cfgLocal,setCfgLocal]=useState(JSON.parse(JSON.stringify(p2Config||P2_DEFAULT_CONFIG)));
-  useEffect(()=>{setCfgLocal(JSON.parse(JSON.stringify(p2Config||P2_DEFAULT_CONFIG)));},[p2Config]);
-  const exportCSV=()=>{
-    const headers=["Date","Utilisateur","Autre collègue","Remorque","Luxfuel","Litres remorque","Personne remorque","Observations générales","Mât","Mode","Statut arrivée","Maintien câble","Litres ajoutés","Heures moteur","Test","Commentaire"];
-    const rows=[];
-    (p2Tours||[]).forEach(t=>{
-      (t.mats||[]).forEach(m=>{
-        rows.push([
-          t.date||"",t.user||"", (t.otherUser||""), t.remorque||"", t.passageLuxfuel?"Oui":"Non",
-          t.litresRemorque||"", t.personneRemplissage||"", t.observations||"",
-          m.nom||"", m.mode||"", m.statut||"", m.cable||"", m.litres||"", m.heures||"", m.test||"", m.commentaire||""
-        ]);
-      });
-    });
-    const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\n');
-    const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
-    const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='Gestion_Mats_Mobile_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
-  };
-  return h("div",{},
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,gap:10}},
-      h("div",{},h("div",{style:{fontSize:16,fontWeight:800}},"Gestion mâts mobile"),h("div",{style:{fontSize:12,color:S.gray}},"Administration, rapports et paramètres P2")),
-      h("button",{onClick:exportCSV,style:{...BP,width:"auto",padding:"10px 14px"}},"Exporter CSV")
-    ),
-    h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)",marginBottom:14}},
-      h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10}},"Réglages"),
-      FL("Remorque gazole"),h("input",{value:cfgLocal.remorque||"",onChange:e=>setCfgLocal(p=>({...p,remorque:e.target.value})),style:{...IS,marginBottom:10}}),
-      h("div",{style:{fontSize:13,fontWeight:700,marginBottom:8}},"Mâts mobiles"),
-      (cfgLocal.mats||[]).map((m,i)=>
-        h("div",{key:m.id||i,style:{display:"grid",gridTemplateColumns:"90px 1fr",gap:8,marginBottom:8}},
-          h("input",{value:m.id||"",onChange:e=>setCfgLocal(p=>{const n=[...(p.mats||[])];n[i]={...n[i],id:e.target.value};return {...p,mats:n};}),style:IS}),
-          h("input",{value:m.nom||"",onChange:e=>setCfgLocal(p=>{const n=[...(p.mats||[])];n[i]={...n[i],nom:e.target.value};return {...p,mats:n};}),style:IS})
-        )
-      ),
-      h("div",{style:{display:"flex",gap:8,marginTop:10}},
-        h("button",{onClick:()=>setCfgLocal(p=>({...p,mats:[...(p.mats||[]),{id:"MAT-"+((p.mats||[]).length+1),nom:"Mât "+((p.mats||[]).length+1)}]})),style:BS},"+ Ajouter un mât"),
-        h("button",{onClick:()=>onSaveConfig(cfgLocal),style:{...BP,width:"auto",padding:"10px 14px"}},"Sauvegarder")
-      )
-    ),
-    h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-      h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10}},"Historique tournées P2"),
-      (p2Tours||[]).length===0?h("div",{style:{padding:"12px 0",color:S.gray}},"Aucune tournée enregistrée.")
-      :[...(p2Tours||[])].reverse().map(t=>
-        h("div",{key:t._id,style:{border:"1px solid "+S.border,borderRadius:12,padding:"10px 12px",marginBottom:8}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}},
-            h("div",{},
-              h("div",{style:{fontSize:13,fontWeight:800}},t.date||"Tournée P2"),
-              h("div",{style:{fontSize:11,color:S.gray}},"👤 "+(t.user||"—")+" · "+(t.totalLitres||0)+" L mâts · "+(t.litresRemorque||0)+" L remorque")
-            ),
-            h("div",{style:{display:"flex",gap:6}},
-              h("button",{onClick:()=>onOpenTour(t),style:{...BS,width:"auto",padding:"8px 10px"}},"Ouvrir"),
-              h("button",{onClick:()=>onEditTour(t),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:10,padding:"8px 10px",fontWeight:700,cursor:"pointer"}},"Modifier"),
-              h("button",{onClick:()=>onDeleteTour(t),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"8px 10px",fontWeight:700,cursor:"pointer"}},"Supprimer")
-            )
-          )
-        )
-      )
-    )
-  );
-}
-
-function P2TourModal({tour,p2Config,currentUser,userAccounts,onSave,onClose}){
-  const base=tour||{
-    date:now(),
-    user:currentUser?.name||"",
-    otherUser:"",
-    remorque:(p2Config&&p2Config.remorque)||P2_DEFAULT_CONFIG.remorque,
-    passageLuxfuel:false,
-    litresRemorque:"",
-    personneRemplissage:currentUser?.name||"",
-    justificatifs:[],
-    observations:"",
-    mats:((p2Config&&p2Config.mats)||P2_DEFAULT_CONFIG.mats).map((m,i)=>({
-      id:m.id||("MAT-"+(i+1)),
-      nom:m.nom||("Mât "+(i+1)),
-      mode:i===0?"controle":"plein",
-      statut:"OK",
-      cable:"oui",
-      litres:"",
-      heures:"",
-      test:"OK",
-      photos:[],
-      commentaire:"",
-      signature:""
-    }))
-  };
-  const[data,setData]=useState(JSON.parse(JSON.stringify(base)));
-  useEffect(()=>{if(tour){setData(JSON.parse(JSON.stringify(base)));}},[tour]);
-  const others=(userAccounts||[]).map(a=>a.name).filter(Boolean).filter(n=>n!==data.user);
-  const setMat=(idx,patch)=>setData(p=>{const mats=[...(p.mats||[])];mats[idx]={...mats[idx],...patch};return {...p,mats};});
-  const totalLitres=(data.mats||[]).reduce((s,m)=>s+(parseFloat(m.litres)||0),0);
-  return h(Modal,{onClose},
-    h("div",{style:{background:"linear-gradient(135deg,"+S.red+","+darken(S.red)+")",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},
-      h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"GESTION MÂTS MOBILE"),
-      h("div",{style:{fontSize:19,fontWeight:900}},tour?"Modifier la tournée P2":"Nouvelle tournée P2")
-    ),
-    FL("Date / heure",true),h("input",{value:data.date||"",onChange:e=>setData(p=>({...p,date:e.target.value})),style:IS}),
-    FL("Utilisateur connecté",true),h("input",{value:data.user||"",readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
-    FL("Autre collègue",true),h("select",{value:data.otherUser||"",onChange:e=>setData(p=>({...p,otherUser:e.target.value})),style:SS},h("option",{value:""},"– Aucun –"),...others.map(n=>h("option",{key:n,value:n},n))),
-    FL("Remorque gazole",true),h("input",{value:data.remorque||"",readOnly:true,style:{...IS,background:"#f7f7f7"}}),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
-      h("label",{style:{background:"#fff",border:"1.5px solid "+S.border,borderRadius:12,padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer"}},
-        h("span",{style:{fontSize:13,fontWeight:700}},"Passage Luxfuel"),
-        h("input",{type:"checkbox",checked:!!data.passageLuxfuel,onChange:e=>setData(p=>({...p,passageLuxfuel:e.target.checked}))})
-      ),
-      h("input",{type:"number",value:data.litresRemorque,onChange:e=>setData(p=>({...p,litresRemorque:e.target.value})),placeholder:"Litres remorque",style:IS})
-    ),
-    FL("Personne ayant rempli la remorque",true),h("input",{value:data.personneRemplissage||"",onChange:e=>setData(p=>({...p,personneRemplissage:e.target.value})),style:IS}),
-    FL("Justificatif / photo remorque",true),h(PhotoPicker,{photos:data.justificatifs||[],onChange:v=>setData(p=>({...p,justificatifs:v})),labelText:"Ajouter ticket / photo"}),
-    FL("Observations générales",true),h("textarea",{value:data.observations||"",onChange:e=>setData(p=>({...p,observations:e.target.value})),style:{...IS,minHeight:70,resize:"vertical"}}),
-    h("div",{style:{fontSize:14,fontWeight:800,margin:"12px 0 8px"}},"Mâts P2"),
-    (data.mats||[]).map((m,i)=>
-      h("div",{key:m.id||i,style:{background:"#fff",border:"1px solid "+S.border,borderRadius:16,padding:"12px",marginBottom:12}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
-          h("div",{style:{fontSize:15,fontWeight:800}},m.nom||("Mât "+(i+1))),
-          i===0&&h("div",{style:{display:"flex",gap:6}},
-            ["controle","plein"].map(mode=>h("button",{key:mode,onClick:()=>setMat(i,{mode}),style:{padding:"7px 10px",borderRadius:20,border:"1.5px solid "+(m.mode===mode?S.blue:S.border),background:m.mode===mode?"#eef5ff":"#fff",color:m.mode===mode?S.blue:S.dark,fontSize:11,fontWeight:700,cursor:"pointer"}},mode==="controle"?"Contrôle uniquement":"Plein effectué"))
-          )
-        ),
-        FL("Statut à l'arrivée"),h("div",{style:{display:"flex",gap:8,marginBottom:8}},["OK","anomalie","non accessible"].map(v=>h("button",{key:v,onClick:()=>setMat(i,{statut:v}),style:{flex:1,padding:"9px",borderRadius:12,border:"1.5px solid "+(m.statut===v?S.red:S.border),background:m.statut===v?"#fff1f0":"#fff",fontWeight:700,cursor:"pointer",fontSize:12}},v))),
-        FL("Alimentation électrique / maintien câble"),h("div",{style:{display:"flex",gap:8,marginBottom:8}},["oui","non","à vérifier"].map(v=>h("button",{key:v,onClick:()=>setMat(i,{cable:v}),style:{flex:1,padding:"9px",borderRadius:12,border:"1.5px solid "+(m.cable===v?S.blue:S.border),background:m.cable===v?"#eef5ff":"#fff",fontWeight:700,cursor:"pointer",fontSize:12}},v))),
-        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
-          h("input",{type:"number",value:m.litres,onChange:e=>setMat(i,{litres:e.target.value}),placeholder:"Litres ajoutés",style:IS}),
-          h("input",{type:"number",value:m.heures,onChange:e=>setMat(i,{heures:e.target.value}),placeholder:"Heures moteur",style:IS})
-        ),
-        FL("Test fonctionnement",true),h("div",{style:{display:"flex",gap:8,marginBottom:8}},["OK","NOK"].map(v=>h("button",{key:v,onClick:()=>setMat(i,{test:v}),style:{flex:1,padding:"9px",borderRadius:12,border:"1.5px solid "+(m.test===v?(v==="OK"?S.green:S.danger):S.border),background:m.test===v?(v==="OK"?"#e6fff0":"#fff1f0"):"#fff",fontWeight:700,cursor:"pointer"}},v))),
-        FL("Photos",true),h(PhotoPicker,{photos:m.photos||[],onChange:v=>setMat(i,{photos:v}),labelText:"Ajouter photos"}),
-        FL("Commentaire",true),h("textarea",{value:m.commentaire||"",onChange:e=>setMat(i,{commentaire:e.target.value}),style:{...IS,minHeight:60,resize:"vertical"}}),
-        FL("Signature",true),h(SignaturePad,{value:m.signature||"",onChange:v=>setMat(i,{signature:v}),height:110})
-      )
-    ),
-    h("div",{style:{background:"#f7f7fb",borderRadius:14,padding:"12px 14px",marginTop:6}},
-      h("div",{style:{fontSize:13,fontWeight:800,marginBottom:4}},"Calcul automatique"),
-      h("div",{style:{fontSize:12,color:S.gray}},"Total litres mis dans les mâts : "+totalLitres+" L"),
-      h("div",{style:{fontSize:12,color:S.gray}},"Total litres remis dans la remorque : "+(parseFloat(data.litresRemorque)||0)+" L")
-    ),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},
-      h("button",{onClick:onClose,style:BS},"Annuler"),
-      h("button",{onClick:()=>onSave({...data,totalLitres}),style:BP},"Enregistrer")
-    )
-  );
-}
-
-function GestionMatsMobilePage({p2Tours,p2Config,currentUser,userAccounts,isAdmin,onNewTour,onEditTour,onDeleteTour,onAdminOpen}){
-  return h("div",{className:"fi"},
-    h("div",{style:{background:"linear-gradient(135deg,#8a1538,#c8102e)",borderRadius:18,padding:"22px 18px",color:"#fff",marginBottom:14}},
-      h("div",{style:{fontSize:12,fontWeight:700,opacity:.85,marginBottom:4}},"GESTION MÂTS MOBILE"),
-      h("div",{style:{fontSize:24,fontWeight:900,marginBottom:6}},"Pleins & contrôles P2"),
-      h("div",{style:{fontSize:13,opacity:.85}},"Tournées carburant et suivi des 4 mâts mobiles du parking P2")
-    ),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
-      h("button",{onClick:onNewTour,style:BP},"➕ Nouvelle tournée"),
-      isAdmin?h("button",{onClick:onAdminOpen,style:BB},"⚙️ Administration"):h("button",{disabled:true,style:{...BS,color:S.gray}},"Admin")
-    ),
-    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:14}},
-      h("div",{style:{background:S.white,borderRadius:14,padding:"12px 14px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Tournées"),h("div",{style:{fontSize:28,fontWeight:900,color:S.red,marginTop:4}},(p2Tours||[]).length)),
-      h("div",{style:{background:S.white,borderRadius:14,padding:"12px 14px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Remorque"),h("div",{style:{fontSize:16,fontWeight:800,marginTop:8}},(p2Config&&p2Config.remorque)||"—"))
-    ),
-    h("div",{style:{background:S.white,borderRadius:16,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-      h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10}},"Dernières tournées"),
-      (p2Tours||[]).length===0?h("div",{style:{padding:"18px 0",textAlign:"center",color:S.gray}},"Aucune tournée enregistrée.")
-      :[...(p2Tours||[])].reverse().slice(0,12).map(t=>h("div",{key:t._id,style:{padding:"10px 0",borderBottom:"1px solid "+S.bg}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}},
-          h("div",{style:{minWidth:0,flex:1}},
-            h("div",{style:{fontSize:13,fontWeight:800}},t.date||"Tournée P2"),
-            h("div",{style:{fontSize:11,color:S.gray}},"👤 "+(t.user||"—")+" · "+(t.totalLitres||0)+" L mâts")
-          ),
-          h("div",{style:{display:"flex",gap:6,flexShrink:0}},
-            h("button",{onClick:()=>onEditTour(t),style:{...BS,width:"auto",padding:"8px 10px"}},"Ouvrir"),
-            isAdmin&&h("button",{onClick:()=>onDeleteTour(t),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"8px 10px",fontWeight:700,cursor:"pointer"}},"Suppr.")
-          )
-        )
-      ))
-    )
-  );
-}
-
-
 // ── APPLICATION PRINCIPALE ────────────────────────────────────────────────────
 function App(){
 const[ready,setReady]=useState(true);
@@ -1814,8 +1637,6 @@ const[adminPin,setAdminPin]=useState("0000");
 const[cfg,setCfg]=useState({nomSite:"LUX AIRPORT",sousTitre:"Gestion Airside",couleur:"#c8102e",emailResp:"responsable@luxairport.lu",logoUrl:"",coverUrl:""});
 const[maintenances,setMaintenances]=useState({});
 const[kits,setKits]=useState([]);
-const[p2Tours,setP2Tours]=useState([]);
-const[p2Config,setP2Config]=useState(P2_DEFAULT_CONFIG);
 const[modal,setModal]=useState(null);
 const[checklist,setChecklist]=useState(["Outil nettoyé?","Batteries chargées?","Accessoires présents?","Outil rangé?"]);
 const[darkMode,setDarkMode]=useState(()=>{const hh=new Date().getHours();return hh>=20||hh<7;});
@@ -1835,13 +1656,11 @@ const[navConfig,setNavConfig]=useState([
 {id:"emprunts",icon:"📦",label:"Emprunts",visible:true,order:1},
 {id:"inspection",icon:"🔧",label:"Inspection",visible:true,order:2},
 {id:"stocks",icon:"🧤",label:"Stocks",visible:true,order:3},
-{id:"kits",icon:"🧰",label:"Kits",visible:true,order:4},
 {id:"entrepot",icon:"🏭",label:"Entrepôt",visible:true,order:5},
-{id:"matsmobile",icon:"⛽",label:"Gestion mâts mobile",visible:true,order:6},
-{id:"rapport",icon:"📊",label:"Rapport",visible:true,order:7},
-{id:"admin",icon:"🔐",label:"Admin",visible:false,order:8,hidden:true},
-{id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
-{id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
+{id:"rapport",icon:"📊",label:"Rapport",visible:true,order:6},
+{id:"admin",icon:"🔐",label:"Admin",visible:false,order:7,hidden:true},
+{id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:8},
+{id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:9},
 ]);
 
 useEffect(()=>{
@@ -1862,13 +1681,12 @@ const p=parSnap.data();
 if(p.employes)setEmployes(p.employes);
 if(p.adminPin)setAdminPin(p.adminPin);
 if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));
-if(p.navConfig)setNavConfig(p.navConfig);
+if(p.navConfig)setNavConfig((p.navConfig||[]).filter(n=>n.id!=="kits"));
 if(p.userAccounts)setUserAccounts(p.userAccounts);
 if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);
-if(p.p2Config)setP2Config({...P2_DEFAULT_CONFIG,...p.p2Config,mats:(p.p2Config&&p.p2Config.mats&&p.p2Config.mats.length?p.p2Config.mats:P2_DEFAULT_CONFIG.mats)});
 }
 const load=async(fn)=>{try{return await Promise.race([fn(),new Promise(r=>setTimeout(()=>r(null),4000))]);}catch(e){return null;}};
-const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,toolsSnap,maintSnap,kitsSnap,p2Snap]=await Promise.all([
+const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,toolsSnap,maintSnap,kitsSnap]=await Promise.all([
 load(()=>db.collection("emprunts").orderBy("ts","asc").get()),
 load(()=>db.collection("cons").get()),
 load(()=>db.collection("vets").get()),
@@ -1877,7 +1695,6 @@ load(()=>db.collection("inspections").get()),
 load(()=>db.collection("tools").get()),
 load(()=>db.collection("maintenances").get()),
 load(()=>db.collection("kits").orderBy("ts","asc").get()),
-load(()=>db.collection("p2_tournees").orderBy("ts","asc").get()),
 ]);
 if(empSnap)setEmprunts(empSnap.docs.map(d=>({...d.data(),_id:d.id})));
 if(consSnap){const cd={};consSnap.forEach(x=>cd[x.id]=x.data());setCons(CONS_DEFAULT.map(c=>cd[c.id]?{...c,...cd[c.id]}:c));}
@@ -1886,7 +1703,6 @@ if(histSnap)setHist(histSnap.docs.map(d=>({...d.data(),_id:d.id})));
 if(inspSnap){const id={};inspSnap.forEach(x=>id[x.id]=x.data());setInspections(id);}
 if(maintSnap){const md={};maintSnap.forEach(x=>md[x.id]=x.data());setMaintenances(md);}
 if(kitsSnap)setKits(kitsSnap.docs.map(d=>({...d.data(),_id:d.id})));
-if(p2Snap)setP2Tours(p2Snap.docs.map(d=>({...d.data(),_id:d.id})));
 if(toolsSnap&&toolsSnap.docs.length>0)setTools(toolsSnap.docs.map(d=>({...d.data(),id:d.id})));
 }catch(e){console.error("Init error:",e);}
 clearTimeout(fallback);setReady(true);
@@ -1899,8 +1715,7 @@ const u5=db.collection("consHist").orderBy("ts","asc").onSnapshot(s=>setHist(s.d
 const u6=db.collection("tools").onSnapshot(s=>{if(s.docs.length>0)setTools(s.docs.map(d=>({...d.data(),id:d.id})));});
 const u7=db.collection("maintenances").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setMaintenances(d);});
 const u8=db.collection("kits").orderBy("ts","asc").onSnapshot(s=>setKits(s.docs.map(d=>({...d.data(),_id:d.id}))));
-const u9=db.collection("p2_tournees").orderBy("ts","asc").onSnapshot(s=>setP2Tours(s.docs.map(d=>({...d.data(),_id:d.id}))));
-return()=>{u1();u2();u3();u4();u5();u6();u7();u8();u9();};
+return()=>{u1();u2();u3();u4();u5();u6();u7();u8();};
 },[]);
 
 const showT=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
@@ -1916,9 +1731,6 @@ const alertCount=outilsLongs.length;
 const saveWarehouseConfig=async(wc)=>{setWarehouseConfig(wc);await db.collection("params").doc("config").set({warehouseConfig:wc},{merge:true});showT("Configuration entrepôt sauvegardée!");};
 const saveNavConfig=async(nc)=>{setNavConfig(nc);await db.collection("params").doc("config").set({navConfig:nc},{merge:true});showT("Menu configuré!");};
 const saveUserAccounts=async(accounts)=>{setUserAccounts(accounts);await db.collection("params").doc("config").set({userAccounts:accounts},{merge:true});showT("Comptes mis à jour!");};
-const saveP2Config=async(cfgP2)=>{const merged={...P2_DEFAULT_CONFIG,...cfgP2,mats:(cfgP2&&cfgP2.mats&&cfgP2.mats.length?cfgP2.mats:P2_DEFAULT_CONFIG.mats)};setP2Config(merged);await db.collection("params").doc("config").set({p2Config:merged},{merge:true});showT("Configuration gestion mâts mobile sauvegardée!");};
-const saveP2Tour=async(tour)=>{setSyncing(true);if(tour._id){const id=tour._id;const payload={...tour};delete payload._id;await fbSet("p2_tournees",id,{...payload,ts:tour.ts||Date.now()});}else{await fbAdd("p2_tournees",{...tour,ts:Date.now()});}setSyncing(false);setModal(null);showT("Tournée P2 enregistrée!");};
-const delP2Tour=async(tour)=>{if(!confirm("Supprimer cette tournée P2 ?"))return;await fbDel("p2_tournees",tour._id);showT("Tournée P2 supprimée");};
 const scanHandle=raw=>{
 const id=n2(raw);
 const t=tools.find(x=>n2(x.id)===id);if(t){setModal(null);setTimeout(()=>setModal({t:"insp",tool:t,ins:inspections[t.id]||{},empr:isEmp(t.id)}),200);return;}
@@ -1926,7 +1738,8 @@ const c=cons.find(x=>n2(x.id)===id);if(c){setModal(null);setTimeout(()=>setModal
 const v=vets.find(x=>n2(x.id)===id);if(v){setModal(null);setTimeout(()=>setModal({t:"take",item:v,cat:"vets"}),200);return;}
 showT("ID non trouvé: "+raw);
 };
-const saveInsp=async(id,data)=>{setSyncing(true);await fbSet("inspections",id,{...data,date:now()});setSyncing(false);setModal(null);showT("Inspection enregistrée!");};
+const saveInsp=async(id,data)=>{setSyncing(true);await fbSet("inspections",id,{...data,date:now()});await fbAdd("inspectionReports",{toolId:id,...data,date:now(),ts:Date.now()});setSyncing(false);setModal(null);showT("Inspection enregistrée!");};
+const resetInspections=async()=>{if(!confirm("Réinitialiser toutes les inspections ?"))return;setSyncing(true);const snap=await db.collection("inspections").get();for(const d of snap.docs){await d.ref.delete();}setSyncing(false);showT("Inspections réinitialisées");};
 const saveMaint=async(toolId,data)=>{setSyncing(true);await fbSet("maintenances",toolId,{...data,updatedAt:now()});setSyncing(false);setModal(null);showT("Maintenance mise à jour!");};
 const saveDepart=async data=>{
 setSyncing(true);
@@ -2006,7 +1819,7 @@ const stockList=(stockTab==="cons"?cons:vets).filter(i=>{const q=stockQ.toLowerC
 const empList=empF==="tous"?emprunts:empF==="encours"?emprunts.filter(e=>!e.retour):emprunts.filter(e=>e.retour);
 
 if(!ready)return h(Spinner,null);
-if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);if(user.role==="admin"){setIsAdmin(true);setPage("admin");}}});
+if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);setIsAdmin(user.role==="admin");setPage("accueil");}});
 
 return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
@@ -2015,45 +1828,65 @@ h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,set
 h("div",{style:{padding:"14px 14px 90px"}},
 
   page==="accueil"&&h("div",{className:"fi"},
-    cfg.coverUrl&&h("div",{style:{borderRadius:14,overflow:"hidden",marginBottom:14,height:120}},h("img",{src:cfg.coverUrl,style:{width:"100%",height:"100%",objectFit:"cover"}})),
-    h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}},
-      [{n:st.ok,l:"OK",c:S.green},{n:st.mo,l:"Moyen",c:S.orange},{n:st.ma,l:"NOK",c:S.danger},{n:st.so,l:"Sortis",c:S.blue}].map(x=>
-        h("div",{key:x.l,style:{background:S.white,borderRadius:14,padding:"12px 6px",textAlign:"center",boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},h("div",{style:{fontSize:26,fontWeight:800,color:x.c,lineHeight:1}},x.n),h("div",{style:{fontSize:10,color:S.gray,fontWeight:600,textTransform:"uppercase",letterSpacing:.5,marginTop:3}},x.l))
+    h("div",{style:{background:`linear-gradient(135deg,${cfg.couleur||S.red},${darken(cfg.couleur||S.red,35)})`,borderRadius:20,padding:"18px 16px",marginBottom:14,color:"#fff",boxShadow:"0 10px 28px rgba(0,0,0,.18)"}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}},
+        cfg.logoUrl?h("img",{src:cfg.logoUrl,style:{width:54,height:54,borderRadius:14,objectFit:"cover",background:"rgba(255,255,255,.15)"}}):h("div",{style:{width:54,height:54,borderRadius:14,background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26}},"✈️"),
+        h("div",{style:{minWidth:0,flex:1}},
+          h("div",{style:{fontSize:26,fontWeight:900,letterSpacing:-.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},cfg.nomSite||"LUX AIRPORT"),
+          h("div",{style:{fontSize:13,opacity:.85}},cfg.sousTitre||"Gestion Airside"),
+          currentUser&&h("div",{style:{fontSize:12,fontWeight:700,marginTop:8,display:"inline-flex",gap:6,alignItems:"center",background:"rgba(255,255,255,.16)",padding:"6px 10px",borderRadius:999}},"👤",currentUser.name||"Utilisateur")
+        )
+      ),
+      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}},
+        [{n:st.ok,l:"OK",c:"#eafff2"},{n:st.mo,l:"Moyen",c:"#fff5de"},{n:st.ma,l:"NOK",c:"#ffe8e7"},{n:st.so,l:"Sortis",c:"#eaf3ff"}].map(x=>
+          h("div",{key:x.l,style:{background:x.c,borderRadius:14,padding:"10px 6px",textAlign:"center",color:S.dark}},
+            h("div",{style:{fontSize:24,fontWeight:900,lineHeight:1}},x.n),
+            h("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginTop:4,opacity:.7}},x.l)
+          )
+        )
       )
     ),
-    h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},h("span",{style:{fontSize:14,fontWeight:600}},"Inspections"),h("span",{style:{fontSize:14,fontWeight:700,color:S.red}},pct+"%")),
-      h("div",{style:{height:7,background:S.bg,borderRadius:4,overflow:"hidden"}},h("div",{style:{height:"100%",width:pct+"%",background:"linear-gradient(90deg,"+S.red+",#ff6b6b)",borderRadius:4,transition:"width .5s"}})),
-      h("div",{style:{fontSize:12,color:S.gray,marginTop:6}},st.fait+"/"+st.total+" inspectés — Attente: "+st.at)
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
+      h("button",{onClick:()=>setPage("inspection"),style:{...BP,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"🔧 Inspection"),
+      h("button",{onClick:()=>setModal({t:"dep"}),style:{...BB,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"📤 Emprunt / sortie"),
+      h("button",{onClick:()=>setPage("entrepot"),style:{...BO,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"🏭 Entrepôt"),
+      h("button",{onClick:()=>setPage("rapport"),style:{...BG,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"📊 Rapports")
     ),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}},
-      h("div",{style:{background:S.white,borderRadius:14,padding:"12px 14px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:600,textTransform:"uppercase"}},"Sorties auj."),h("div",{style:{fontSize:28,fontWeight:800,color:S.blue,marginTop:4}},sortiesJ)),
-      h("div",{style:{background:S.white,borderRadius:14,padding:"12px 14px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:600,textTransform:"uppercase"}},"Retours auj."),h("div",{style:{fontSize:28,fontWeight:800,color:S.green,marginTop:4}},entreesJ))
+    h("div",{style:{background:S.white,borderRadius:16,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},h("span",{style:{fontSize:14,fontWeight:700}},"Progression inspections"),h("span",{style:{fontSize:14,fontWeight:800,color:S.red}},pct+"%")),
+      h("div",{style:{height:8,background:S.bg,borderRadius:999,overflow:"hidden"}},h("div",{style:{height:"100%",width:pct+"%",background:`linear-gradient(90deg,${S.red},#ff6b6b)`,borderRadius:999,transition:"width .5s"}})),
+      h("div",{style:{fontSize:12,color:S.gray,marginTop:8}},st.fait+"/"+st.total+" inspectés — Attente: "+st.at)
     ),
-    outilsLongs.length>0&&h("div",{style:{background:"#e8f0fe",border:"1px solid #c7d7f9",borderRadius:12,padding:"12px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:S.blue}},"Outils sortis depuis +24h: "+outilsLongs.length),
-    st.ma>0&&h("div",{style:{background:"#fff1f0",border:"1px solid #ffccc7",borderRadius:12,padding:"12px 14px",marginBottom:10,fontSize:13,fontWeight:600,color:S.danger}},"Outils en mauvais état: "+st.ma),
-    lowS.length>0&&h("div",{style:{background:"#fff8e6",border:"1px solid #ffe8a3",borderRadius:12,padding:"12px 14px",marginBottom:14,fontSize:13,fontWeight:600,color:S.orange}},"Stock faible: "+lowS.length+" article(s)"),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},
-      h("button",{onClick:()=>setPage("inspection"),style:BP},"🔧 Inspecter"),
-      h("button",{onClick:()=>setModal({t:"dep"}),style:BB},"📤 Sortir outil")
+    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
+      h("div",{style:{background:S.white,borderRadius:16,padding:"14px",boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Sorties aujourd'hui"),h("div",{style:{fontSize:28,fontWeight:900,color:S.blue,marginTop:4}},sortiesJ)),
+      h("div",{style:{background:S.white,borderRadius:16,padding:"14px",boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Retours aujourd'hui"),h("div",{style:{fontSize:28,fontWeight:900,color:S.green,marginTop:4}},entreesJ))
     ),
-    h("button",{onClick:()=>setModal({t:"scan"}),style:{...BO,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"📷 Scanner QR Code"),
+    (cfg.teamMessage1||cfg.teamMessage2||isAdmin)&&h("div",{style:{background:S.white,borderRadius:16,padding:"14px 16px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},
+      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
+        h("div",{style:{fontSize:15,fontWeight:800}},"📣 Messages équipe"),
+        isAdmin&&h("div",{style:{display:"flex",gap:8}},
+          h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||"");if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:"auto",padding:"8px 10px",fontSize:12}},"Modifier 1"),
+          h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||"");if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:"auto",padding:"8px 10px",fontSize:12}},"Modifier 2")
+        )
+      ),
+      cfg.teamMessage1&&h("div",{style:{background:"#fff7f7",borderLeft:"4px solid "+S.red,borderRadius:12,padding:"12px 14px",marginBottom:8}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:4}},"Message 1"),h("div",{style:{fontSize:13,fontWeight:600,whiteSpace:"pre-wrap"}},cfg.teamMessage1)),
+      cfg.teamMessage2&&h("div",{style:{background:"#f5f8ff",borderLeft:"4px solid "+S.blue,borderRadius:12,padding:"12px 14px"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:4}},"Message 2"),h("div",{style:{fontSize:13,fontWeight:600,whiteSpace:"pre-wrap"}},cfg.teamMessage2)),
+      !cfg.teamMessage1&&!cfg.teamMessage2&&!isAdmin&&h("div",{style:{fontSize:13,color:S.gray}},"Aucun message actuellement")
+    ),
+    (outilsLongs.length>0||st.ma>0||lowS.length>0)&&h("div",{style:{display:"grid",gap:8,marginBottom:14}},
+      outilsLongs.length>0&&h("div",{style:{background:"#e8f0fe",border:"1px solid #c7d7f9",borderRadius:12,padding:"12px 14px",fontSize:13,fontWeight:700,color:S.blue}},"Outils sortis depuis +24h: "+outilsLongs.length),
+      st.ma>0&&h("div",{style:{background:"#fff1f0",border:"1px solid #ffccc7",borderRadius:12,padding:"12px 14px",fontSize:13,fontWeight:700,color:S.danger}},"Outils en mauvais état: "+st.ma),
+      lowS.length>0&&h("div",{style:{background:"#fff8e6",border:"1px solid #ffe8a3",borderRadius:12,padding:"12px 14px",fontSize:13,fontWeight:700,color:S.orange}},"Stock faible: "+lowS.length+" article(s)")
+    ),
     h("div",{style:{background:S.white,borderRadius:16,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-      h("div",{style:{padding:"12px 16px",borderBottom:"1px solid "+S.bg,display:"flex",justifyContent:"space-between",alignItems:"center"}},h("span",{style:{fontSize:14,fontWeight:700}},"Outils sortis"),h("span",{style:{background:"#fdf4f4",color:S.red,borderRadius:20,padding:"2px 10px",fontSize:11,fontWeight:700}},st.so)),
-      emprunts.filter(e=>!e.retour).length===0
-        ?h("div",{style:{padding:24,textAlign:"center",color:S.gray}},h("div",{style:{fontSize:36,marginBottom:8}},"✅"),h("div",{style:{fontWeight:600}},"Tous les outils disponibles"))
-        :emprunts.filter(e=>!e.retour).map(e=>{
-          const t=tools.find(x=>x.id===e.toolId);const eid=e._id;
-          return h("div",{key:eid,style:{padding:"12px 16px",borderBottom:"1px solid "+S.bg,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}},
-            h("div",{style:{minWidth:0}},h("div",{style:{fontSize:10,fontWeight:700,color:S.blue}},e.toolId),h("div",{style:{fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},t?t.nom:e.toolId),h("div",{style:{fontSize:11,color:S.gray}},"👤 "+e.personne+" — "+e.dateDepart)),
-            h("button",{onClick:()=>openRetour(eid),style:{background:S.blue,color:S.white,border:"none",borderRadius:10,padding:"8px 13px",fontSize:12,fontWeight:700,cursor:"pointer",flexShrink:0}},"Retour")
-          );
-        })
+      h("div",{style:{padding:"12px 16px",borderBottom:"1px solid "+S.bg,display:"flex",justifyContent:"space-between",alignItems:"center"}},h("span",{style:{fontSize:14,fontWeight:700}},"Outils sortis"),h("span",{style:{fontSize:12,color:S.gray,fontWeight:700}},(outilsLongs.length||emprunts.filter(e=>!e.retour).length)+" en cours")),
+      emprunts.filter(e=>!e.retour).slice(-6).reverse().map((e,i)=>{const t=tools.find(x=>x.id===e.toolId);return h("div",{key:i,onClick:()=>setPage("emprunts"),style:{padding:"12px 16px",borderBottom:i<Math.min(5,emprunts.filter(x=>!x.retour).length-1)?"1px solid "+S.bg:"none",cursor:"pointer"}},h("div",{style:{fontSize:11,fontWeight:800,color:S.red}},e.toolId),h("div",{style:{fontSize:13,fontWeight:700}},t?t.nom:e.toolId),h("div",{style:{fontSize:11,color:S.gray,marginTop:3}},"👤 "+e.personne+" — "+e.dateDepart));}),
+      emprunts.filter(e=>!e.retour).length===0&&h("div",{style:{padding:18,textAlign:"center",color:S.gray,fontSize:13}},"Aucun outil actuellement sorti")
     )
   ),
 
   page==="emprunts"&&h("div",{className:"fi"},
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour")),
+    h("div",{style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 1fr 1fr":"1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour"),isAdmin&&h("button",{onClick:()=>setPage("kits"),style:{...BG,padding:"12px",fontSize:13}},"🧰 Gérer kits")),
     h("div",{style:{display:"flex",gap:8,marginBottom:14,overflowX:"auto"}},[["tous","Tous"],["encours","En cours"],["retournes","Retournés"]].map(([f,l])=>h("button",{key:f,onClick:()=>setEmpF(f),style:{flex:"none",padding:"7px 14px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(empF===f?S.red:S.border),background:empF===f?S.red:S.white,color:empF===f?S.white:"#3c3c43",cursor:"pointer"}},l))),
     empList.length===0?h("div",{style:{padding:28,textAlign:"center",color:S.gray}},"Aucun emprunt")
     :[...empList].reverse().map(e=>{
@@ -2078,6 +1911,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="inspection"&&h("div",{className:"fi"},
+    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},h("button",{onClick:resetInspections,style:{...BO,flex:1,padding:"11px",fontSize:13}},"🔄 Réinitialiser inspections"),h("button",{onClick:()=>setPage("rapport"),style:{...BG,flex:1,padding:"11px",fontSize:13}},"📊 Rapports")),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
       h("div",{style:{position:"relative",flex:1}},h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:15}},"🔍"),h("input",{value:toolSearch,onChange:e=>setToolSearch(e.target.value),placeholder:"ID, nom, marque...",style:{width:"100%",padding:"11px 14px 11px 36px",border:"none",borderRadius:12,fontSize:14,background:S.white,outline:"none",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})),
       h("button",{onClick:()=>setModal({t:"scan"}),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 14px",fontSize:20,cursor:"pointer"}},"📷")
@@ -2114,7 +1948,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
       h("button",{onClick:()=>setModal({t:"scan"}),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 14px",fontSize:20,cursor:"pointer"}},"📷")
     ),
     h("div",{style:{display:"flex",background:S.border,borderRadius:12,padding:3,marginBottom:14}},[["cons","📦 Consommables"],["vets","🧤 EPI/Vêtements"]].map(([tb,lb])=>h("button",{key:tb,onClick:()=>{setStockTab(tb);setStockQ("");},style:{flex:1,padding:"9px",borderRadius:10,border:"none",background:stockTab===tb?S.white:"transparent",color:stockTab===tb?S.dark:S.gray,fontWeight:stockTab===tb?700:500,fontSize:13,cursor:"pointer",boxShadow:stockTab===tb?"0 1px 3px rgba(0,0,0,.1)":"none"}},lb))),
-    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},h("button",{onClick:()=>setModal({t:"addCons",cat:stockTab}),style:{...BG,flex:1,padding:"10px",fontSize:13}},"+Ajouter"),h("button",{onClick:()=>setModal({t:"csv",cat:stockTab}),style:{...BO,flex:1,padding:"10px",fontSize:13}},"📥 Import CSV")),
+    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},h("button",{onClick:()=>setModal({t:"addCons",cat:stockTab}),style:{...BG,flex:1,padding:"10px",fontSize:13}},"+Ajouter"),h("button",{onClick:()=>setModal({t:"csv",cat:stockTab}),style:{...BO,flex:1,padding:"10px",fontSize:13}},"📥 Import Excel/CSV")),
     stockList.length===0?h("div",{style:{padding:28,textAlign:"center",color:S.gray}},"Aucun article")
     :stockList.map(item=>{
       const low=item.stock<=item.min;
@@ -2122,7 +1956,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
         h("div",{style:{padding:"13px 16px"}},
           h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}},
             h("div",{style:{minWidth:0,flex:1}},h("div",{style:{fontSize:10,fontWeight:700,color:S.red}},item.id),h("div",{style:{fontSize:14,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}},item.nom),item.taille&&h("div",{style:{fontSize:11,color:S.gray}},"T."+item.taille+" — "+item.fournisseur)),
-            h("div",{style:{textAlign:"right",flexShrink:0}},h("div",{style:{fontSize:24,fontWeight:800,color:low?S.danger:S.green,lineHeight:1}},item.stock),h("div",{style:{fontSize:10,color:S.gray}},"pcs"))
+            h("div",{style:{display:"flex",alignItems:"center",gap:10,flexShrink:0}},h(QRCodeDisplay,{text:item.id,size:48}),h("div",{style:{textAlign:"right"}},h("div",{style:{fontSize:24,fontWeight:800,color:low?S.danger:S.green,lineHeight:1}},item.stock),h("div",{style:{fontSize:10,color:S.gray}},"pcs")))
           ),
           low&&h("div",{style:{background:"#fff1f0",borderRadius:8,padding:"6px 10px",marginTop:8,fontSize:12,color:S.danger,fontWeight:600}},"Stock faible — min: "+item.min),
           h("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
@@ -2137,7 +1971,16 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="kits"&&h("div",{className:"fi"},
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}},h("div",{style:{fontSize:17,fontWeight:800}},"Kits d'outils"),isAdmin&&h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}},"+Kit")),
+    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14,gap:8}},
+      h("div",{style:{display:"flex",alignItems:"center",gap:8}},
+        h("button",{onClick:()=>setPage("emprunts"),style:{...BS,width:"auto",padding:"10px 12px",fontSize:12}},"← Retour"),
+        h("div",{style:{fontSize:17,fontWeight:800}},"Gérer les kits")
+      ),
+      isAdmin&&h("div",{style:{display:"flex",gap:8}},
+        h("button",{onClick:()=>setPage("entrepot"),style:{...BO,width:"auto",padding:"9px 12px",fontSize:12}},"📍 Emplacements"),
+        h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}},"+ Kit")
+      )
+    ),
     kits.length===0?h("div",{style:{background:S.white,borderRadius:14,padding:"40px 20px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:48,marginBottom:12}},"🧰"),h("div",{style:{fontSize:16,fontWeight:700,marginBottom:8}},"Aucun kit"),h("button",{onClick:()=>setModal({t:"kit"}),style:BP},"+Créer le premier kit"))
     :kits.map(kit=>{
       const dispo=kit.outils?.every(id=>!isEmp(id));const outilsDispo=kit.outils?.filter(id=>!isEmp(id)).length||0;const total=kit.outils?.length||0;
@@ -2153,8 +1996,6 @@ h("div",{style:{padding:"14px 14px 90px"}},
 
   page==="entrepot"&&h(EntrepotPage,{isAdmin,showT,cfg,warehouseConfig,currentUser}),
 
-  page==="matsmobile"&&h(GestionMatsMobilePage,{p2Tours,p2Config,currentUser,userAccounts,isAdmin,onNewTour:()=>setModal({t:"p2Tour"}),onEditTour:(tour)=>setModal({t:"p2Tour",tour}),onDeleteTour:delP2Tour,onAdminOpen:()=>setPage("admin")}),
-
   page==="rapport"&&h("div",{className:"fi"},
     !isAdmin?h("div",{style:{textAlign:"center",padding:40}},h("div",{style:{fontSize:56,marginBottom:16}},"🔐"),h("div",{style:{fontSize:18,fontWeight:700,marginBottom:8}},"Accès restreint"),h("p",{style:{fontSize:14,color:S.gray}},"Les rapports sont disponibles uniquement en mode administrateur."))
     :h("div",{},
@@ -2162,8 +2003,8 @@ h("div",{style:{padding:"14px 14px 90px"}},
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
         h("button",{onClick:()=>{const rows=tools.map(t=>{const ins=inspections[t.id]||{};const em=isEmp(t.id);return[t.id,t.nom.substring(0,18),t.marque||"",em?"Sorti":(ins.etat||"Attente"),ins.tech||""];});genPDF("insp",{stats:[{n:st.ok,l:"OK",c:"#34c759"},{n:st.mo,l:"Moyen",c:"#ff9500"},{n:st.ma,l:"NOK",c:"#ff3b30"},{n:st.so,l:"Sortis",c:"#007aff"}],headers:["ID","Outil","Marque","État","Tech"],rows},cfg);},style:{...BP,padding:"12px",fontSize:13}},"Inspections"),
         h("button",{onClick:()=>{genPDF("emp",{stats:[{n:emprunts.length,l:"Total",c:"#1c1c1e"},{n:emprunts.filter(e=>!e.retour).length,l:"En cours",c:"#007aff"},{n:emprunts.filter(e=>e.retour).length,l:"Retournés",c:"#34c759"},{n:sortiesJ,l:"Auj.",c:"#ff9500"}],headers:["Outil","Personne","Départ","Retour"],rows:emprunts.map(e=>[e.toolId,e.personne,e.dateDepart,e.retour||"En cours"])},cfg);},style:{...BB,padding:"12px",fontSize:13}},"Emprunts"),
-        h("button",{onClick:()=>{const allItems=[...cons,...vets];genPDF("stock",{stats:[{n:allItems.length,l:"Total",c:"#1c1c1e"},{n:allItems.filter(i=>i.stock>i.min).length,l:"OK",c:"#34c759"},{n:lowS.length,l:"Faible",c:"#ff3b30"},{n:allItems.reduce((a,i)=>a+i.stock,0),l:"Total pcs",c:"#007aff"}],headers:["ID","Article","Stock","Min","Statut"],rows:allItems.map(i=>[i.id,i.nom.substring(0,16),i.stock,i.min,i.stock<=i.min?"FAIBLE":"OK"])},cfg);},style:{...BS,padding:"12px",fontSize:13}},"Stocks"),
-        h("button",{onClick:()=>{genPDF("hist",{headers:["Article","Qté","Action","Personne","Date"],rows:hist.map(hh=>[hh.nom.substring(0,14),hh.qte,hh.action||"sortie",hh.personne,hh.date])},cfg);},style:{...BS,padding:"12px",fontSize:13,color:S.red}},"Historique")
+        h("button",{onClick:()=>{const allItems=[...cons,...vets];genPDF("stock",{stats:[{n:allItems.length,l:"Total",c:"#1c1c1e"},{n:allItems.filter(i=>i.stock>i.min).length,l:"OK",c:"#34c759"},{n:lowS.length,l:"Faible",c:"#ff3b30"},{n:allItems.reduce((a,i)=>a+i.stock,0),l:"Total pcs",c:"#007aff"}],headers:["ID","Article","Stock","Min","Statut"],rows:allItems.map(i=>[i.id,i.nom.substring(0,16),i.stock,i.min,i.stock<=i.min?"FAIBLE":"OK"])},cfg);},style:{...BG,padding:"12px",fontSize:13}},"Stocks"),
+        h("button",{onClick:()=>{genPDF("hist",{headers:["Article","Qté","Action","Personne","Date"],rows:hist.map(hh=>[hh.nom.substring(0,14),hh.qte,hh.action||"sortie",hh.personne,hh.date])},cfg);},style:{...BO,padding:"12px",fontSize:13}},"Historique")
       )
     )
   ),
@@ -2179,7 +2020,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="admin"&&h("div",{className:"fi"},
-      h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>{setIsAdmin(false);setCurrentUser(null);setPage("accueil");},onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig,p2Config,p2Tours,saveP2Config,saveP2Tour,delP2Tour,setPage})
+      h(AdminPanel,{cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg:saveCfg,onSaveAdmin:saveAdmin,onLogout:()=>{setIsAdmin(false);setCurrentUser(null);setPage("accueil");},onDelHist:delHist,onDelEmprunt:delEmprunt,onModEmprunt:(e)=>setModal({t:"modEmp",empr:e}),onDetEmprunt:(e,t)=>setModal({t:"detEmp",empr:e,tool:t}),genPDF,showT,setModal,importCSV,saveMaint,onExportBackup:exportBackup,onImportBackup:importBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig})
   )
 ),
 
@@ -2210,7 +2051,6 @@ modal&&h("div",{},
   modal.t==="planningMaint"&&h(PlanningMaintenanceModal,{tools,maintenances,onClose:()=>setModal(null)}),
   modal.t==="addUser"&&h(AddUserModal,{onSave:(u)=>{saveUserAccounts([...(userAccounts||[]),u]);setModal(null);},onClose:()=>setModal(null)}),
   modal.t==="editUser"&&h(AddUserModal,{existing:modal.acc,onSave:(u)=>{const na=[...(userAccounts||[])];na[modal.idx]=u;saveUserAccounts(na);setModal(null);},onClose:()=>setModal(null)}),
-  modal.t==="p2Tour"&&h(P2TourModal,{tour:modal.tour,p2Config,currentUser,userAccounts,onSave:saveP2Tour,onClose:()=>setModal(null)}),
   modal.t==="alertes"&&h(Modal,{onClose:()=>setModal(null)},
     h("div",{style:{background:"linear-gradient(135deg,#ff9500,#e67e22)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"ALERTES"),h("div",{style:{fontSize:20,fontWeight:900}},"Situation en cours")),
     outilsLongs.length>0&&h("div",{style:{background:"#e8f0fe",borderRadius:12,padding:"12px 14px",margin:"14px 0 8px"}},
