@@ -1778,232 +1778,264 @@ tab==="perso"&&h("div",{},
 
 // ── APPLICATION PRINCIPALE ────────────────────────────────────────────────────
 
+
 // ── FOD BOSS ────────────────────────────────────────────────────────────────
-function FodBossPage({isAdmin,currentUser,showT}){
-const DEFAULT_APRONS=[
-  {id:'P1',surface:158500,recurrenceDays:7,active:true},
-  {id:'P2',surface:45000,recurrenceDays:7,active:true},
-  {id:'P5',surface:29000,recurrenceDays:7,active:true},
-  {id:'P6',surface:7200,recurrenceDays:7,active:true},
-];
-const[tab,setTab]=useState('passage');
-const[loading,setLoading]=useState(true);
-const[cfg,setCfg]=useState({aprons:DEFAULT_APRONS});
-const[passages,setPassages]=useState([]);
-const[dateTime,setDateTime]=useState(new Date().toISOString().slice(0,16));
-const[apron,setApron]=useState('P2');
-const[poids,setPoids]=useState('');
-const[commentaire,setCommentaire]=useState('');
-const[photos,setPhotos]=useState([]);
-const[editAprons,setEditAprons]=useState(DEFAULT_APRONS);
-const[newApron,setNewApron]=useState({id:'',surface:'',recurrenceDays:7});
-const[search,setSearch]=useState('');
-
-useEffect(()=>{
-  const u1=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{
-    if(s.exists){
-      const d=s.data()||{};
-      const arr=(d.aprons&&d.aprons.length?d.aprons:DEFAULT_APRONS).map(a=>({
-        id:(a.id||'').toUpperCase(),
-        surface:parseFloat(a.surface)||0,
-        recurrenceDays:parseInt(a.recurrenceDays)||7,
-        active:a.active!==false
-      }));
-      setCfg({aprons:arr});
-      setEditAprons(arr);
-      if(!arr.find(a=>a.id===apron)&&arr[0])setApron(arr[0].id);
-    }else{
-      setCfg({aprons:DEFAULT_APRONS});
-      setEditAprons(DEFAULT_APRONS);
-    }
-    setLoading(false);
-  });
-  const u2=db.collection('fodBossPassages').orderBy('ts','desc').onSnapshot(s=>{
-    setPassages(s.docs.map(d=>({...d.data(),_id:d.id})));
-  });
-  return ()=>{u1();u2();};
-},[]);
-
-const aprons=(cfg.aprons||[]).filter(a=>a.active!==false);
-const selectedApron=aprons.find(a=>a.id===apron) || aprons[0] || {id:'',surface:0,recurrenceDays:7};
-const gpm2 = selectedApron.surface>0 && poids!=='' ? ((parseFloat(poids)||0)/selectedApron.surface) : null;
-const roundedGpm2 = gpm2===null ? '' : gpm2.toFixed(4);
-
-const savePassage=async()=>{
-  if(!selectedApron.id){alert("Sélectionnez un apron");return;}
-  if(poids==='' || isNaN(parseFloat(poids))){alert("Entrez le poids en grammes");return;}
-  const payload={
-    apron:selectedApron.id,
-    surface:selectedApron.surface,
-    recurrenceDays:selectedApron.recurrenceDays||7,
-    poidsGrammes:parseFloat(poids)||0,
-    gpm2:parseFloat(roundedGpm2||'0'),
-    commentaire:commentaire||'',
-    photos:photos||[],
-    user:currentUser?.name||'Utilisateur',
-    dateTime:dateTime ? new Date(dateTime).toLocaleString('fr-FR') : now(),
-    dateTimeISO: dateTime ? new Date(dateTime).toISOString() : new Date().toISOString(),
-    ts: Date.now(),
+function FodBossPage({currentUser,isAdmin,showT}){
+  const DEFAULT_FOD_CFG={
+    aprons:[
+      {id:'P1',surface:158500,active:true},
+      {id:'P2',surface:45000,active:true},
+      {id:'P5',surface:29000,active:true},
+      {id:'P6',surface:7200,active:true}
+    ],
+    emails:['','']
   };
-  await fbAdd('fodBossPassages',payload);
-  setDateTime(new Date().toISOString().slice(0,16));
-  setPoids('');
-  setCommentaire('');
-  setPhotos([]);
-  showT&&showT('Passage FOD enregistré');
-};
+  const REC_RULES=[
+    {min:5.01,max:Infinity,label:'1 x par semaine',days:7},
+    {min:1.01,max:5.00,label:'1 x ttes les 2 semaines',days:14},
+    {min:0.51,max:1.00,label:'1 x par mois',days:30},
+    {min:0.00,max:0.50,label:'1 x ts les 2 mois',days:60}
+  ];
+  const [tab,setTab]=useState('passage');
+  const [cfg,setCfg]=useState(DEFAULT_FOD_CFG);
+  const [passages,setPassages]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [selectedApron,setSelectedApron]=useState('P2');
+  const [poidsKg,setPoidsKg]=useState('');
+  const [commentaire,setCommentaire]=useState('');
+  const [photos,setPhotos]=useState([]);
+  const [datePassage,setDatePassage]=useState(new Date().toISOString().slice(0,16));
+  const [editApronId,setEditApronId]=useState('');
+  const [editSurface,setEditSurface]=useState('');
+  const [newApronId,setNewApronId]=useState('');
+  const [newApronSurface,setNewApronSurface]=useState('');
+  const [search,setSearch]=useState('');
 
-const saveAprons=async()=>{
-  const cleaned=editAprons
-    .map(a=>({id:(a.id||'').toUpperCase().trim(),surface:parseFloat(a.surface)||0,recurrenceDays:parseInt(a.recurrenceDays)||7,active:a.active!==false}))
-    .filter(a=>a.id && a.surface>0);
-  if(cleaned.length===0){alert("Ajoutez au moins un apron valide");return;}
-  await db.collection('fodBossConfig').doc('main').set({aprons:cleaned},{merge:true});
-  showT&&showT('Configuration FOD BOSS sauvegardée');
-};
+  useEffect(()=>{
+    const unsubCfg=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{
+      if(s.exists){
+        const data=s.data()||{};
+        setCfg({
+          aprons:Array.isArray(data.aprons)&&data.aprons.length?data.aprons:DEFAULT_FOD_CFG.aprons,
+          emails:Array.isArray(data.emails)?data.emails:DEFAULT_FOD_CFG.emails
+        });
+      }else{
+        setCfg(DEFAULT_FOD_CFG);
+      }
+      setLoading(false);
+    },()=>setLoading(false));
+    const unsubPass=db.collection('fodBossPassages').orderBy('ts','desc').onSnapshot(s=>{
+      setPassages(s.docs.map(d=>({...d.data(),_id:d.id})));
+    });
+    return ()=>{unsubCfg();unsubPass();};
+  },[]);
 
-const exportHistoryCsv=()=>{
-  const headers=['Date','Apron','Surface m2','Poids g','g/m2','Récurrence jours','Utilisateur','Commentaire'];
-  const rows=passages.map(p=>[p.dateTime||'',p.apron||'',p.surface||'',p.poidsGrammes||'',p.gpm2||'',p.recurrenceDays||'',p.user||'',(p.commentaire||'').replace(/\n/g,' ')]);
-  const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\n');
-  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='FOD_BOSS_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
-};
+  const saveCfg=async(next)=>{
+    const cleaned={
+      aprons:(next.aprons||[]).map(a=>({id:String(a.id||'').trim().toUpperCase(),surface:Number(a.surface)||0,active:a.active!==false})).filter(a=>a.id&&a.surface>0),
+      emails:[...(next.emails||['',''])].slice(0,2)
+    };
+    await db.collection('fodBossConfig').doc('main').set(cleaned,{merge:true});
+    setCfg(cleaned);
+    showT&&showT('Configuration FOD sauvegardée');
+  };
 
-const historyFiltered=passages.filter(p=>{
-  const q=(search||'').toLowerCase().trim();
-  return !q || (p.apron||'').toLowerCase().includes(q) || (p.user||'').toLowerCase().includes(q) || (p.commentaire||'').toLowerCase().includes(q);
-});
+  const apronOptions=(cfg.aprons||[]).filter(a=>a.active!==false);
+  useEffect(()=>{
+    if(apronOptions.length && !apronOptions.find(a=>a.id===selectedApron)) setSelectedApron(apronOptions[0].id);
+  },[JSON.stringify(apronOptions),selectedApron]);
+  const selectedCfg=apronOptions.find(a=>a.id===selectedApron) || cfg.aprons?.[0] || DEFAULT_FOD_CFG.aprons[0];
+  const kgNum=parseFloat(String(poidsKg).replace(',','.'))||0;
+  const grams=kgNum*1000;
+  const gm2=selectedCfg&&selectedCfg.surface>0?grams/selectedCfg.surface:0;
+  const recurrence=REC_RULES.find(r=>gm2>=r.min&&gm2<=r.max) || REC_RULES[REC_RULES.length-1];
+  const nextDateStr=(()=>{
+    try{const base=new Date(datePassage||Date.now()); base.setDate(base.getDate()+recurrence.days); return base.toLocaleDateString('fr-FR');}catch{return '—';}
+  })();
+  const gm2Label=gm2.toFixed(3);
+  const recurColor=gm2>=5.01?S.danger:gm2>=1.01?S.orange:gm2>=0.51?S.blue:S.green;
 
-const planning = aprons.map(a=>{
-  const last=passages.find(p=>p.apron===a.id);
-  let nextDate=null,status='À planifier';
-  if(last && last.dateTimeISO){
-    nextDate=new Date(new Date(last.dateTimeISO).getTime() + ((parseInt(a.recurrenceDays)||7)*86400000));
-    const nowD=new Date();
-    status = nextDate < nowD ? 'En retard' : 'Planifié';
-  }
-  return {apron:a,last,nextDate,status};
-});
+  const savePassage=async()=>{
+    if(!selectedCfg){alert('Aucun apron configuré');return;}
+    if(!(kgNum>0)){alert('Indiquez un poids en kg');return;}
+    const baseDate=new Date(datePassage||Date.now());
+    const nextTs=baseDate.getTime()+recurrence.days*86400000;
+    const payload={
+      apron:selectedCfg.id,
+      surface:selectedCfg.surface,
+      poidsKg:kgNum,
+      poidsGrammes:grams,
+      gm2:Number(gm2.toFixed(4)),
+      recurrenceLabel:recurrence.label,
+      recurrenceDays:recurrence.days,
+      nextPassageTs:nextTs,
+      nextPassageLabel:new Date(nextTs).toLocaleDateString('fr-FR'),
+      commentaire,
+      photos,
+      user:currentUser?.name||'Utilisateur',
+      dateTime:baseDate.toLocaleString('fr-FR'),
+      ts:Date.now()
+    };
+    await fbAdd('fodBossPassages',payload);
+    setPoidsKg('');setCommentaire('');setPhotos([]);setDatePassage(new Date().toISOString().slice(0,16));
+    showT&&showT('Passage FOD enregistré');
+  };
 
-if(loading)return h("div",{style:{padding:"30px",textAlign:"center",color:S.gray}},"Chargement FOD BOSS...");
+  const updateApron=async()=>{
+    if(!editApronId.trim() || !(parseFloat(String(editSurface).replace(',','.'))>0)){alert('ID et surface requis');return;}
+    const next={...cfg,aprons:(cfg.aprons||[]).map(a=>a.id===editApronId?{...a,surface:parseFloat(String(editSurface).replace(',','.'))}:a)};
+    await saveCfg(next);setEditApronId('');setEditSurface('');
+  };
+  const removeApron=async(id)=>{if(!confirm('Supprimer '+id+' ?'))return;await saveCfg({...cfg,aprons:(cfg.aprons||[]).filter(a=>a.id!==id)});};
+  const addApron=async()=>{
+    const id=String(newApronId||'').trim().toUpperCase();
+    const surface=parseFloat(String(newApronSurface).replace(',','.'));
+    if(!id || !(surface>0)){alert('Nom et surface requis');return;}
+    if((cfg.aprons||[]).some(a=>a.id===id)){alert('Apron déjà existant');return;}
+    await saveCfg({...cfg, aprons:[...(cfg.aprons||[]),{id,surface,active:true}]});
+    setNewApronId('');setNewApronSurface('');
+  };
 
-return h("div",{className:"fi"},
-  h("div",{style:{background:"linear-gradient(135deg,#1c1c1e,#3c3c43)",borderRadius:16,padding:"22px 18px",marginBottom:14,color:"#fff"}},
-    h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}},
-      h("div",{},
-        h("div",{style:{fontSize:12,fontWeight:700,opacity:.7,letterSpacing:.8,textTransform:"uppercase",marginBottom:4}},"Foreign Object Debris"),
-        h("div",{style:{fontSize:24,fontWeight:900}},"FOD BOSS"),
-        h("div",{style:{fontSize:12,opacity:.7,marginTop:4}},"Suivi des passages apron en g/m²")
-      ),
-      h("div",{style:{background:"rgba(255,255,255,.12)",borderRadius:14,padding:"10px 12px",textAlign:"center",minWidth:88}},
-        h("div",{style:{fontSize:22,fontWeight:900}},passages.length),
-        h("div",{style:{fontSize:10,opacity:.7,textTransform:"uppercase"}},"Passages")
-      )
-    )
-  ),
-  h("div",{style:{display:"flex",gap:6,overflowX:"auto",marginBottom:12}},
-    [['passage','✍️ Passage'],['planning','📅 Planning'],['historique','🕘 Historique'],['admin','⚙️ Admin']].map(([id,label])=>
-      h("button",{key:id,onClick:()=>setTab(id),style:{flex:"none",padding:"9px 12px",borderRadius:14,border:"none",fontWeight:700,fontSize:12,cursor:"pointer",background:tab===id?S.dark:"#fff",color:tab===id?"#fff":S.gray,boxShadow:"0 1px 3px rgba(0,0,0,.06)"}},label)
-    )
-  ),
+  const filteredPassages=[...passages].filter(p=>{
+    const q=(search||'').toLowerCase().trim();
+    if(!q)return true;
+    return String(p.apron||'').toLowerCase().includes(q) || String(p.user||'').toLowerCase().includes(q) || String(p.commentaire||'').toLowerCase().includes(q) || String(p.dateTime||'').toLowerCase().includes(q);
+  });
 
-  tab==='passage'&&h("div",{},
-    h(Card,{title:"Nouveau passage",badge:selectedApron.id||''},
-      h("div",{style:{padding:14}},
-        FL("Date / heure"),h("input",{type:"datetime-local",value:dateTime,onChange:e=>setDateTime(e.target.value),style:IS}),
-        FL("Utilisateur",true),h("input",{value:currentUser?.name||"",readOnly:true,style:{...IS,background:"#f7f7f7",fontWeight:700}}),
-        FL("Apron *",true),h("select",{value:apron,onChange:e=>setApron(e.target.value),style:SS},
-          h("option",{value:""},"– Sélectionner –"),
-          ...aprons.map(a=>h("option",{key:a.id,value:a.id},`${a.id} — ${a.surface} m²`))
-        ),
-        selectedApron.id&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:8,marginBottom:6}},
-          h("div",{style:{background:"#eef5ff",borderRadius:12,padding:"10px 12px"}},h("div",{style:{fontSize:10,fontWeight:700,color:S.blue,textTransform:"uppercase"}},"Surface"),h("div",{style:{fontSize:18,fontWeight:900,color:S.blue,marginTop:2}},selectedApron.surface),h("div",{style:{fontSize:10,color:S.gray}},"m²")),
-          h("div",{style:{background:"#fff8e6",borderRadius:12,padding:"10px 12px"}},h("div",{style:{fontSize:10,fontWeight:700,color:S.orange,textTransform:"uppercase"}},"Récurrence"),h("div",{style:{fontSize:18,fontWeight:900,color:S.orange,marginTop:2}},selectedApron.recurrenceDays||7),h("div",{style:{fontSize:10,color:S.gray}},"jour(s)"))
-        ),
-        FL("Poids ramassé (grammes) *",true),h("input",{type:"number",value:poids,onChange:e=>setPoids(e.target.value),placeholder:"Ex: 250",style:{...IS,fontSize:18,fontWeight:800,textAlign:"center"}}),
-        gpm2!==null&&h("div",{style:{marginTop:10,background:"#e6fff0",borderRadius:14,padding:"12px 14px",textAlign:"center"}},
-          h("div",{style:{fontSize:10,fontWeight:700,color:S.green,textTransform:"uppercase",marginBottom:3}},"Calcul automatique"),
-          h("div",{style:{fontSize:28,fontWeight:900,color:S.green}},roundedGpm2),
-          h("div",{style:{fontSize:11,color:S.gray}},"g/m²")
-        ),
-        FL("Commentaire",true),h("textarea",{value:commentaire,onChange:e=>setCommentaire(e.target.value),placeholder:"Remarque, état de zone, observation...",style:{...IS,minHeight:70,resize:"vertical"}}),
-        FL("Photos",true),h(PhotoPicker,{photos,onChange:setPhotos,labelText:"Ajouter une ou plusieurs photos"}),
-        h("button",{onClick:savePassage,style:{...BP,marginTop:12}},"Enregistrer le passage")
-      )
-    )
-  ),
+  const planning=(cfg.aprons||[]).map(a=>{
+    const last=[...passages].filter(p=>p.apron===a.id).sort((x,y)=>(y.ts||0)-(x.ts||0))[0];
+    const nextTs=last?.nextPassageTs||null;
+    const overdue=nextTs?Date.now()>nextTs:false;
+    return {id:a.id,surface:a.surface,lastLabel:last?last.dateTime:'Jamais',gm2:last?Number(last.gm2||0).toFixed(3):'—',freq:last?.recurrenceLabel||'—',next:nextTs?new Date(nextTs).toLocaleDateString('fr-FR'):'—',status:!last?'À planifier':overdue?'En retard':'À venir'};
+  });
 
-  tab==='planning'&&h("div",{},
-    planning.map((p,i)=>h("div",{key:i,style:{background:"#fff",borderRadius:14,padding:"14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,.08)",borderLeft:`4px solid ${p.status==='En retard'?S.danger:S.blue}`}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}},
-        h("div",{style:{fontSize:18,fontWeight:900}},p.apron.id),
-        h("div",{style:{background:p.status==='En retard'?'#fff1f0':'#eef5ff',color:p.status==='En retard'?S.danger:S.blue,borderRadius:999,padding:'4px 10px',fontSize:11,fontWeight:800}},p.status)
-      ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}},
-        h("div",{style:{background:S.bg,borderRadius:10,padding:'10px 12px'}},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase"}},"Dernier passage"),h("div",{style:{fontSize:12,fontWeight:700,marginTop:3}},p.last?.dateTime||"Aucun")),
-        h("div",{style:{background:S.bg,borderRadius:10,padding:'10px 12px'}},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase"}},"Prochain"),h("div",{style:{fontSize:12,fontWeight:700,marginTop:3}},p.nextDate?p.nextDate.toLocaleString('fr-FR'):"À planifier"))
-      ),
-      h("div",{style:{fontSize:11,color:S.gray,marginTop:8}},`${p.apron.surface} m² • Tous les ${p.apron.recurrenceDays||7} jour(s)`)
-    ))
-  ),
+  const exportFodExcel=()=>{
+    const rows=filteredPassages.map(p=>({
+      Date:p.dateTime||'',
+      Apron:p.apron||'',
+      'Surface m²':p.surface||'',
+      'Poids kg':p.poidsKg||'',
+      'Poids g':p.poidsGrammes||'',
+      'g/m²':p.gm2||'',
+      'Fréquence':p.recurrenceLabel||'',
+      'Prochain passage':p.nextPassageLabel||'',
+      Agent:p.user||'',
+      Commentaire:p.commentaire||''
+    }));
+    const ws=window.XLSX.utils.json_to_sheet(rows);
+    const wb=window.XLSX.utils.book_new();
+    window.XLSX.utils.book_append_sheet(wb,ws,'FOD BOSS');
+    window.XLSX.writeFile(wb,'FOD_BOSS_'+new Date().toISOString().slice(0,10)+'.xlsx');
+  };
 
-  tab==='historique'&&h("div",{},
-    h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-      h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher apron, agent, commentaire...",style:{...IS,flex:1}}),
-      h("button",{onClick:exportHistoryCsv,style:{...BG,width:'auto',padding:'0 14px'}},"CSV")
+  if(loading)return h('div',{style:{padding:'20px',textAlign:'center'}},'Chargement FOD BOSS...');
+  return h('div',{className:'fi'},
+    h('div',{style:{background:'linear-gradient(135deg,#0f2027,#2c5364)',borderRadius:16,padding:'18px',marginBottom:14,color:'#fff'}},
+      h('div',{style:{fontSize:11,fontWeight:700,opacity:.75,marginBottom:4}},'FOD BOSS'),
+      h('div',{style:{fontSize:24,fontWeight:900,marginBottom:4}},'Suivi des passages APRON'),
+      h('div',{style:{fontSize:13,color:'rgba(255,255,255,.75)'}},'Saisie en kg, conversion automatique en grammes, calcul g/m² et récurrence automatique')
     ),
-    historyFiltered.length===0
-      ?h("div",{style:{background:"#fff",borderRadius:14,padding:"28px 20px",textAlign:"center",color:S.gray}},"Aucun passage")
-      :historyFiltered.map(p=>h("div",{key:p._id,style:{background:"#fff",borderRadius:14,padding:"14px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,.08)"}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:8}},
-            h("div",{},
-              h("div",{style:{fontSize:17,fontWeight:900}},p.apron||'—'),
-              h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},(p.user||'')+" • "+(p.dateTime||''))
-            ),
-            h("div",{style:{textAlign:'right'}},
-              h("div",{style:{fontSize:24,fontWeight:900,color:S.green,lineHeight:1}},(p.gpm2||0).toFixed?Number(p.gpm2).toFixed(4):p.gpm2),
-              h("div",{style:{fontSize:10,color:S.gray}},"g/m²")
+    h('div',{style:{display:'flex',gap:8,overflowX:'auto',marginBottom:12}},
+      [['passage','Nouveau passage'],['planning','Planning'],['historique','Historique'],['admin','Admin']].map(([id,label])=>h('button',{key:id,onClick:()=>setTab(id),style:{flex:'none',padding:'10px 14px',borderRadius:14,border:'none',fontWeight:700,cursor:'pointer',background:tab===id?S.dark:'#fff',color:tab===id?'#fff':S.gray,boxShadow:'0 1px 3px rgba(0,0,0,.08)'}},label))
+    ),
+    tab==='passage'&&h('div',{},
+      h(Card,{title:'Nouveau passage FOD BOSS'},
+        h('div',{style:{padding:'14px'}},
+          FL('Apron'),h('select',{value:selectedApron,onChange:e=>setSelectedApron(e.target.value),style:SS},...(apronOptions||[]).map(a=>h('option',{key:a.id,value:a.id},a.id+' — '+a.surface+' m²'))),
+          FL('Date / heure',true),h('input',{type:'datetime-local',value:datePassage,onChange:e=>setDatePassage(e.target.value),style:IS}),
+          FL('Poids collecté (kg) *',true),h('input',{value:poidsKg,onChange:e=>setPoidsKg(e.target.value.replace(',', '.')),placeholder:'Ex : 1 ou 0.5',style:IS,inputMode:'decimal'}),
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:10}},
+            h('div',{style:{background:'#f8f9ff',borderRadius:12,padding:'12px'}},h('div',{style:{fontSize:11,fontWeight:700,color:S.gray,marginBottom:4}},'Conversion automatique'),h('div',{style:{fontSize:18,fontWeight:900,color:S.blue}},(grams||0).toLocaleString('fr-FR',{maximumFractionDigits:0})+' g')),
+            h('div',{style:{background:'#f8fff6',borderRadius:12,padding:'12px'}},h('div',{style:{fontSize:11,fontWeight:700,color:S.gray,marginBottom:4}},'Surface apron'),h('div',{style:{fontSize:18,fontWeight:900,color:S.green}},(selectedCfg?.surface||0).toLocaleString('fr-FR')+' m²'))
+          ),
+          h('div',{style:{background:'#fff',border:'2px solid '+recurColor,borderRadius:14,padding:'14px',marginTop:12}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
+              h('div',{},h('div',{style:{fontSize:11,fontWeight:700,color:S.gray,textTransform:'uppercase'}},'Résultat'),h('div',{style:{fontSize:28,fontWeight:900,color:recurColor,marginTop:2}},gm2Label+' g/m²')),
+              h('div',{style:{textAlign:'right'}},h('div',{style:{fontSize:11,fontWeight:700,color:S.gray,textTransform:'uppercase'}},'Fréquence automatique'),h('div',{style:{fontSize:16,fontWeight:800,color:recurColor,marginTop:2}},recurrence.label),h('div',{style:{fontSize:12,color:S.gray,marginTop:2}},'Prochain passage : '+nextDateStr))
             )
           ),
-          h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}},
-            h("div",{style:{background:"#eef5ff",borderRadius:10,padding:"8px 10px"}},h("div",{style:{fontSize:10,color:S.gray,textTransform:"uppercase",fontWeight:700}},"Poids"),h("div",{style:{fontWeight:800,color:S.blue}},(p.poidsGrammes||0)+" g")),
-            h("div",{style:{background:"#f7f7fa",borderRadius:10,padding:"8px 10px"}},h("div",{style:{fontSize:10,color:S.gray,textTransform:"uppercase",fontWeight:700}},"Surface"),h("div",{style:{fontWeight:800}},(p.surface||0)+" m²"))
+          FL('Commentaire',true),h('textarea',{value:commentaire,onChange:e=>setCommentaire(e.target.value),placeholder:'Observation, zone plus sale, remarque...',style:{...IS,minHeight:72,resize:'vertical'}}),
+          FL('Photos',true),h(PhotoPicker,{photos,onChange:setPhotos,labelText:'Ajouter une ou plusieurs photos'}),
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}},
+            h('button',{onClick:()=>{setPoidsKg('');setCommentaire('');setPhotos([]);},style:BS},'Réinitialiser'),
+            h('button',{onClick:savePassage,style:BP},'Enregistrer le passage')
+          )
+        )
+      ),
+      h(Card,{title:'Grille de récurrence',badge:'Automatique',color:recurColor},
+        h('div',{style:{padding:'12px'}},REC_RULES.map((r,i)=>h('div',{key:i,style:{display:'grid',gridTemplateColumns:'1fr auto',gap:10,padding:'10px 0',borderBottom:i<REC_RULES.length-1?'1px solid '+S.bg:'none'}},
+          h('div',{style:{fontWeight:700}},(r.max===Infinity?'5,01 ou plus':String(r.min.toFixed(2)).replace('.',',')+' - '+String(r.max.toFixed(2)).replace('.',','))+' g/m²'),
+          h('div',{style:{color:S.gray,fontWeight:700}},r.label)
+        )))
+      )
+    ),
+    tab==='planning'&&h(Card,{title:'Planning automatique',badge:planning.length},
+      h('div',{style:{padding:'12px'}},planning.map((p,i)=>h('div',{key:i,style:{background:'#fff',borderRadius:12,padding:'12px',marginBottom:8,border:'1px solid '+S.border}},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}},
+          h('div',{style:{fontSize:16,fontWeight:900}},p.id),
+          h('div',{style:{background:p.status==='En retard'?'#fff1f0':p.status==='À venir'?'#e8f0fe':'#fff8e6',color:p.status==='En retard'?S.danger:p.status==='À venir'?S.blue:S.orange,borderRadius:999,padding:'4px 10px',fontSize:11,fontWeight:800}},p.status)
+        ),
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12}},
+          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Dernier passage'),h('div',{style:{fontWeight:700}},p.lastLabel)),
+          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Prochain passage'),h('div',{style:{fontWeight:700}},p.next)),
+          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Dernier g/m²'),h('div',{style:{fontWeight:700}},p.gm2)),
+          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Fréquence'),h('div',{style:{fontWeight:700}},p.freq))
+        )
+      )))
+    ),
+    tab==='historique'&&h('div',{},
+      h('div',{style:{display:'flex',gap:8,marginBottom:10}},
+        h('div',{style:{position:'relative',flex:1}},h('span',{style:{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',fontSize:14,pointerEvents:'none'}},'🔍'),h('input',{value:search,onChange:e=>setSearch(e.target.value),placeholder:'Rechercher apron, agent, commentaire...',style:{...IS,paddingLeft:34}})),
+        h('button',{onClick:exportFodExcel,style:{...BG,width:'auto',padding:'0 14px'}},'Excel')
+      ),
+      filteredPassages.map((p,i)=>h(Card,{key:p._id||i,title:(p.apron||'Apron')+' — '+(p.dateTime||''),badge:Number(p.gm2||0).toFixed(3)+' g/m²'},
+        h('div',{style:{padding:'12px'}},
+          h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12,marginBottom:8}},
+            h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Poids saisi'),h('div',{style:{fontWeight:800}},String(p.poidsKg||0).replace('.',',')+' kg')),
+            h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Poids converti'),h('div',{style:{fontWeight:800}},(p.poidsGrammes||0).toLocaleString('fr-FR')+' g')),
+            h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Surface'),h('div',{style:{fontWeight:800}},(p.surface||0).toLocaleString('fr-FR')+' m²')),
+            h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Fréquence'),h('div',{style:{fontWeight:800}},p.recurrenceLabel||''))
           ),
-          p.commentaire&&h("div",{style:{fontSize:12,color:"#444",marginBottom:8}},p.commentaire),
-          p.photos&&p.photos.length>0&&h("div",{style:{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}},p.photos.map((src,i)=>h("img",{key:i,src,style:{width:64,height:64,borderRadius:10,objectFit:'cover',border:'1px solid '+S.border}}))),
-          isAdmin&&h("button",{onClick:async()=>{if(!confirm("Supprimer ce passage ?"))return;await fbDel('fodBossPassages',p._id);showT&&showT('Passage supprimé');},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"8px 12px",fontWeight:700,cursor:"pointer"}},"Supprimer")
-      ))
-  ),
-
-  tab==='admin'&&(
-    !isAdmin
-      ?h("div",{style:{background:"#fff",borderRadius:14,padding:"24px 20px",textAlign:"center",color:S.gray}},"Accès réservé à l'administrateur")
-      :h("div",{},
-        h(Card,{title:"Réglages des aprons",badge:editAprons.length},
-          h("div",{style:{padding:14}},
-            editAprons.map((a,i)=>h("div",{key:i,style:{background:S.bg,borderRadius:12,padding:"12px",marginBottom:8}},
-              h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:8,alignItems:"end"}},
-                h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},"Apron"),h("input",{value:a.id,onChange:e=>setEditAprons(p=>p.map((x,j)=>j===i?{...x,id:e.target.value.toUpperCase()}:x)),style:IS})),
-                h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},"Surface m²"),h("input",{type:"number",value:a.surface,onChange:e=>setEditAprons(p=>p.map((x,j)=>j===i?{...x,surface:e.target.value}:x)),style:IS})),
-                h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},"Récurrence (jours)"),h("input",{type:"number",value:a.recurrenceDays||7,onChange:e=>setEditAprons(p=>p.map((x,j)=>j===i?{...x,recurrenceDays:e.target.value}:x)),style:IS})),
-                h("button",{onClick:()=>setEditAprons(p=>p.filter((_,j)=>j!==i)),style:{width:42,height:42,borderRadius:12,border:"none",background:"#fff1f0",color:S.danger,fontWeight:900,cursor:"pointer"}},"×")
-              )
+          p.commentaire&&h('div',{style:{fontSize:12,marginBottom:8}},h('span',{style:{fontWeight:700,color:S.gray}},'Commentaire : '),p.commentaire),
+          p.photos?.length>0&&h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},p.photos.map((ph,j)=>h('img',{key:j,src:ph,style:{width:62,height:62,objectFit:'cover',borderRadius:8,border:'1px solid '+S.border}}))),
+          isAdmin&&h('button',{onClick:async()=>{if(!confirm('Supprimer ce passage ?'))return;await fbDel('fodBossPassages',p._id);showT&&showT('Passage supprimé');},style:{...BS,color:S.danger,marginTop:8}},'Supprimer')
+        )
+      )),
+      filteredPassages.length===0&&h('div',{style:{background:'#fff',borderRadius:14,padding:'30px 20px',textAlign:'center',color:S.gray}},'Aucun passage enregistré')
+    ),
+    tab==='admin'&&h('div',{},
+      !isAdmin?h('div',{style:{background:'#fff1f0',borderRadius:14,padding:'18px',color:S.danger,fontWeight:700,textAlign:'center'}},'Accès admin requis')
+      :h('div',{},
+        h(Card,{title:'Aprons configurés',badge:(cfg.aprons||[]).length},
+          h('div',{style:{padding:'12px'}},
+            (cfg.aprons||[]).map((a,i)=>h('div',{key:a.id,style:{display:'grid',gridTemplateColumns:'1fr auto auto',gap:8,alignItems:'center',padding:'10px 0',borderBottom:i<cfg.aprons.length-1?'1px solid '+S.bg:'none'}},
+              h('div',{},h('div',{style:{fontWeight:800}},a.id),h('div',{style:{fontSize:12,color:S.gray}},(a.surface||0).toLocaleString('fr-FR')+' m²')),
+              h('button',{onClick:()=>{setEditApronId(a.id);setEditSurface(String(a.surface||''));},style:{background:'#e8f0fe',color:S.blue,border:'none',borderRadius:10,padding:'8px 10px',cursor:'pointer',fontWeight:700}},'Modifier'),
+              h('button',{onClick:()=>removeApron(a.id),style:{background:'#fff1f0',color:S.danger,border:'none',borderRadius:10,padding:'8px 10px',cursor:'pointer',fontWeight:700}},'Suppr.')
             )),
-            h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr 1fr auto",gap:8,alignItems:"end",marginTop:8}},
-              h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},"Nouvel apron"),h("input",{value:newApron.id,onChange:e=>setNewApron(p=>({...p,id:e.target.value.toUpperCase()})),placeholder:"P7",style:IS})),
-              h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},"Surface m²"),h("input",{type:"number",value:newApron.surface,onChange:e=>setNewApron(p=>({...p,surface:e.target.value})),style:IS})),
-              h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},"Récurrence"),h("input",{type:"number",value:newApron.recurrenceDays,onChange:e=>setNewApron(p=>({...p,recurrenceDays:e.target.value})),style:IS})),
-              h("button",{onClick:()=>{if(!newApron.id||!newApron.surface)return;setEditAprons(p=>[...p,{id:newApron.id.toUpperCase(),surface:parseFloat(newApron.surface)||0,recurrenceDays:parseInt(newApron.recurrenceDays)||7,active:true}]);setNewApron({id:'',surface:'',recurrenceDays:7});},style:{width:42,height:42,borderRadius:12,border:"none",background:S.green,color:"#fff",fontWeight:900,cursor:"pointer"}},"+")
+            h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,marginTop:12}},
+              h('input',{value:newApronId,onChange:e=>setNewApronId(e.target.value.toUpperCase()),placeholder:'Nouvel apron (ex: P7)',style:IS}),
+              h('input',{value:newApronSurface,onChange:e=>setNewApronSurface(e.target.value),placeholder:'Surface m²',style:IS,inputMode:'decimal'}),
+              h('button',{onClick:addApron,style:{...BP,width:'auto',padding:'0 14px'}},'+')
             ),
-            h("button",{onClick:saveAprons,style:{...BP,marginTop:12}},"Sauvegarder les réglages FOD BOSS")
+            editApronId&&h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr auto',gap:8,marginTop:10}},
+              h('input',{value:editApronId,readOnly:true,style:{...IS,background:'#f7f7f7',fontWeight:700}}),
+              h('input',{value:editSurface,onChange:e=>setEditSurface(e.target.value),placeholder:'Surface m²',style:IS,inputMode:'decimal'}),
+              h('button',{onClick:updateApron,style:{...BB,width:'auto',padding:'0 14px'}},'OK')
+            )
+          )
+        ),
+        h(Card,{title:'Emails rapport',badge:'Optionnel'},
+          h('div',{style:{padding:'12px'}},
+            h('input',{value:cfg.emails?.[0]||'',onChange:e=>setCfg(prev=>({...prev,emails:[e.target.value,prev.emails?.[1]||'']})),placeholder:'Mail destinataire 1',style:{...IS,marginBottom:8}}),
+            h('input',{value:cfg.emails?.[1]||'',onChange:e=>setCfg(prev=>({...prev,emails:[prev.emails?.[0]||'',e.target.value]})),placeholder:'Mail destinataire 2',style:{...IS,marginBottom:10}}),
+            h('button',{onClick:()=>saveCfg(cfg),style:BB},'Sauvegarder les emails')
           )
         )
       )
-  )
-);
+    )
+  );
 }
-
 
 function App(){
 const[ready,setReady]=useState(true);
@@ -2423,7 +2455,7 @@ h("div",{style:{padding:"14px 14px 90px"}},
     )
   ),
 
-  page==="fod"&&h(FodBossPage,{isAdmin,currentUser,showT}),
+  page==="fod"&&h(FodBossPage,{currentUser,isAdmin,showT}),
 
   page==="vehicules"&&h("div",{className:"fi"},
     h("div",{style:{background:"linear-gradient(135deg,#2c3e50,#3498db)",borderRadius:16,padding:"30px 20px",textAlign:"center",marginBottom:14}},h("div",{style:{fontSize:56,marginBottom:12}},"🚗"),h("div",{style:{fontSize:22,fontWeight:900,color:"#fff",marginBottom:6}},"Équipements Véhicules"),h("div",{style:{fontSize:13,color:"rgba(255,255,255,.6)"}},"Gestion du parc véhicules airside")),
