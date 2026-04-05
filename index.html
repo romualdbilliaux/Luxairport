@@ -1798,6 +1798,7 @@ function FodBossPage({currentUser,isAdmin,showT}){
     {min:0.00,max:0.50,label:'1 x ts les 2 mois',days:60}
   ];
   const WEATHER_OPTIONS=['Ensoleillé','Nuageux','Pluie','Vent','Variable'];
+  const LUX_LOGO_DATA='data:image/jpeg;base64,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';
   const [tab,setTab]=useState('passage');
   const [cfg,setCfg]=useState(DEFAULT_FOD_CFG);
   const [passages,setPassages]=useState([]);
@@ -2013,72 +2014,157 @@ function FodBossPage({currentUser,isAdmin,showT}){
       const {jsPDF}=window.jspdf;
       const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
       const W=210,H=297;
-      const accent='#2c5364';
-      const rgb=hexToRgb(accent);
+      const dark='#1d1d1f', line='#1b1b1b', pale=[233,239,234];
       const checks=getRuleChecks(p.gm2);
-      const row = (y,label,val,unit) => {
-        doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.setTextColor(40,40,40); doc.text(label,14,y);
-        doc.setFont('helvetica','normal'); doc.setTextColor(30,30,30); doc.text(String(val||'—'),45,y);
-        if(unit){ doc.setTextColor(120,120,120); doc.text(unit,78,y); }
+      const dMain=parseLocalDate(p.dateTime||new Date());
+      const reportDate=(p.echeanceDate||frDate(dMain));
+      const startDate=(p.debutDate||frDate(dMain));
+      const startTime=(p.debutHeure||frTime(dMain));
+      const endDate=(p.finDate||frDate(dMain));
+      const endTime=(p.finHeure||frTime(dMain));
+
+      const box=(x,y,w,h,fill=null,lw=0.6)=>{
+        if(fill){ doc.setFillColor(...fill); doc.rect(x,y,w,h,'F'); }
+        doc.setDrawColor(0,0,0); doc.setLineWidth(lw); doc.rect(x,y,w,h);
       };
-      doc.setFillColor(rgb.r,rgb.g,rgb.b); doc.rect(10,10,190,14,'F');
-      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('Rapport de balayage',105,19,{align:'center'});
-      doc.setDrawColor(220,220,220); doc.setLineWidth(0.3);
-
-      row(31,'Échéance Passage','Date : '+(p.echeanceDate||frDate(p.dateTime)),'');
-      row(42,'Début','Date : '+(p.debutDate||frDate(p.dateTime))+'   Heure : '+(p.debutHeure||''),'');
-      doc.setFont('helvetica','bold'); doc.text('Nom(s) :',115,42); doc.setFont('helvetica','normal'); doc.text((p.user||'')+(p.colleague?' / '+p.colleague:''),135,42);
-      row(53,'Fin','Date : '+(p.finDate||frDate(p.dateTime))+'   Heure : '+(p.finHeure||''),'');
-      doc.setFont('helvetica','bold'); doc.text('Duty Manager avisé pour inspection :',87,53); doc.setFont('helvetica','normal'); doc.text(p.dutyManager||'—',160,53);
-
-      doc.setFillColor(244,247,250); doc.roundedRect(10,60,190,108,3,3,'F');
-      doc.setFont('helvetica','bold'); doc.setTextColor(40,40,40); doc.setFontSize(11);
-      doc.text('Equipement :',14,70); doc.setTextColor(rgb.r,rgb.g,rgb.b); doc.text('F.O.D BOSS',42,70);
-
-      row(80,'APRON :',p.apron,'');
-      row(92,'Surface (m²) :',Number(p.surface||0).toLocaleString('fr-FR'),'m²');
-      row(104,'Débris (Kg) :',String(p.poidsKg||0).replace('.',','),'Kg');
-      row(116,'Distance (mL) :',p.distanceMl||'—','m/L');
-      row(128,'Quantité (g/m²) :',Number(p.gm2||0).toFixed(3),'g/m²');
-      row(140,'Météo :',p.weather||'—','');
-
-      doc.setFont('helvetica','bold'); doc.setTextColor(40,40,40); doc.text('Remarque :',14,152);
-      doc.setFont('helvetica','normal'); doc.text(String(p.commentaire||'—').slice(0,95),40,152);
-      doc.setFont('helvetica','bold'); doc.text('Localisation :',14,164);
-      doc.setFont('helvetica','normal'); doc.text(String(p.localisation||'—').slice(0,95),40,164);
-
-      doc.setFillColor(rgb.r,rgb.g,rgb.b); doc.roundedRect(118,66,76,74,3,3,'F');
-      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(10); doc.text('Quantité de matériaux collectés',156,74,{align:'center'});
-      doc.text('(g/m²)',156,80,{align:'center'});
-      const freqLine=(y,left,checked,right)=>{
-        doc.setTextColor(255,255,255); doc.setFont('helvetica','normal'); doc.setFontSize(9);
-        doc.text(left,124,y); doc.text(checked?'☑':'☐',154,y); doc.text(right,162,y);
+      const txt=(str,x,y,opts={})=>{
+        doc.setFont(opts.bold?'helvetica':'helvetica', opts.bold?'bold':'normal');
+        doc.setFontSize(opts.size||10);
+        doc.setTextColor(0,0,0);
+        doc.text(String(str??''),x,y,opts.align?{align:opts.align}:undefined);
       };
-      freqLine(92,'5,01 ou plus',checks.week,'1 x par semaine');
-      freqLine(104,'1,01 - 5,00',checks.twoWeeks,'1 x ttes les 2 semaines');
-      freqLine(116,'0,51 - 1,00',checks.month,'1 x par mois');
-      freqLine(128,'0,00 - 0,50',checks.twoMonths,'1 x ts les 2 mois');
-      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.text('Prochain Passage au plus tard le :',156,140,{align:'center'});
-      doc.setFont('helvetica','normal'); doc.text(p.nextPassageLabel||'—',156,147,{align:'center'});
 
-      doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60); doc.text('Surfaces APRON',14,182);
-      (cfg.aprons||DEFAULT_FOD_CFG.aprons).forEach((a,i)=>{
-        const y=192+i*10;
-        doc.setFillColor(248,248,248); doc.roundedRect(14,y-5,84,8,2,2,'F');
-        doc.setFont('helvetica','bold'); doc.setTextColor(50,50,50); doc.text(a.id+' :',18,y);
-        doc.setFont('helvetica','normal'); doc.text((a.surface||0).toLocaleString('fr-FR')+' m²',36,y);
+      // Outer frame
+      doc.setDrawColor(46,125,50);
+      doc.setLineWidth(1.2);
+      doc.rect(6,6,198,285);
+
+      // Header
+      box(8,8,194,20, pale);
+      try{ doc.addImage(LUX_LOGO_DATA,'JPEG',10,9,18,18); }catch(e){}
+      txt('Rapport de balayage',105,20,{bold:true,size:16,align:'center'});
+
+      // Top information rows
+      box(8,28,194,9);
+      txt('Échéance Passage',11,34,{bold:true,size:9});
+      txt('Date :',42,34,{bold:true,size:9});
+      txt(reportDate,56,34,{size:9});
+
+      box(8,37,194,10);
+      txt('Début',11,43,{bold:true,size:9});
+      txt('Date :',24,43,{bold:true,size:9});
+      txt(startDate,38,43,{size:9});
+      txt('Heure :',68,43,{bold:true,size:9});
+      txt(startTime,83,43,{size:9});
+      txt('Nom(s) :',107,43,{bold:true,size:9});
+      txt(p.user||'',126,43,{size:9});
+      txt(p.colleague||'',165,43,{size:9});
+
+      box(8,47,194,10);
+      txt('Fin',11,53,{bold:true,size:9});
+      txt('Date :',24,53,{bold:true,size:9});
+      txt(endDate,38,53,{size:9});
+      txt('Heure :',68,53,{bold:true,size:9});
+      txt(endTime,83,53,{size:9});
+      txt('Duty Manager avisé pour inspection :',107,53,{bold:true,size:8});
+      txt(p.dutyManager||'',165,53,{size:9});
+
+      // Main left table
+      const leftX=8, leftW=104;
+      box(leftX,57,leftW,122);
+      // row helper
+      const infoRow=(y,label,val,unit,rowH=12)=>{
+        box(leftX,y,leftW,rowH);
+        txt(label,leftX+3,y+7,{bold:true,size:10});
+        txt(val,leftX+34,y+7,{size:10});
+        if(unit) txt(unit,leftX+72,y+7,{size:10});
+      };
+      infoRow(57,'Equipement :','F.O.D BOSS','',12);
+      infoRow(69,'APRON :',p.apron||'','',12);
+      infoRow(81,'Surface (m²) :',(p.surface||0).toLocaleString('fr-FR'),'m²',12);
+      infoRow(93,'Débris (Kg) :',String(p.poidsKg||0).replace('.',','),'Kg',12);
+      infoRow(105,'Distance (mL) :',p.distanceMl||'------------------------','m/L',12);
+      infoRow(117,'Quantité (g/m²) :',Number(p.gm2||0).toFixed(2),'g/m²',12);
+      infoRow(129,'Météo :',p.weather||'','',12);
+
+      // Remark block
+      box(leftX,141,leftW,18);
+      txt('Remarque :',leftX+3,148,{bold:true,size:10});
+      const remarkLines=doc.splitTextToSize(String(p.commentaire||''), leftW-34);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text(remarkLines, leftX+34, 148);
+
+      box(leftX,159,leftW,20);
+      txt('Localisation :',leftX+3,167,{bold:true,size:10});
+      const locLines=doc.splitTextToSize(String(p.localisation||''), leftW-34);
+      doc.setFont('helvetica','normal'); doc.setFontSize(9);
+      doc.text(locLines, leftX+34, 167);
+
+      // Right frequency table
+      const rightX=112, rightW=90;
+      box(rightX,57,rightW,122);
+      box(rightX,57, rightW, 18, pale);
+      doc.setFont('helvetica','bold'); doc.setFontSize(9);
+      doc.text('Quantité de matériaux', rightX+23, 66, {align:'center'});
+      doc.text('collectés (g/m²)', rightX+23, 72, {align:'center'});
+      doc.text('Fréquence', rightX+68, 68, {align:'center'});
+      // vertical splits
+      doc.line(rightX+48,57,rightX+48,179);
+      doc.line(rightX+58,57,rightX+58,179);
+
+      const freqRows=[
+        ['5,01 ou plus', checks.week, '1 x par semaine'],
+        ['1,01 - 5,00', checks.twoWeeks, '1 x ttes les 2 semaines'],
+        ['0,51 - 1,00', checks.month, '1 x par mois'],
+        ['0,00 - 0,50', checks.twoMonths, '1 x ts les 2 mois']
+      ];
+      let fy=75;
+      freqRows.forEach((r,idx)=>{
+        const h=23;
+        box(rightX,fy,rightW,h);
+        txt(r[0], rightX+24, fy+13,{size:9,align:'center'});
+        // checkbox
+        box(rightX+50, fy+6, 6, 6);
+        if(r[1]){
+          doc.setLineWidth(1.2);
+          doc.line(rightX+51.2, fy+9.5, rightX+52.8, fy+11.2);
+          doc.line(rightX+52.8, fy+11.2, rightX+55.3, fy+7.8);
+        }
+        txt(r[2], rightX+74, fy+13,{size:9,align:'center'});
+        fy+=h;
+      });
+      // Next passage row
+      box(rightX,167,rightW,12,pale);
+      txt('Prochain Passage au plus tard le :', rightX+45, 175,{bold:true,size:9,align:'center'});
+      box(rightX,179,rightW,12);
+      txt(p.nextPassageLabel||'—', rightX+45, 187,{size:11,align:'center'});
+
+      // Apron surfaces block
+      box(112,191,90,36);
+      txt('Surfaces APRON',157,198,{bold:true,size:10,align:'center'});
+      const apronList=(cfg.aprons||DEFAULT_FOD_CFG.aprons);
+      apronList.slice(0,5).forEach((a,i)=>{
+        const y=205+i*6;
+        txt((a.label||a.id)+' :',118,y,{bold:true,size:8});
+        txt((a.surface||0).toLocaleString('fr-FR')+' m²',146,y,{size:8});
       });
 
-      if((p.photos||[]).length){
-        doc.setFont('helvetica','bold'); doc.setTextColor(60,60,60); doc.text('Photos',118,182);
-        (p.photos||[]).slice(0,2).forEach((ph,i)=>{
-          try{ doc.addImage(ph,'JPEG',118+i*38,188,34,26); }catch(e){ try{doc.addImage(ph,'PNG',118+i*38,188,34,26);}catch(_){} }
-        });
-      }
+      // Photos block
+      box(8,179,104,48);
+      txt('Photos :',11,186,{bold:true,size:10});
+      (p.photos||[]).slice(0,2).forEach((ph,i)=>{
+        try{
+          box(27+i*39,184,34,26);
+          try{ doc.addImage(ph,'JPEG',28+i*39,185,32,24);}catch(e){ doc.addImage(ph,'PNG',28+i*39,185,32,24);}
+        }catch(e){}
+      });
 
-      doc.setDrawColor(220,220,220); doc.line(10,H-16,200,H-16);
-      doc.setFontSize(8); doc.setTextColor(120,120,120); doc.text('Généré le '+new Date().toLocaleString('fr-FR'),14,H-10);
-      doc.text('Agent : '+(p.user||'—'),200,H-10,{align:'right'});
+      // Footer
+      doc.setDrawColor(0,0,0); doc.setLineWidth(0.6);
+      doc.line(8,282,202,282);
+      txt('Généré le '+new Date().toLocaleString('fr-FR'),10,287,{size:8});
+      txt('Agent : '+(p.user||'—'),200,287,{size:8,align:'right'});
+
       doc.save('Rapport_FOD_BOSS_'+(p.apron||'APRON')+'_'+(p.debutDate||frDate(p.dateTime)).replace(/\//g,'-')+'.pdf');
     }catch(e){ alert('Erreur PDF : '+e.message); }
   };
