@@ -1425,6 +1425,17 @@ const defaultCfg=matsCfg||{};
 const defaultMats=(defaultCfg.mats&&defaultCfg.mats.length===4?defaultCfg.mats:[
   {id:'MAT-1',nom:'Mât 1'},{id:'MAT-2',nom:'Mât 2'},{id:'MAT-3',nom:'Mât 3'},{id:'MAT-4',nom:'Mât 4'}
 ]);
+const makeMatsState=(src)=>(src&&src.length?src:defaultMats).map((m,i)=>({
+  ...m,
+  mode:m.mode||(i===0?'controle':'plein'),
+  statut:m.statut||'OK',
+  cable:(m.cable!==undefined&&m.cable!==null&&m.cable!=='')?m.cable:(i===0?'oui':'non'),
+  litres:m.litres||'',
+  heures:m.heures||'',
+  test:m.test||'OK',
+  photos:m.photos||[],
+  commentaire:m.commentaire||''
+}));
 const[tab,setTab]=useState('tournee');
 const[nowDate,setNowDate]=useState(new Date().toISOString().slice(0,16));
 const[collegue,setCollegue]=useState('');
@@ -1433,23 +1444,12 @@ const[litresRemorque,setLitresRemorque]=useState('');
 const[remplisseur,setRemplisseur]=useState(currentUser?.name||'');
 const[obs,setObs]=useState('');
 const[justifPhotos,setJustifPhotos]=useState([]);
+const[finalSignature,setFinalSignature]=useState('');
+const[editTourId,setEditTourId]=useState(null);
 const otherUsers=(userAccounts||[]).filter(a=>(a.name||'')!==(currentUser?.name||'')).map(a=>a.name);
-const[mats,setMats]=useState(defaultMats.map((m,i)=>({
-  ...m,
-  mode:i===0?'controle':'plein',
-  statut:'OK',
-  cable:'oui',
-  litres:'',
-  heures:'',
-  test:'OK',
-  photos:[],
-  commentaire:'',
-  signature:''
-})));
+const[mats,setMats]=useState(makeMatsState(defaultMats));
 useEffect(()=>{
-  setMats((defaultCfg.mats&&defaultCfg.mats.length===4?defaultCfg.mats:defaultMats).map((m,i)=>({
-    ...m,mode:i===0?'controle':'plein',statut:'OK',cable:'oui',litres:'',heures:'',test:'OK',photos:[],commentaire:'',signature:''
-  })));
+  setMats(makeMatsState((defaultCfg.mats&&defaultCfg.mats.length===4?defaultCfg.mats:defaultMats)));
 },[JSON.stringify(defaultCfg.mats)]);
 const updateMat=(idx,patch)=>setMats(prev=>prev.map((m,i)=>i===idx?{...m,...patch}:m));
 const totalLitres=(mats||[]).reduce((a,m)=>a+(parseFloat(m.litres)||0),0);
@@ -1464,27 +1464,19 @@ const exportCsv=()=>{
 };
 const saveTour=async()=>{
   if(!(currentUser?.name)){alert('Utilisateur requis');return;}
-  for(const m of mats){ if(!m.signature){ alert('Signature obligatoire pour '+(m.nom||m.id)); return; } }
-  const payload={
-    dateTime:nowDate?new Date(nowDate).toLocaleString('fr-FR'):now(),
-    user:currentUser?.name||'',
-    otherColleague:collegue||'',
-    trailerName:defaultCfg.trailerName||'Remorque gazole P2',
-    luxfuel:!!luxfuel,
-    remorqueLitres:parseFloat(litresRemorque)||0,
-    remorqueFilledBy:remplisseur||'',
-    generalObs:obs||'',
-    justificatifs:justifPhotos||[],
-    totalLitresMats:totalLitres,
-    mats:mats,
-    ts:Date.now()
-  };
-  await onSaveTour(payload);
-  setLuxfuel(false);setLitresRemorque('');setObs('');setJustifPhotos([]);setCollegue('');
-  setMats(defaultMats.map((m,i)=>({...m,mode:i===0?'controle':'plein',statut:'OK',cable:'oui',litres:'',heures:'',test:'OK',photos:[],commentaire:'',signature:''})));
+  if(!finalSignature){ alert('Signature finale obligatoire'); return; }
+  const payload=currentPayload();
+  if(editTourId){
+    await db.collection('matsMobileTours').doc(editTourId).set({...payload,ts:sortedTours.find(x=>x._id===editTourId)?.ts||Date.now()},{merge:true});
+    showT&&showT('Tournée modifiée');
+  }else{
+    await onSaveTour({...payload,ts:Date.now()});
+    showT&&showT('Tournée enregistrée');
+  }
+  resetTournee();
 };
 const saveCfgLocal=async()=>{
-  await saveMatsCfg({trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:defaultMats});
+  await saveMatsCfg({trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:defaultMats,emails:defaultCfg.emails||[]});
 };
 return h('div',{className:'fi'},
   h('div',{style:{background:'linear-gradient(135deg,#23395d,#3f72af)',borderRadius:18,padding:'18px 16px',color:'#fff',marginBottom:14,boxShadow:'0 8px 24px rgba(0,0,0,.15)'}},
@@ -1523,13 +1515,23 @@ return h('div',{className:'fi'},
         FL('Heures moteur',true),h('input',{type:'number',value:mat.heures,onChange:e=>updateMat(idx,{heures:e.target.value}),placeholder:'0',style:IS}),
         FL('Test fonctionnement',true),h('div',{style:{display:'flex',gap:8,marginBottom:8}},['OK','NOK'].map(v=>h('button',{key:v,onClick:()=>updateMat(idx,{test:v}),style:{flex:1,padding:'10px',borderRadius:12,border:'2px solid '+(mat.test===v?(v==='OK'?S.green:S.danger):S.border),background:mat.test===v?(v==='OK'?'#e6fff0':'#fff1f0'):'#fff',fontWeight:700,cursor:'pointer'}},v))),
         FL('Photos',true),h(PhotoPicker,{photos:mat.photos,onChange:val=>updateMat(idx,{photos:val}),labelText:'Ajouter photos du mât'}),
-        FL('Commentaire',true),h('textarea',{value:mat.commentaire,onChange:e=>updateMat(idx,{commentaire:e.target.value}),style:{...IS,minHeight:60,resize:'vertical'},placeholder:'Remarque, défaut, observation...'}),
-        FL('Signature *',true),h(SignaturePad,{value:mat.signature,onChange:val=>updateMat(idx,{signature:val}),height:130})
+        FL('Commentaire',true),h('textarea',{value:mat.commentaire,onChange:e=>updateMat(idx,{commentaire:e.target.value}),style:{...IS,minHeight:60,resize:'vertical'},placeholder:'Remarque, défaut, observation...'})
       )
     )),
+    h(Card,{title:'Validation finale',color:'#23395d'},
+      h('div',{style:{padding:'14px'}},
+        FL('Signature finale *'),h(SignaturePad,{value:finalSignature,onChange:setFinalSignature,height:140}),
+        h('div',{style:{fontSize:12,color:S.gray,marginTop:8}},'Une seule signature finale est demandée pour toute la tournée.'),
+        editTourId&&h('div',{style:{marginTop:8,background:'#fff8e6',color:S.orange,borderRadius:10,padding:'8px 12px',fontSize:12,fontWeight:700}},'Mode modification activé')
+      )
+    ),
     h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}},
-      h('button',{onClick:()=>{setLuxfuel(false);setLitresRemorque('');setObs('');setJustifPhotos([]);setCollegue('');setMats(defaultMats.map((m,i)=>({...m,mode:i===0?'controle':'plein',statut:'OK',cable:'oui',litres:'',heures:'',test:'OK',photos:[],commentaire:'',signature:''})));showT('Formulaire vidé');},style:BS},'Réinitialiser'),
-      h('button',{onClick:saveTour,style:BP},'Enregistrer la tournée')
+      h('button',{onClick:()=>{resetTournee();showT('Formulaire vidé');},style:BS},'Réinitialiser'),
+      h('button',{onClick:saveTour,style:BP},editTourId?'Enregistrer la modification':'Enregistrer la tournée')
+    ),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:10}},
+      h('button',{onClick:()=>exportMatsPDF(),style:BB},'📄 PDF actuel'),
+      h('button',{onClick:()=>prepareMatsMail(),style:BG},'📧 Préparer email')
     )
   ),
   tab==='historique'&&h('div',{},
@@ -1548,7 +1550,12 @@ return h('div',{className:'fi'},
           h('div',{style:{fontSize:12,color:S.gray}},'Statut: '+(m.statut||'')+' · Câble: '+(m.cable||'')+' · Litres: '+(m.litres||0)+' · Heures: '+(m.heures||'')),
           m.commentaire&&h('div',{style:{fontSize:12,marginTop:4}},m.commentaire)
         ))),
-        isAdmin&&h('div',{style:{display:'flex',gap:8,marginTop:10}},
+        h('div',{style:{display:'grid',gridTemplateColumns:isAdmin?'1fr 1fr 1fr':'1fr 1fr',gap:8,marginTop:10}},
+          h('button',{onClick:()=>exportMatsPDF(t),style:BB},'PDF'),
+          h('button',{onClick:()=>prepareMatsMail(t),style:BG},'Email'),
+          isAdmin&&h('button',{onClick:()=>loadTourForEdit(t),style:{...BS,color:S.blue}},'Modifier')
+        ),
+        isAdmin&&h('div',{style:{display:'flex',gap:8,marginTop:8}},
           h('button',{onClick:()=>onDeleteTour&&onDeleteTour(t),style:{...BS,color:S.danger}},'Supprimer')
         )
       )
@@ -1557,9 +1564,12 @@ return h('div',{className:'fi'},
   tab==='admin'&&isAdmin&&h('div',{},
     h(Card,{title:'Paramètres Gestion mâts mobile'},
       h('div',{style:{padding:'14px'}},
-        FL('Nom de la remorque'),h('input',{value:defaultCfg.trailerName||'Remorque gazole P2',onChange:e=>saveMatsCfg({...defaultCfg,trailerName:e.target.value,mats:defaultMats}),style:IS}),
+        FL('Nom de la remorque'),h('input',{value:defaultCfg.trailerName||'Remorque gazole P2',onChange:e=>saveMatsCfg({...defaultCfg,trailerName:e.target.value,mats:defaultMats,emails:defaultCfg.emails||[]}),style:IS}),
         h('div',{style:{fontSize:12,fontWeight:700,margin:'14px 0 8px'}},'Noms des 4 mâts'),
-        defaultMats.map((m,i)=>h('input',{key:i,value:m.nom,onChange:e=>{const matsNew=defaultMats.map((x,j)=>j===i?{...x,nom:e.target.value}:x);saveMatsCfg({...defaultCfg,trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:matsNew});},style:{...IS,marginBottom:8}})),
+        defaultMats.map((m,i)=>h('input',{key:i,value:m.nom,onChange:e=>{const matsNew=defaultMats.map((x,j)=>j===i?{...x,nom:e.target.value}:x);saveMatsCfg({...defaultCfg,trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:matsNew,emails:defaultCfg.emails||[]});},style:{...IS,marginBottom:8}})),
+        FL('Emails rapport',true),
+        h('input',{value:defaultCfg.emails?.[0]||'',onChange:e=>saveMatsCfg({...defaultCfg,trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:defaultMats,emails:[e.target.value,defaultCfg.emails?.[1]||'']}),placeholder:'Mail destinataire 1',style:{...IS,marginBottom:8}}),
+        h('input',{value:defaultCfg.emails?.[1]||'',onChange:e=>saveMatsCfg({...defaultCfg,trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:defaultMats,emails:[defaultCfg.emails?.[0]||'',e.target.value]}),placeholder:'Mail destinataire 2',style:{...IS,marginBottom:8}}),
         h('button',{onClick:saveCfgLocal,style:BP},'Sauvegarder les paramètres')
       )
     ),
@@ -2171,8 +2181,9 @@ function FodBossPage({currentUser,isAdmin,showT}){
 
   const prepareMail=(p)=>{
     const to=(cfg.emails||[]).filter(Boolean).join(',');
-    const subject='Rapport FOD BOSS du '+(p.debutDate||frDate(p.dateTime));
-    const body='Bonjour,%0D%0A%0D%0AVeuillez trouver ci-joint le rapport FOD BOSS du '+(p.debutDate||frDate(p.dateTime))+'.%0D%0A%0D%0ACordialement.';
+    const apronLabel=p.apron||'APRON';
+    const subject='Rapport FOD BOSS '+apronLabel+' du '+(p.debutDate||frDate(p.dateTime));
+    const body='Bonjour,%0D%0A%0D%0AVeuillez trouver ci-joint le rapport FOD BOSS '+apronLabel+' du '+(p.debutDate||frDate(p.dateTime))+'.%0D%0A%0D%0ACordialement.';
     window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+body;
   };
 
