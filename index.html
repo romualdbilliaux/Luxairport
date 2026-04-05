@@ -542,7 +542,8 @@ const otherUsers=(userAccounts||[]).filter(a=>(a.name||"")!==owner&&a.role!=="ad
 const[search,setSearch]=useState("");const[showScan,setShowScan]=useState(false);const[extraPers,setExtraPers]=useState("");
 const[etat,setEtat]=useState("Bon");const[comm,setComm]=useState("");const[photos,setPhotos]=useState([]);const[sig,setSig]=useState("");
 const[selected,setSelected]=useState([]);const[pickerOpen,setPickerOpen]=useState(false);
-const availTools=(tools||[]).filter(t=>!emprunts.find(e=>e.toolId===t.id&&!e.retour));
+const toolIdsInKits=new Set((kits||[]).flatMap(k=>k.outils||[]));
+const availTools=(tools||[]).filter(t=>!toolIdsInKits.has(t.id)&&!emprunts.find(e=>e.toolId===t.id&&!e.retour));
 const combinedItems=[
   ...availTools.map(t=>({kind:"tool",id:t.id,label:t.id+" — "+t.nom,sub:t.nom,toolIds:[t.id],accent:S.blue})),
   ...((kits||[]).map(k=>({kind:"kit",id:k.id||k._id,label:(k.id||"KIT")+" — "+(k.nom||"Kit"),sub:((k.outils||[]).length||0)+" outil(s)",toolIds:(k.outils||[]).filter(id=>availTools.find(t=>t.id===id)),accent:S.orange})))
@@ -612,7 +613,7 @@ h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14
 }
 
 function RetFindModal({emprunts,onFound,onClose}){
-const encours=emprunts.filter(e=>!e.retour);
+const encours=emprunts.filter(e=>!e.retour&&!e.kitId);
 return h(Modal,{onClose},
 h("h2",{style:{fontSize:18,fontWeight:800,marginBottom:12}},"Sélectionner l'outil à retourner"),
 encours.length===0?h("div",{style:{padding:"20px",textAlign:"center",color:S.gray}},"Aucun outil sorti")
@@ -1461,6 +1462,81 @@ const exportCsv=()=>{
   const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\n');
   const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='gestion_mats_mobile_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+};
+
+const resetTournee=()=>{
+  setLuxfuel(false);setLitresRemorque('');setObs('');setJustifPhotos([]);setCollegue('');setRemplisseur(currentUser?.name||'');setFinalSignature('');setEditTourId(null);setNowDate(new Date().toISOString().slice(0,16));
+  setMats(makeMatsState(defaultMats));
+};
+const currentPayload=()=>({
+  dateTime:nowDate?new Date(nowDate).toLocaleString('fr-FR'):now(),
+  user:currentUser?.name||'',
+  otherColleague:collegue||'',
+  trailerName:defaultCfg.trailerName||'Remorque gazole P2',
+  luxfuel:!!luxfuel,
+  remorqueLitres:parseFloat(litresRemorque)||0,
+  remorqueFilledBy:remplisseur||'',
+  generalObs:obs||'',
+  justificatifs:justifPhotos||[],
+  totalLitresMats:totalLitres,
+  mats:mats,
+  finalSignature:finalSignature||''
+});
+const loadTourForEdit=(tour)=>{
+  if(!tour)return;
+  const srcMats=(tour.mats||defaultMats).map((m,i)=>({...defaultMats[i],...m}));
+  setEditTourId(tour._id||null);
+  setNowDate((()=>{try{const d=new Date((tour.dateTime||'').replace(/(\d{2})\/(\d{2})\/(\d{4}),? /,'$3-$2-$1T')); return isNaN(d)?new Date().toISOString().slice(0,16):new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,16);}catch(e){return new Date().toISOString().slice(0,16);}})());
+  setCollegue(tour.otherColleague||'');
+  setLuxfuel(!!tour.luxfuel);
+  setLitresRemorque(String(tour.remorqueLitres||''));
+  setRemplisseur(tour.remorqueFilledBy||currentUser?.name||'');
+  setObs(tour.generalObs||'');
+  setJustifPhotos(tour.justificatifs||[]);
+  setFinalSignature(tour.finalSignature||'');
+  setMats(makeMatsState(srcMats));
+  setTab('tournee');
+};
+const exportMatsPDF=(tourArg)=>{
+  try{
+    const t=tourArg||currentPayload();
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const W=210,H=297;
+    const rgb=hexToRgb(cfg.couleur||'#23395d');
+    doc.setFillColor(rgb.r,rgb.g,rgb.b); doc.rect(0,0,W,20,'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('Rapport – Pleins des mâts mobiles P2',10,12);
+    doc.setFontSize(9); doc.text(String(t.dateTime||now()),W-10,12,{align:'right'});
+    let y=28;
+    const row=(l,v)=>{doc.setFillColor(248,248,248); doc.rect(10,y,55,8,'F'); doc.rect(65,y,135,8); doc.setTextColor(80); doc.setFontSize(8); doc.setFont('helvetica','bold'); doc.text(l,12,y+5.3); doc.setTextColor(20); doc.setFont('helvetica','normal'); doc.text(String(v||'—').substring(0,85),67,y+5.3); y+=8;};
+    row('Agent',t.user||''); row('Autre collègue',t.otherColleague||'—'); row('Remorque',t.trailerName||'Remorque gazole P2'); row('Passage Luxfuel',t.luxfuel?'Oui':'Non'); row('Litres remorque',t.remorqueLitres||0); row('Remplie par',t.remorqueFilledBy||''); row('Total litres mâts',t.totalLitresMats||0);
+    if(t.generalObs){ row('Observations générales',t.generalObs); }
+    y+=4; doc.setFillColor(rgb.r,rgb.g,rgb.b); doc.rect(10,y,190,8,'F'); doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.text('Détail par mât',12,y+5.3); y+=10;
+    (t.mats||[]).forEach((m,i)=>{
+      if(y>250){doc.addPage(); y=20;}
+      doc.setFillColor(245,247,250); doc.rect(10,y,190,7,'F'); doc.setTextColor(20); doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text((m.nom||m.id||('Mât '+(i+1))),12,y+4.8); y+=8;
+      const line=(a,b,c,d)=>{doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.text(a,12,y+4.5); doc.setFont('helvetica','normal'); doc.text(String(b||'—'),42,y+4.5); doc.setFont('helvetica','bold'); doc.text(c,105,y+4.5); doc.setFont('helvetica','normal'); doc.text(String(d||'—'),145,y+4.5); y+=6;};
+      line('Mode',m.mode==='controle'?'Contrôle':'Plein','Statut',m.statut||'');
+      line('Câble',m.cable||'', 'Test', m.test||'');
+      line('Litres ajoutés',m.litres||0,'Heures moteur',m.heures||'');
+      if(m.commentaire){ doc.setFont('helvetica','bold'); doc.text('Commentaire',12,y+4.5); doc.setFont('helvetica','normal'); doc.text(String(m.commentaire).substring(0,100),42,y+4.5); y+=6;}
+      y+=2;
+    });
+    if(t.finalSignature){
+      if(y>230){doc.addPage(); y=20;}
+      doc.setFont('helvetica','bold'); doc.setFontSize(9); doc.text('Signature finale',10,y+5);
+      try{doc.addImage(t.finalSignature,'PNG',10,y+8,70,28);}catch(e){}
+    }
+    doc.save('rapport_mats_mobile_'+new Date().toISOString().slice(0,10)+'.pdf');
+  }catch(e){ alert('Erreur PDF: '+e.message); }
+};
+const prepareMatsMail=(tourArg)=>{
+  const t=tourArg||currentPayload();
+  const to=(defaultCfg.emails||[]).filter(Boolean).join(',');
+  const d=String(t.dateTime||now()).split(' ')[0];
+  const subject='Rapport – Pleins mâts mobiles P2 du '+d;
+  const body=encodeURIComponent('Bonjour,\n\nVeuillez trouver ci-joint le rapport de la tournée des pleins des mâts mobiles P2 réalisée le '+d+'.\n\nCordialement.');
+  window.location.href='mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(subject)+'&body='+body;
 };
 const saveTour=async()=>{
   if(!(currentUser?.name)){alert('Utilisateur requis');return;}
@@ -2546,61 +2622,21 @@ h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,set
 
 h("div",{style:{padding:"14px 14px 90px"}},
 
-  page==="accueil"&&h("div",{className:"fi"},
-    h("div",{style:{background:`linear-gradient(135deg,${cfg.couleur||S.red},${darken(cfg.couleur||S.red,35)})`,borderRadius:20,padding:"18px 16px",marginBottom:14,color:"#fff",boxShadow:"0 10px 28px rgba(0,0,0,.18)"}},
-      h("div",{style:{display:"flex",alignItems:"center",gap:12,marginBottom:10}},
-        cfg.logoUrl?h("img",{src:cfg.logoUrl,style:{width:54,height:54,borderRadius:14,objectFit:"cover",background:"rgba(255,255,255,.15)"}}):h("div",{style:{width:54,height:54,borderRadius:14,background:"rgba(255,255,255,.15)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:26}},"✈️"),
-        h("div",{style:{minWidth:0,flex:1}},
-          h("div",{style:{fontSize:26,fontWeight:900,letterSpacing:-.5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}},cfg.nomSite||"LUX AIRPORT"),
-          h("div",{style:{fontSize:13,opacity:.85}},cfg.sousTitre||"Gestion Airside"),
-          currentUser&&h("div",{style:{fontSize:12,fontWeight:700,marginTop:8,display:"inline-flex",gap:6,alignItems:"center",background:"rgba(255,255,255,.16)",padding:"6px 10px",borderRadius:999}},"👤",currentUser.name||"Utilisateur")
-        )
+  page==="accueil"&&h("div",{className:"fi",style:{minHeight:"65vh",display:"flex",alignItems:"center",justifyContent:"center"}},
+    h("div",{style:{width:"100%",maxWidth:640,margin:"0 auto",display:"grid",gap:16}},
+      h("div",{style:{textAlign:"center",marginBottom:4}},
+        h("div",{style:{fontSize:28,fontWeight:900,color:S.red,marginBottom:6}},"Messages équipe"),
+        h("div",{style:{fontSize:13,color:S.gray}},"Accueil simplifié")
       ),
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}},
-        [{n:st.ok,l:"OK",c:"#eafff2"},{n:st.mo,l:"Moyen",c:"#fff5de"},{n:st.ma,l:"NOK",c:"#ffe8e7"},{n:st.so,l:"Sortis",c:"#eaf3ff"}].map(x=>
-          h("div",{key:x.l,style:{background:x.c,borderRadius:14,padding:"10px 6px",textAlign:"center",color:S.dark}},
-            h("div",{style:{fontSize:24,fontWeight:900,lineHeight:1}},x.n),
-            h("div",{style:{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginTop:4,opacity:.7}},x.l)
-          )
-        )
+      h("div",{style:{background:S.white,borderRadius:22,padding:"24px 20px",boxShadow:"0 10px 30px rgba(0,0,0,.08)"}},
+        h("div",{style:{display:"flex",justifyContent:"center",gap:10,marginBottom:18,flexWrap:"wrap"}},
+          isAdmin&&h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||"");if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:"auto",padding:"10px 16px",fontSize:13}},"Modifier 1"),
+          isAdmin&&h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||"");if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:"auto",padding:"10px 16px",fontSize:13}},"Modifier 2")
+        ),
+        cfg.teamMessage1&&h("div",{style:{background:"#fff7f7",borderLeft:"4px solid "+S.red,borderRadius:16,padding:"18px 18px",marginBottom:12,textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Message 1"),h("div",{style:{fontSize:20,fontWeight:700,whiteSpace:"pre-wrap"}},cfg.teamMessage1)),
+        cfg.teamMessage2&&h("div",{style:{background:"#f5f8ff",borderLeft:"4px solid "+S.blue,borderRadius:16,padding:"18px 18px",textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Message 2"),h("div",{style:{fontSize:20,fontWeight:700,whiteSpace:"pre-wrap"}},cfg.teamMessage2)),
+        !cfg.teamMessage1&&!cfg.teamMessage2&&h("div",{style:{padding:24,textAlign:"center",color:S.gray,fontSize:14}},"Aucun message actuellement")
       )
-    ),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
-      h("button",{onClick:()=>setPage("inspection"),style:{...BP,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"🔧 Inspection"),
-      h("button",{onClick:()=>setModal({t:"dep"}),style:{...BB,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"📤 Emprunt / sortie"),
-      h("button",{onClick:()=>setPage("entrepot"),style:{...BO,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"🏭 Entrepôt"),
-      h("button",{onClick:()=>setPage("rapport"),style:{...BG,display:"flex",alignItems:"center",justifyContent:"center",gap:8}},"📊 Rapports")
-    ),
-    h("div",{style:{background:S.white,borderRadius:16,padding:"14px 16px",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",marginBottom:8}},h("span",{style:{fontSize:14,fontWeight:700}},"Progression inspections"),h("span",{style:{fontSize:14,fontWeight:800,color:S.red}},pct+"%")),
-      h("div",{style:{height:8,background:S.bg,borderRadius:999,overflow:"hidden"}},h("div",{style:{height:"100%",width:pct+"%",background:`linear-gradient(90deg,${S.red},#ff6b6b)`,borderRadius:999,transition:"width .5s"}})),
-      h("div",{style:{fontSize:12,color:S.gray,marginTop:8}},st.fait+"/"+st.total+" inspectés — Attente: "+st.at)
-    ),
-    h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}},
-      h("div",{style:{background:S.white,borderRadius:16,padding:"14px",boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Sorties aujourd'hui"),h("div",{style:{fontSize:28,fontWeight:900,color:S.blue,marginTop:4}},sortiesJ)),
-      h("div",{style:{background:S.white,borderRadius:16,padding:"14px",boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Retours aujourd'hui"),h("div",{style:{fontSize:28,fontWeight:900,color:S.green,marginTop:4}},entreesJ))
-    ),
-    (cfg.teamMessage1||cfg.teamMessage2||isAdmin)&&h("div",{style:{background:S.white,borderRadius:16,padding:"14px 16px",marginBottom:14,boxShadow:"0 1px 4px rgba(0,0,0,.07)"}},
-      h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
-        h("div",{style:{fontSize:15,fontWeight:800}},"📣 Messages équipe"),
-        isAdmin&&h("div",{style:{display:"flex",gap:8}},
-          h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||"");if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:"auto",padding:"8px 10px",fontSize:12}},"Modifier 1"),
-          h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||"");if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:"auto",padding:"8px 10px",fontSize:12}},"Modifier 2")
-        )
-      ),
-      cfg.teamMessage1&&h("div",{style:{background:"#fff7f7",borderLeft:"4px solid "+S.red,borderRadius:12,padding:"12px 14px",marginBottom:8}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:4}},"Message 1"),h("div",{style:{fontSize:13,fontWeight:600,whiteSpace:"pre-wrap"}},cfg.teamMessage1)),
-      cfg.teamMessage2&&h("div",{style:{background:"#f5f8ff",borderLeft:"4px solid "+S.blue,borderRadius:12,padding:"12px 14px"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:4}},"Message 2"),h("div",{style:{fontSize:13,fontWeight:600,whiteSpace:"pre-wrap"}},cfg.teamMessage2)),
-      !cfg.teamMessage1&&!cfg.teamMessage2&&!isAdmin&&h("div",{style:{fontSize:13,color:S.gray}},"Aucun message actuellement")
-    ),
-    (outilsLongs.length>0||st.ma>0||lowS.length>0)&&h("div",{style:{display:"grid",gap:8,marginBottom:14}},
-      outilsLongs.length>0&&h("div",{style:{background:"#e8f0fe",border:"1px solid #c7d7f9",borderRadius:12,padding:"12px 14px",fontSize:13,fontWeight:700,color:S.blue}},"Outils sortis depuis +24h: "+outilsLongs.length),
-      st.ma>0&&h("div",{style:{background:"#fff1f0",border:"1px solid #ffccc7",borderRadius:12,padding:"12px 14px",fontSize:13,fontWeight:700,color:S.danger}},"Outils en mauvais état: "+st.ma),
-      lowS.length>0&&h("div",{style:{background:"#fff8e6",border:"1px solid #ffe8a3",borderRadius:12,padding:"12px 14px",fontSize:13,fontWeight:700,color:S.orange}},"Stock faible: "+lowS.length+" article(s)")
-    ),
-    h("div",{style:{background:S.white,borderRadius:16,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
-      h("div",{style:{padding:"12px 16px",borderBottom:"1px solid "+S.bg,display:"flex",justifyContent:"space-between",alignItems:"center"}},h("span",{style:{fontSize:14,fontWeight:700}},"Outils sortis"),h("span",{style:{fontSize:12,color:S.gray,fontWeight:700}},(outilsLongs.length||emprunts.filter(e=>!e.retour).length)+" en cours")),
-      emprunts.filter(e=>!e.retour).slice(-6).reverse().map((e,i)=>{const t=tools.find(x=>x.id===e.toolId);return h("div",{key:i,onClick:()=>setPage("emprunts"),style:{padding:"12px 16px",borderBottom:i<Math.min(5,emprunts.filter(x=>!x.retour).length-1)?"1px solid "+S.bg:"none",cursor:"pointer"}},h("div",{style:{fontSize:11,fontWeight:800,color:S.red}},e.toolId),h("div",{style:{fontSize:13,fontWeight:700}},t?t.nom:e.toolId),h("div",{style:{fontSize:11,color:S.gray,marginTop:3}},"👤 "+e.personne+" — "+e.dateDepart));}),
-      emprunts.filter(e=>!e.retour).length===0&&h("div",{style:{padding:18,textAlign:"center",color:S.gray,fontSize:13}},"Aucun outil actuellement sorti")
     )
   ),
 
@@ -2617,10 +2653,10 @@ h("div",{style:{padding:"14px 14px 90px"}},
             h("span",{style:{background:enC&&jours>=1?"#fff8e6":enC?"#e8f0fe":"#e6fff0",color:enC&&jours>=1?S.orange:enC?S.blue:S.green,borderRadius:20,padding:"3px 10px",fontSize:11,fontWeight:700,flexShrink:0,marginLeft:8}},enC&&jours>=1?"⏰ "+jours+"j":enC?"En cours":"Retourné")
           ),
           h("div",{style:{fontSize:12,color:"#3c3c43"}},"👤 ",h("strong",{},e.personne)),
-          h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},"Départ: "+e.dateDepart),
+          h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},(e.kitNom?"Kit: "+e.kitNom+" — ":"")+"Départ: "+e.dateDepart),
           e.retour&&h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},"Retour: "+e.retour),
           h("div",{style:{display:"flex",gap:8,marginTop:10}},
-            enC&&h("button",{onClick:ev=>{ev.stopPropagation();openRetour(eid);},style:{...BB,padding:"9px",flex:2}},"📥 Retour"),
+            enC&&!e.kitId&&h("button",{onClick:ev=>{ev.stopPropagation();openRetour(eid);},style:{...BB,padding:"9px",flex:2}},"📥 Retour"),
             isAdmin&&h("button",{onClick:ev=>{ev.stopPropagation();setModal({t:"modEmp",empr:e});},style:{...BS,padding:"9px",flex:1,fontSize:12}},"✏️"),
             isAdmin&&h("button",{onClick:ev=>{ev.stopPropagation();delEmprunt(eid);},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"9px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer"}},"🗑️")
           )
@@ -2695,17 +2731,26 @@ h("div",{style:{padding:"14px 14px 90px"}},
         h("button",{onClick:()=>setPage("emprunts"),style:{...BS,width:"auto",padding:"10px 12px",fontSize:12}},"← Retour"),
         h("div",{style:{fontSize:17,fontWeight:800}},"Gérer les kits")
       ),
-      isAdmin&&h("div",{style:{display:"flex",gap:8}},
-        h("button",{onClick:()=>setPage("entrepot"),style:{...BO,width:"auto",padding:"9px 12px",fontSize:12}},"📍 Emplacements"),
-        h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}},"+ Kit")
-      )
+      isAdmin&&h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:10,padding:"9px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}},"+ Kit")
     ),
     kits.length===0?h("div",{style:{background:S.white,borderRadius:14,padding:"40px 20px",textAlign:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},h("div",{style:{fontSize:48,marginBottom:12}},"🧰"),h("div",{style:{fontSize:16,fontWeight:700,marginBottom:8}},"Aucun kit"),h("button",{onClick:()=>setModal({t:"kit"}),style:BP},"+Créer le premier kit"))
     :kits.map(kit=>{
       const dispo=kit.outils?.every(id=>!isEmp(id));const outilsDispo=kit.outils?.filter(id=>!isEmp(id)).length||0;const total=kit.outils?.length||0;
+      const kitCode=kit.id||kit._id;
       return h("div",{key:kit._id,style:{background:S.white,borderRadius:14,marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.08)",overflow:"hidden"}},
         h("div",{style:{padding:"14px 16px",borderLeft:"4px solid "+(dispo?S.green:S.orange)}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}},h("div",{style:{flex:1}},h("div",{style:{fontSize:16,fontWeight:800}},kit.nom),kit.description&&h("div",{style:{fontSize:12,color:S.gray,marginTop:2}},kit.description),h("div",{style:{fontSize:12,marginTop:4,color:dispo?S.green:S.orange,fontWeight:600}},outilsDispo+"/"+total+" outils disponibles")),h("span",{style:{background:dispo?"#e6fff0":"#fff8e6",color:dispo?S.green:S.orange,borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:700}},dispo?"Disponible":"Partiel")),
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,gap:12}},
+            h("div",{style:{flex:1}},
+              h("div",{style:{fontSize:10,fontWeight:800,color:S.purple,marginBottom:3}},kitCode),
+              h("div",{style:{fontSize:16,fontWeight:800}},kit.nom),
+              kit.description&&h("div",{style:{fontSize:12,color:S.gray,marginTop:2}},kit.description),
+              h("div",{style:{fontSize:12,marginTop:4,color:dispo?S.green:S.orange,fontWeight:600}},outilsDispo+"/"+total+" outils disponibles")
+            ),
+            h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}},
+              h("span",{style:{background:dispo?"#e6fff0":"#fff8e6",color:dispo?S.green:S.orange,borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:700}},dispo?"Disponible":"Partiel"),
+              h(QRCodeDisplay,{text:kitCode,size:58,label:"Kit"})
+            )
+          ),
           h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}},(kit.outils||[]).map(id=>{const t=tools.find(x=>x.id===id);const sorti=isEmp(id);return h("span",{key:id,style:{background:sorti?"#fff1f0":"#e6fff0",color:sorti?S.danger:S.green,borderRadius:8,padding:"3px 8px",fontSize:10,fontWeight:600}},t?t.nom.substring(0,20):id);})),
           h("div",{style:{display:"flex",gap:8}},h("button",{onClick:()=>setModal({t:"kitDep",kit}),style:{...BP,flex:2,padding:"10px",fontSize:13}},"📤 Sortir le kit"),isAdmin&&h("button",{onClick:()=>setModal({t:"kit",kit}),style:{...BS,flex:1,padding:"10px",fontSize:12}},"Modifier"),isAdmin&&h("button",{onClick:()=>delKit(kit._id),style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"10px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer"}},"Supprimer"))
         )
