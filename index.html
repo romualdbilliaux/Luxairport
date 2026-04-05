@@ -130,6 +130,16 @@ transitCases:4
 };
 const FAM_COLORS=['#3498db','#e74c3c','#2ecc71','#f39c12','#9b59b6','#1abc9c','#e67e22','#e91e63','#00bcd4','#ff5722'];
 
+const DASHBOARD_WIDGETS_DEFAULT=[
+{id:'weather',label:'Météo',visible:true,order:0},
+{id:'alerts',label:'Alertes',visible:true,order:1},
+{id:'quick',label:'Accès rapides',visible:true,order:2},
+{id:'messages',label:'Messages équipe',visible:true,order:3},
+{id:'mats',label:'Dernier plein mâts',visible:true,order:4},
+{id:'fod',label:'Planning FOD BOSS',visible:true,order:5}
+];
+const WEATHER_CODE_LABELS={0:'Ensoleillé',1:'Principalement dégagé',2:'Partiellement nuageux',3:'Couvert',45:'Brouillard',48:'Brouillard givrant',51:'Bruine légère',53:'Bruine',55:'Bruine dense',61:'Pluie légère',63:'Pluie',65:'Forte pluie',71:'Neige légère',73:'Neige',75:'Forte neige',80:'Averses légères',81:'Averses',82:'Fortes averses',95:'Orage'};
+
 // ── UTILITAIRES ───────────────────────────────────────────────────────────────
 const {useState,useEffect,useRef,useMemo}=React;
 const h=React.createElement;
@@ -143,12 +153,6 @@ const fbDel=(c,i)=>db.collection(c).doc(i).delete();
 const daysSince=d=>{if(!d)return 0;try{const parts=d.split(/[/ ]/);const date=new Date(parts.length>=3?parts[2]+"-"+parts[1]+"-"+parts[0]:d);return isNaN(date)?0:Math.floor((Date.now()-date.getTime())/86400000);}catch(e){return 0;}};
 function darken(hex,amt=30){try{const r=Math.max(0,parseInt(hex.slice(1,3),16)-amt);const g=Math.max(0,parseInt(hex.slice(3,5),16)-(amt-10));const b=Math.max(0,parseInt(hex.slice(5,7),16)-(amt-10));return`rgb(${r},${g},${b})`;}catch{return hex;}}
 function hexToRgb(hex){return{r:parseInt(hex.slice(1,3),16),g:parseInt(hex.slice(3,5),16),b:parseInt(hex.slice(5,7),16)};}
-
-function weatherLabel(code){
-  const map={0:"Ciel dégagé",1:"Peu nuageux",2:"Partiellement nuageux",3:"Couvert",45:"Brouillard",48:"Brouillard givrant",51:"Bruine légère",53:"Bruine modérée",55:"Bruine dense",56:"Bruine verglaçante légère",57:"Bruine verglaçante dense",61:"Pluie légère",63:"Pluie modérée",65:"Pluie forte",66:"Pluie verglaçante légère",67:"Pluie verglaçante forte",71:"Neige faible",73:"Neige modérée",75:"Neige forte",77:"Grains de neige",80:"Averses faibles",81:"Averses modérées",82:"Averses violentes",85:"Averses de neige faibles",86:"Averses de neige fortes",95:"Orage",96:"Orage avec grêle",99:"Orage violent avec grêle"};
-  return map[code]||"Conditions variables";
-}
-
 
 // ── STYLES ────────────────────────────────────────────────────────────────────
 const S={red:'#c8102e',blue:'#007aff',green:'#34c759',orange:'#ff9500',danger:'#ff3b30',bg:'#f2f2f7',white:'#fff',gray:'#8e8e93',border:'#e5e5ea',dark:'#1c1c1e',purple:'#af52de',yellow:'#ffd60a'};
@@ -1840,6 +1844,17 @@ tab==="perso"&&h("div",{},
       )
     ))
   ),
+  h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Widgets du dashboard"),
+  h("div",{style:{background:S.white,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
+    mergeDashboardWidgets(lCfg.dashboardWidgets||cfg.dashboardWidgets).map((w,i,arr)=>h("div",{key:w.id,style:{display:"grid",gridTemplateColumns:"1fr auto auto auto",gap:6,alignItems:"center",padding:"10px 0",borderBottom:i<arr.length-1?"1px solid "+S.bg:"none"}},
+      h("span",{style:{fontSize:13,fontWeight:600}},w.label),
+      h("button",{onClick:()=>setLCfg(prev=>{const list=mergeDashboardWidgets(prev.dashboardWidgets||cfg.dashboardWidgets); const idx=list.findIndex(x=>x.id===w.id); if(idx>0){[list[idx-1],list[idx]]=[list[idx],list[idx-1]]; list.forEach((x,j)=>x.order=j);} return {...prev,dashboardWidgets:[...list]};}),style:{background:"#eef4ff",color:S.blue,border:"none",borderRadius:8,padding:"6px 8px",fontSize:12,cursor:"pointer"}},"↑"),
+      h("button",{onClick:()=>setLCfg(prev=>{const list=mergeDashboardWidgets(prev.dashboardWidgets||cfg.dashboardWidgets); const idx=list.findIndex(x=>x.id===w.id); if(idx<list.length-1){[list[idx+1],list[idx]]=[list[idx],list[idx+1]]; list.forEach((x,j)=>x.order=j);} return {...prev,dashboardWidgets:[...list]};}),style:{background:"#eef4ff",color:S.blue,border:"none",borderRadius:8,padding:"6px 8px",fontSize:12,cursor:"pointer"}},"↓"),
+      h("div",{onClick:()=>setLCfg(prev=>{const list=mergeDashboardWidgets(prev.dashboardWidgets||cfg.dashboardWidgets).map(x=>x.id===w.id?{...x,visible:x.visible===false?true:false}:x);return {...prev,dashboardWidgets:list};}),style:{width:44,height:24,borderRadius:12,background:w.visible!==false?S.green:S.border,position:"relative",cursor:"pointer"}},
+        h("div",{style:{width:20,height:20,borderRadius:"50%",background:"#fff",position:"absolute",top:2,left:w.visible!==false?22:2,transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}})
+      )
+    ))
+  ),
   h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Apparence"),
   h("div",{style:{background:S.white,borderRadius:14,padding:"14px 16px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
     FL("Nom du site"),h("input",{value:lCfg.nomSite||"",onChange:e=>setLCfg(p=>({...p,nomSite:e.target.value})),placeholder:"LUX AIRPORT",style:IS}),
@@ -2419,6 +2434,9 @@ const[userAccounts,setUserAccounts]=useState([]);
 const[warehouseConfig,setWarehouseConfig]=useState(WAREHOUSE_DEFAULT);
 const[matsCfg,setMatsCfg]=useState({trailerName:'Remorque gazole P2',mats:[{id:'MAT-1',nom:'Mât 1'},{id:'MAT-2',nom:'Mât 2'},{id:'MAT-3',nom:'Mât 3'},{id:'MAT-4',nom:'Mât 4'}]});
 const[matsTours,setMatsTours]=useState([]);
+const[dashboardWeather,setDashboardWeather]=useState({loading:true,temp:null,wind:null,label:'Chargement...',time:''});
+const[fodHomeCfg,setFodHomeCfg]=useState({aprons:[]});
+const[fodHomePassages,setFodHomePassages]=useState([]);
 const[toast,setToast]=useState("");
 const[syncing,setSyncing]=useState(false);
 const[toolSearch,setToolSearch]=useState("");
@@ -2426,7 +2444,6 @@ const[toolF,setToolF]=useState("tous");
 const[stockTab,setStockTab]=useState("cons");
 const[stockQ,setStockQ]=useState("");
 const[empF,setEmpF]=useState("tous");
-const[weather,setWeather]=useState({loading:true,name:"Luxembourg Airport / Findel",temp:null,wind:null,time:"",label:"Chargement..."});
 const[navConfig,setNavConfig]=useState([
 {id:"accueil",icon:"🏠",label:"Accueil",visible:true,order:0},
 {id:"emprunts",icon:"📦",label:"Emprunts",visible:true,order:1},
@@ -2439,33 +2456,6 @@ const[navConfig,setNavConfig]=useState([
 {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
 {id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
 ]);
-
-useEffect(()=>{
-  let cancelled=false;
-  const loadWeather=async()=>{
-    try{
-      const res=await fetch("https://api.open-meteo.com/v1/forecast?latitude=49.6233&longitude=6.2044&current_weather=true&timezone=Europe%2FBerlin");
-      const data=await res.json();
-      const cw=data.current_weather||{};
-      if(cancelled)return;
-      setWeather({
-        loading:false,
-        name:"Luxembourg Airport / Findel",
-        temp:typeof cw.temperature==="number"?cw.temperature:null,
-        wind:typeof cw.windspeed==="number"?cw.windspeed:null,
-        time:cw.time||"",
-        label:weatherLabel(cw.weathercode)
-      });
-    }catch(e){
-      if(cancelled)return;
-      setWeather({loading:false,name:"Luxembourg Airport / Findel",temp:null,wind:null,time:"",label:"Indisponible"});
-    }
-  };
-  loadWeather();
-  const iv=setInterval(loadWeather,15*60*1000);
-  return ()=>{cancelled=true;clearInterval(iv);};
-},[]);
-
 const mergeNavConfig=(stored)=>{
   const defaults=[
     {id:"accueil",icon:"🏠",label:"Accueil",visible:true,order:0},
@@ -2482,6 +2472,15 @@ const mergeNavConfig=(stored)=>{
   const clean=(stored||[]).filter(n=>n.id!=="kits");
   const map=new Map(clean.map(n=>[n.id,n]));
   defaults.forEach(d=>{ if(!map.has(d.id)) map.set(d.id,d); else map.set(d.id,{...d,...map.get(d.id)}); });
+  return [...map.values()].sort((a,b)=>(a.order||0)-(b.order||0));
+};
+
+const mergeDashboardWidgets=(stored)=>{
+  const map=new Map((stored||[]).map(w=>[w.id,w]));
+  DASHBOARD_WIDGETS_DEFAULT.forEach((d,i)=>{
+    if(!map.has(d.id)) map.set(d.id,d);
+    else map.set(d.id,{...d,...map.get(d.id),order:map.get(d.id).order??d.order??i});
+  });
   return [...map.values()].sort((a,b)=>(a.order||0)-(b.order||0));
 };
 
@@ -2502,7 +2501,7 @@ if(parSnap.exists){
 const p=parSnap.data();
 if(p.employes)setEmployes(p.employes);
 if(p.adminPin)setAdminPin(p.adminPin);
-if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));
+if(p.cfg)setCfg(prev=>({...prev,...p.cfg,dashboardWidgets:mergeDashboardWidgets(p.cfg.dashboardWidgets)}));
 if(p.navConfig)setNavConfig(mergeNavConfig(p.navConfig));
 if(p.userAccounts)setUserAccounts(p.userAccounts);
 if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);
@@ -2554,13 +2553,6 @@ const entreesJ=emprunts.filter(e=>{if(!e.retour)return false;try{const d=e.retou
 const outilsLongs=emprunts.filter(e=>!e.retour&&daysSince(e.dateDepart)>=1);
 const alertCount=outilsLongs.length;
 
-const greetingHour=new Date().getHours();
-const greeting=greetingHour<12?"Bonjour":greetingHour<18?"Bon après-midi":"Bonsoir";
-const todayFr=new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"2-digit",month:"long",year:"numeric"});
-const currentTimeFr=new Date().toLocaleTimeString("fr-FR",{hour:"2-digit",minute:"2-digit"});
-const lastMatsTour=[...matsTours].sort((a,b)=>(b.ts||0)-(a.ts||0))[0]||null;
-const lastInspectionAt=Object.values(inspections||{}).filter(v=>v&&v.ts).sort((a,b)=>(b.ts||0)-(a.ts||0))[0]||null;
-
 const saveWarehouseConfig=async(wc)=>{setWarehouseConfig(wc);await db.collection("params").doc("config").set({warehouseConfig:wc},{merge:true});showT("Configuration entrepôt sauvegardée!");};
 const saveNavConfig=async(nc)=>{const merged=mergeNavConfig(nc);setNavConfig(merged);await db.collection("params").doc("config").set({navConfig:merged},{merge:true});showT("Menu configuré!");};
 const saveMatsCfg=async(newCfg)=>{setMatsCfg(newCfg);await db.collection("params").doc("config").set({matsCfg:newCfg},{merge:true});showT("Paramètres mâts mobiles sauvegardés!");};
@@ -2606,7 +2598,7 @@ const takeStock=async(item,cat,pers,qte,code,comm)=>{setSyncing(true);const ns=M
 const addStock=async(item,cat,pers,qte,comm)=>{setSyncing(true);const ns=item.stock+qte;await fbSet(cat==="cons"?"cons":"vets",item.id,{stock:ns});await fbAdd("consHist",{nom:item.nom,id:item.id,qte,action:"entree",personne:pers,date:now(),categorie:cat,commentaire:comm||""});setSyncing(false);setModal(null);showT("+"+qte+" "+item.nom);};
 const adjStock=async(item,cat,nv,raison)=>{setSyncing(true);await fbSet(cat==="cons"?"cons":"vets",item.id,{stock:nv});await fbAdd("consHist",{nom:item.nom,id:item.id,qte:Math.abs(nv-item.stock),action:"ajustement",personne:"Admin",date:now(),categorie:cat,commentaire:raison||"Ajustement"});setSyncing(false);setModal(null);showT("Stock ajusté!");};
 const delHist=async id=>{if(!confirm("Supprimer?"))return;await fbDel("consHist",id);showT("Supprimé");};
-const saveCfg=async newCfg=>{setCfg(newCfg);await db.collection("params").doc("config").set({cfg:newCfg},{merge:true});showT("Paramètres sauvegardés!");};
+const saveCfg=async newCfg=>{const cleaned={...newCfg,dashboardWidgets:mergeDashboardWidgets(newCfg.dashboardWidgets)};setCfg(cleaned);await db.collection("params").doc("config").set({cfg:cleaned},{merge:true});showT("Paramètres sauvegardés!");};
 const saveAdmin=async(np,ne)=>{setAdminPin(np);setEmployes(ne);await db.collection("params").doc("config").set({adminPin:np,employes:ne},{merge:true});showT("Sauvegardé!");};
 const saveKit=async(data)=>{setSyncing(true);if(data._id){await db.collection("kits").doc(data._id).set(data,{merge:true});}else{await fbAdd("kits",{...data,ts:Date.now()});}setSyncing(false);setModal(null);showT("Kit sauvegardé!");};
 const delKit=async id=>{if(!confirm("Supprimer ce kit?"))return;await fbDel("kits",id);showT("Kit supprimé");};
@@ -2652,7 +2644,112 @@ if(toolF==="attente")mf=!ins.etat&&!em;else if(toolF==="ok")mf=ins.etat==="Bon";
 return ms&&mf;
 });
 const stockList=(stockTab==="cons"?cons:vets).filter(i=>{const q=stockQ.toLowerCase();return !stockQ||i.nom.toLowerCase().includes(q)||i.id.toLowerCase().includes(q)||(i.taille||"").toLowerCase().includes(q);});
+
 const empList=empF==="tous"?emprunts:empF==="encours"?emprunts.filter(e=>!e.retour):emprunts.filter(e=>e.retour);
+
+useEffect(()=>{
+  let dead=false;
+  const loadWeather=async()=>{
+    try{
+      const res=await fetch('https://api.open-meteo.com/v1/forecast?latitude=49.6233&longitude=6.2044&current_weather=true&windspeed_unit=kmh');
+      const json=await res.json();
+      const cw=json.current_weather||{};
+      if(dead)return;
+      setDashboardWeather({
+        loading:false,
+        temp:typeof cw.temperature==='number'?cw.temperature:null,
+        wind:typeof cw.windspeed==='number'?cw.windspeed:null,
+        label:WEATHER_CODE_LABELS[cw.weathercode]||'Météo',
+        time:cw.time?new Date(cw.time).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):''
+      });
+    }catch(e){ if(!dead) setDashboardWeather({loading:false,temp:null,wind:null,label:'Indisponible',time:''}); }
+  };
+  loadWeather();
+  const t=setInterval(loadWeather,30*60*1000);
+  return ()=>{dead=true; clearInterval(t);};
+},[]);
+useEffect(()=>{
+  const u1=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{const data=s.exists?(s.data()||{}):{}; setFodHomeCfg({aprons:Array.isArray(data.aprons)?data.aprons:[]});});
+  const u2=db.collection('fodBossPassages').orderBy('ts','desc').limit(40).onSnapshot(s=>setFodHomePassages(s.docs.map(d=>({...d.data(),_id:d.id}))));
+  return ()=>{u1();u2();};
+},[]);
+const dashboardWidgets=mergeDashboardWidgets(cfg.dashboardWidgets);
+const lastMatsTour=[...(matsTours||[])].sort((a,b)=>(b.ts||0)-(a.ts||0))[0]||null;
+const fodRules=[
+  {min:5.01,max:Infinity,label:'1 x / semaine',days:7,color:S.danger},
+  {min:1.01,max:5,label:'1 x / 2 semaines',days:14,color:S.orange},
+  {min:0.51,max:1,label:'1 x / mois',days:30,color:S.blue},
+  {min:0,max:0.5,label:'1 x / 2 mois',days:60,color:S.green}
+];
+const fodPlanningHome=((fodHomeCfg.aprons||[]).filter(a=>a.active!==false).map(a=>{
+  const last=[...(fodHomePassages||[])].filter(p=>p.apron===a.id).sort((x,y)=>(y.ts||0)-(x.ts||0))[0];
+  const gm2=Number(last?.gm2||0);
+  const rule=fodRules.find(r=>gm2>=r.min&&gm2<=r.max) || fodRules[fodRules.length-1];
+  const nextTs=last?.nextPassageTs || (last?.ts ? ((last.ts)+(rule.days*86400000)) : null);
+  const status=!last?'À planifier':(nextTs && Date.now()>nextTs)?'En retard':'À jour';
+  return {id:a.id,last,lastLabel:last?.dateTime||'Jamais',freq:last?.recurrenceLabel||rule.label,next:nextTs?new Date(nextTs).toLocaleDateString('fr-FR'):'—',status,color:!last?S.gray:((nextTs && Date.now()>nextTs)?S.danger:S.green)};
+})).sort((a,b)=>{
+  const av=a.status==='En retard'?0:a.status==='À planifier'?1:2;
+  const bv=b.status==='En retard'?0:b.status==='À planifier'?1:2;
+  return av-bv;
+}).slice(0,4);
+const quickButtons=[
+  {id:'inspection',label:'Inspection',icon:'🔧',bg:'#eef4ff',color:S.blue},
+  {id:'emprunts',label:'Emprunts',icon:'📦',bg:'#fff4f2',color:S.red},
+  {id:'matsmobile',label:'Pleins mâts',icon:'⛽',bg:'#fff8ea',color:S.orange},
+  {id:'fod',label:'FOD BOSS',icon:'✈️',bg:'#edf9f0',color:S.green}
+].filter(x=>navConfig.find(n=>n.id===x.id&&n.visible!==false));
+const renderDashboardWidget=(widget)=>{
+  if(widget.id==='weather') return h('div',{style:{background:'#fff',borderRadius:24,padding:'18px',boxShadow:'0 10px 30px rgba(0,0,0,.06)'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}},
+      h('div',{},h('div',{style:{fontSize:11,fontWeight:800,color:S.gray,letterSpacing:.8,textTransform:'uppercase',marginBottom:6}},'Météo'),h('div',{style:{fontSize:15,fontWeight:800}},'Luxembourg Airport / Findel'),h('div',{style:{fontSize:13,color:S.gray,marginTop:3}},dashboardWeather.label)),
+      h('div',{style:{textAlign:'right'}},h('div',{style:{fontSize:34,fontWeight:900,lineHeight:1,color:'#223'}},dashboardWeather.temp!==null?Math.round(dashboardWeather.temp)+'°':'—'),h('div',{style:{fontSize:12,color:S.gray,marginTop:6}},dashboardWeather.wind!==null?'Vent '+Math.round(dashboardWeather.wind)+' km/h':'—'))
+    ),
+    h('div',{style:{marginTop:12,fontSize:11,color:S.gray}},dashboardWeather.time?'Mise à jour '+dashboardWeather.time:'')
+  );
+  if(widget.id==='alerts') return h('div',{style:{background:'#fff',borderRadius:24,padding:'18px',boxShadow:'0 10px 30px rgba(0,0,0,.06)'}},
+    h('div',{style:{fontSize:11,fontWeight:800,color:S.gray,letterSpacing:.8,textTransform:'uppercase',marginBottom:10}},'Alertes'),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10}},
+      h('div',{style:{background:'#fff8f1',borderRadius:18,padding:'14px',textAlign:'center'}},h('div',{style:{fontSize:28,fontWeight:900,color:S.orange}},alertCount),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700,marginTop:4}},'Sorties longues')),
+      h('div',{style:{background:'#fff6f6',borderRadius:18,padding:'14px',textAlign:'center'}},h('div',{style:{fontSize:28,fontWeight:900,color:S.danger}},lowS.length),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700,marginTop:4}},'Stock faible')),
+      h('div',{style:{background:'#f4fbf5',borderRadius:18,padding:'14px',textAlign:'center'}},h('div',{style:{fontSize:28,fontWeight:900,color:S.green}},st.at),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700,marginTop:4}},'À inspecter'))
+    )
+  );
+  if(widget.id==='quick') return h('div',{style:{background:'#fff',borderRadius:24,padding:'18px',boxShadow:'0 10px 30px rgba(0,0,0,.06)'}},
+    h('div',{style:{fontSize:11,fontWeight:800,color:S.gray,letterSpacing:.8,textTransform:'uppercase',marginBottom:10}},'Accès rapides'),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},quickButtons.map(btn=>h('button',{key:btn.id,onClick:()=>setPage(btn.id),style:{background:btn.bg,color:btn.color,border:'none',borderRadius:20,padding:'16px 14px',textAlign:'left',cursor:'pointer'}},h('div',{style:{fontSize:24,marginBottom:8}},btn.icon),h('div',{style:{fontSize:14,fontWeight:800}},btn.label))))
+  );
+  if(widget.id==='messages') return h('div',{style:{background:'#fff',borderRadius:28,padding:'24px 20px',boxShadow:'0 12px 30px rgba(0,0,0,.07)',textAlign:'center'}},
+    h('div',{style:{display:'flex',justifyContent:'center',gap:10,marginBottom:12,flexWrap:'wrap'}},
+      isAdmin&&h('button',{onClick:async()=>{const v=prompt('Message équipe 1',cfg.teamMessage1||'');if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:'auto',padding:'10px 16px',fontSize:13}},'Modifier 1'),
+      isAdmin&&h('button',{onClick:async()=>{const v=prompt('Message équipe 2',cfg.teamMessage2||'');if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:'auto',padding:'10px 16px',fontSize:13}},'Modifier 2')
+    ),
+    h('div',{style:{fontSize:11,fontWeight:800,color:S.gray,letterSpacing:.8,textTransform:'uppercase',marginBottom:8}},'Messages équipe'),
+    cfg.teamMessage1&&h('div',{style:{background:'#fff7f7',borderLeft:'4px solid '+S.red,borderRadius:18,padding:'16px 16px',marginBottom:10}},h('div',{style:{fontSize:11,color:S.gray,fontWeight:800,textTransform:'uppercase',marginBottom:6}},'Message 1'),h('div',{style:{fontSize:20,fontWeight:800,whiteSpace:'pre-wrap'}},cfg.teamMessage1)),
+    cfg.teamMessage2&&h('div',{style:{background:'#f5f8ff',borderLeft:'4px solid '+S.blue,borderRadius:18,padding:'16px 16px'}},h('div',{style:{fontSize:11,color:S.gray,fontWeight:800,textTransform:'uppercase',marginBottom:6}},'Message 2'),h('div',{style:{fontSize:20,fontWeight:800,whiteSpace:'pre-wrap'}},cfg.teamMessage2)),
+    !cfg.teamMessage1&&!cfg.teamMessage2&&h('div',{style:{padding:24,textAlign:'center',color:S.gray,fontSize:14}},'Aucun message actuellement')
+  );
+  if(widget.id==='mats') return h('div',{style:{background:'#fff',borderRadius:24,padding:'18px',boxShadow:'0 10px 30px rgba(0,0,0,.06)'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},h('div',{style:{fontSize:11,fontWeight:800,color:S.gray,letterSpacing:.8,textTransform:'uppercase'}},'Dernier plein des mâts'),h('button',{onClick:()=>setPage('matsmobile'),style:{background:'#eef4ff',color:S.blue,border:'none',borderRadius:12,padding:'8px 10px',fontSize:12,fontWeight:800,cursor:'pointer'}},'Ouvrir')),
+    lastMatsTour ? h('div',{},
+      h('div',{style:{fontSize:18,fontWeight:900,marginBottom:4}},lastMatsTour.dateTime||'—'),
+      h('div',{style:{fontSize:13,color:S.gray,marginBottom:10}},'Agent : '+(lastMatsTour.user||'—')+(lastMatsTour.otherColleague?' · '+lastMatsTour.otherColleague:'')),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},
+        h('div',{style:{background:'#fff8ea',borderRadius:16,padding:'12px'}},h('div',{style:{fontSize:24,fontWeight:900,color:S.orange}},Math.round((lastMatsTour.totalLitres||0)*10)/10),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Litres sur mâts')),
+        h('div',{style:{background:'#f4fbf5',borderRadius:16,padding:'12px'}},h('div',{style:{fontSize:24,fontWeight:900,color:S.green}},lastMatsTour.luxfuel?'Oui':'Non'),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Passage Luxfuel'))
+      )
+    ) : h('div',{style:{fontSize:13,color:S.gray}},'Aucune tournée enregistrée')
+  );
+  if(widget.id==='fod') return h('div',{style:{background:'#fff',borderRadius:24,padding:'18px',boxShadow:'0 10px 30px rgba(0,0,0,.06)'}},
+    h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10}},h('div',{style:{fontSize:11,fontWeight:800,color:S.gray,letterSpacing:.8,textTransform:'uppercase'}},'Planning automatique FOD BOSS'),h('button',{onClick:()=>setPage('fod'),style:{background:'#edf9f0',color:S.green,border:'none',borderRadius:12,padding:'8px 10px',fontSize:12,fontWeight:800,cursor:'pointer'}},'Ouvrir')),
+    fodPlanningHome.length ? fodPlanningHome.map((item,i)=>h('div',{key:item.id,style:{display:'grid',gridTemplateColumns:'auto 1fr auto',gap:10,alignItems:'center',padding:'11px 0',borderBottom:i<fodPlanningHome.length-1?'1px solid '+S.bg:'none'}},
+      h('div',{style:{width:42,height:42,borderRadius:14,background:item.color+'22',color:item.color,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:900}},item.id),
+      h('div',{},h('div',{style:{fontSize:14,fontWeight:800}},item.status),h('div',{style:{fontSize:12,color:S.gray}},'Prochain : '+item.next+' · '+item.freq)),
+      h('div',{style:{fontSize:12,fontWeight:800,color:item.color}},item.last?'OK':'—')
+    )) : h('div',{style:{fontSize:13,color:S.gray}},'Aucun apron configuré')
+  );
+  return null;
+};
 
 if(!ready)return h(Spinner,null);
 if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);setIsAdmin(user.role==="admin");setPage("accueil");}});
@@ -2665,69 +2762,23 @@ h("div",{style:{padding:"14px 14px 90px"}},
 
   page==="accueil"&&h("div",{className:"fi"},
     h("div",{style:{display:"grid",gap:14}},
-      h("div",{style:{background:`linear-gradient(135deg,${cfg.couleur||S.red},${darken(cfg.couleur||S.red,30)})`,borderRadius:24,padding:"20px 18px",color:"#fff",boxShadow:"0 14px 34px rgba(0,0,0,.14)"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:14,flexWrap:"wrap"}},
-          h("div",{style:{minWidth:0,flex:1}},
-            h("div",{style:{fontSize:13,opacity:.82,fontWeight:700,marginBottom:6}},greeting+(currentUser?.name?" "+currentUser.name:"")),
-            h("div",{style:{fontSize:26,fontWeight:900,letterSpacing:-.4,marginBottom:6}},"Dashboard opérationnel"),
-            h("div",{style:{fontSize:12,opacity:.82,lineHeight:1.45}},todayFr+" • "+currentTimeFr)
+      h("div",{style:{background:"linear-gradient(135deg,#ffffff,#f7f9fc)",borderRadius:28,padding:"20px 18px",boxShadow:"0 12px 30px rgba(0,0,0,.07)"}},
+        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:12,marginBottom:10}},
+          h("div",{},
+            h("div",{style:{fontSize:11,fontWeight:900,color:S.gray,letterSpacing:1,textTransform:"uppercase",marginBottom:6}},"DASHBOARD"),
+            h("div",{style:{fontSize:26,fontWeight:900,lineHeight:1.05,color:"#18212f"}},"Bonjour "+((currentUser?.name||"Equipe").split(" ")[0])),
+            h("div",{style:{fontSize:13,color:S.gray,marginTop:8}},new Date().toLocaleDateString('fr-FR',{weekday:'long',day:'2-digit',month:'long',year:'numeric'}))
           ),
-          h("div",{style:{background:"rgba(255,255,255,.14)",border:"1px solid rgba(255,255,255,.18)",borderRadius:18,padding:"12px 14px",minWidth:170,maxWidth:240,backdropFilter:"blur(10px)"}},
-            h("div",{style:{fontSize:11,fontWeight:800,opacity:.8,textTransform:"uppercase",marginBottom:5}},"Météo live"),
-            h("div",{style:{fontSize:13,fontWeight:800,marginBottom:3}},weather.name),
-            h("div",{style:{fontSize:12,opacity:.9}},weather.loading?"Chargement...":weather.label),
-            weather.temp!==null&&h("div",{style:{fontSize:28,fontWeight:900,marginTop:6,lineHeight:1}},String(weather.temp).replace(".",",")+"°C"),
-            weather.wind!==null&&h("div",{style:{fontSize:11,opacity:.85,marginTop:5}},"Vent "+String(weather.wind).replace(".",",")+" km/h")
+          h("div",{style:{textAlign:"right"}},
+            h("div",{style:{fontSize:12,color:S.gray,fontWeight:700}},"Inspection"),
+            h("div",{style:{fontSize:30,fontWeight:900,color:S.red,lineHeight:1}},pct+"%")
           )
         ),
-        h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginTop:16}},
-          h("div",{style:{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"12px 10px"}},h("div",{style:{fontSize:11,opacity:.82,fontWeight:700,textTransform:"uppercase"}},"Inspection"),h("div",{style:{fontSize:24,fontWeight:900,marginTop:6}},pct+"%"),h("div",{style:{fontSize:11,opacity:.82,marginTop:4}},st.fait+"/"+st.total+" inspectés")),
-          h("div",{style:{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"12px 10px"}},h("div",{style:{fontSize:11,opacity:.82,fontWeight:700,textTransform:"uppercase"}},"Sorties aujourd'hui"),h("div",{style:{fontSize:24,fontWeight:900,marginTop:6}},sortiesJ),h("div",{style:{fontSize:11,opacity:.82,marginTop:4}},"retours : "+entreesJ)),
-          h("div",{style:{background:"rgba(255,255,255,.14)",borderRadius:16,padding:"12px 10px"}},h("div",{style:{fontSize:11,opacity:.82,fontWeight:700,textTransform:"uppercase"}},"Alertes"),h("div",{style:{fontSize:24,fontWeight:900,marginTop:6}},alertCount+lowS.length),h("div",{style:{fontSize:11,opacity:.82,marginTop:4}},alertCount>0?"à traiter":"RAS"))
+        h("div",{style:{height:10,background:"#eef1f5",borderRadius:999,overflow:"hidden"}},
+          h("div",{style:{height:"100%",width:pct+"%",background:"linear-gradient(90deg,"+S.red+","+S.orange+")",borderRadius:999}})
         )
       ),
-
-      h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}},
-        h("div",{style:{background:S.white,borderRadius:18,padding:"14px 14px",boxShadow:"0 6px 20px rgba(0,0,0,.06)"}},
-          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}},
-            h("div",{style:{fontSize:15,fontWeight:800}},"🚨 Alertes intelligentes"),
-            h("span",{style:{background:(alertCount+lowS.length)>0?"#fff1f0":"#e6fff0",color:(alertCount+lowS.length)>0?S.danger:S.green,borderRadius:999,padding:"4px 10px",fontSize:11,fontWeight:800}},(alertCount+lowS.length)>0?"Action":"OK")
-          ),
-          outilsLongs.length>0&&h("div",{style:{background:"#fff7f7",borderLeft:"4px solid "+S.danger,borderRadius:12,padding:"10px 12px",fontSize:12,fontWeight:700,marginBottom:8}},`🔴 ${outilsLongs.length} outil(s) sorti(s) depuis plus de 24h`),
-          st.at>0&&h("div",{style:{background:"#fff8e6",borderLeft:"4px solid "+S.orange,borderRadius:12,padding:"10px 12px",fontSize:12,fontWeight:700,marginBottom:8}},`🟠 ${st.at} outil(s) encore à inspecter`),
-          lowS.length>0&&h("div",{style:{background:"#eef5ff",borderLeft:"4px solid "+S.blue,borderRadius:12,padding:"10px 12px",fontSize:12,fontWeight:700,marginBottom:8}},`🔵 ${lowS.length} article(s) en stock faible`),
-          outilsLongs.length===0&&st.at===0&&lowS.length===0&&h("div",{style:{background:"#f5fff8",borderLeft:"4px solid "+S.green,borderRadius:12,padding:"12px 12px",fontSize:12,fontWeight:700}}, "✅ Aucun point bloquant pour le moment")
-        ),
-        h("div",{style:{background:S.white,borderRadius:18,padding:"14px 14px",boxShadow:"0 6px 20px rgba(0,0,0,.06)"}},
-          h("div",{style:{fontSize:15,fontWeight:800,marginBottom:10}},"📈 Suivi rapide"),
-          h("div",{style:{display:"grid",gap:8}},
-            h("div",{style:{background:"#f7f8fc",borderRadius:12,padding:"10px 12px"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Dernière tournée mâts"),h("div",{style:{fontSize:13,fontWeight:700,marginTop:3}},lastMatsTour?lastMatsTour.dateTime||lastMatsTour.date||"—":"Aucune tournée"), lastMatsTour&&h("div",{style:{fontSize:11,color:S.gray,marginTop:4}},(lastMatsTour.user||"")+" · "+((lastMatsTour.mats||[]).length||0)+" mât(s)")),
-            h("div",{style:{background:"#f7f8fc",borderRadius:12,padding:"10px 12px"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"Dernière inspection"),h("div",{style:{fontSize:13,fontWeight:700,marginTop:3}},lastInspectionAt?lastInspectionAt.date||now():"Aucune inspection"), lastInspectionAt&&h("div",{style:{fontSize:11,color:S.gray,marginTop:4}},(lastInspectionAt.tech||"Technicien")+" · "+(lastInspectionAt.etat||"—"))),
-            h("div",{style:{background:"#f7f8fc",borderRadius:12,padding:"10px 12px"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase"}},"F.O.D BOSS"),h("div",{style:{fontSize:13,fontWeight:700,marginTop:3}},"Module disponible"),h("div",{style:{fontSize:11,color:S.gray,marginTop:4}},"Accès rapide depuis le menu"))
-          )
-        )
-      ),
-
-      h("div",{style:{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}},
-        h("button",{onClick:()=>setPage("fod"),style:{background:"#111827",color:"#fff",border:"none",borderRadius:18,padding:"16px 12px",cursor:"pointer",boxShadow:"0 8px 22px rgba(17,24,39,.15)"}},h("div",{style:{fontSize:26,marginBottom:6}},"✈️"),h("div",{style:{fontSize:14,fontWeight:800}},"FOD BOSS"),h("div",{style:{fontSize:11,opacity:.78,marginTop:4}},"Ouvrir le module")),
-        h("button",{onClick:()=>setPage("emprunts"),style:{background:"#0b6bff",color:"#fff",border:"none",borderRadius:18,padding:"16px 12px",cursor:"pointer",boxShadow:"0 8px 22px rgba(0,122,255,.18)"}},h("div",{style:{fontSize:26,marginBottom:6}},"📦"),h("div",{style:{fontSize:14,fontWeight:800}},"Emprunts"),h("div",{style:{fontSize:11,opacity:.78,marginTop:4}},"Départs / retours")),
-        h("button",{onClick:()=>setPage("inspection"),style:{background:"#14a44d",color:"#fff",border:"none",borderRadius:18,padding:"16px 12px",cursor:"pointer",boxShadow:"0 8px 22px rgba(52,199,89,.18)"}},h("div",{style:{fontSize:26,marginBottom:6}},"🔧"),h("div",{style:{fontSize:14,fontWeight:800}},"Inspection"),h("div",{style:{fontSize:11,opacity:.78,marginTop:4}},"Suivi matériel"))
-      ),
-
-      h("div",{style:{background:S.white,borderRadius:22,padding:"20px 18px",boxShadow:"0 10px 30px rgba(0,0,0,.08)"}},
-        h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:14,flexWrap:"wrap"}},
-          h("div",{},h("div",{style:{fontSize:22,fontWeight:900,color:S.red,marginBottom:3}},"Messages équipe"),h("div",{style:{fontSize:12,color:S.gray}},"Zone centrale d'information")),
-          isAdmin&&h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
-            h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||"");if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:"auto",padding:"10px 14px",fontSize:13}},"Modifier 1"),
-            h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||"");if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:"auto",padding:"10px 14px",fontSize:13}},"Modifier 2")
-          )
-        ),
-        h("div",{style:{display:"grid",gap:12}},
-          cfg.teamMessage1&&h("div",{style:{background:"linear-gradient(135deg,#fff7f7,#ffffff)",borderLeft:"5px solid "+S.red,borderRadius:18,padding:"18px 18px",textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:800,textTransform:"uppercase",marginBottom:6}},"Message 1"),h("div",{style:{fontSize:21,fontWeight:800,whiteSpace:"pre-wrap",lineHeight:1.35}},cfg.teamMessage1)),
-          cfg.teamMessage2&&h("div",{style:{background:"linear-gradient(135deg,#f5f8ff,#ffffff)",borderLeft:"5px solid "+S.blue,borderRadius:18,padding:"18px 18px",textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:800,textTransform:"uppercase",marginBottom:6}},"Message 2"),h("div",{style:{fontSize:21,fontWeight:800,whiteSpace:"pre-wrap",lineHeight:1.35}},cfg.teamMessage2)),
-          !cfg.teamMessage1&&!cfg.teamMessage2&&h("div",{style:{padding:"26px 18px",textAlign:"center",color:S.gray,fontSize:14}},"Aucun message actuellement")
-        )
-      )
+      dashboardWidgets.filter(w=>w.visible!==false).sort((a,b)=>(a.order||0)-(b.order||0)).map(w=>renderDashboardWidget(w))
     )
   ),
 
