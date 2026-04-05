@@ -1825,11 +1825,12 @@ function FodBossPage({currentUser,isAdmin,showT}){
       setLoading(false);
     },()=>setLoading(false));
     const unsubPass=db.collection('fodBossPassages').orderBy('ts','desc').onSnapshot(s=>{
-      setPassages(s.docs.map(d=>({...d.data(),_id:d.id})));
+      setPassages(s.docs.map(d=>({...d.data(),_id:d.id}))); 
     });
     return ()=>{unsubCfg();unsubPass();};
   },[]);
 
+  const fmt=n=>Number(n||0).toLocaleString('fr-FR',{maximumFractionDigits:3});
   const saveCfg=async(next)=>{
     const cleaned={
       aprons:(next.aprons||[]).map(a=>({id:String(a.id||'').trim().toUpperCase(),surface:Number(a.surface)||0,active:a.active!==false})).filter(a=>a.id&&a.surface>0),
@@ -1905,9 +1906,25 @@ function FodBossPage({currentUser,isAdmin,showT}){
   const planning=(cfg.aprons||[]).map(a=>{
     const last=[...passages].filter(p=>p.apron===a.id).sort((x,y)=>(y.ts||0)-(x.ts||0))[0];
     const nextTs=last?.nextPassageTs||null;
+    const diffDays=nextTs?Math.ceil((nextTs-Date.now())/86400000):null;
     const overdue=nextTs?Date.now()>nextTs:false;
-    return {id:a.id,surface:a.surface,lastLabel:last?last.dateTime:'Jamais',gm2:last?Number(last.gm2||0).toFixed(3):'—',freq:last?.recurrenceLabel||'—',next:nextTs?new Date(nextTs).toLocaleDateString('fr-FR'):'—',status:!last?'À planifier':overdue?'En retard':'À venir'};
+    const soon=diffDays!==null && diffDays>=0 && diffDays<=3;
+    return {id:a.id,surface:a.surface,lastLabel:last?last.dateTime:'Jamais',gm2:last?Number(last.gm2||0).toFixed(3):'—',freq:last?.recurrenceLabel||'—',next:nextTs?new Date(nextTs).toLocaleDateString('fr-FR'):'—',status:!last?'À planifier':overdue?'En retard':soon?'Bientôt':'À venir'};
   });
+
+  const analytics=(()=>{
+    const totalKg=filteredPassages.reduce((a,p)=>a+(Number(p.poidsKg)||0),0);
+    const avgGm2=filteredPassages.length?filteredPassages.reduce((a,p)=>a+(Number(p.gm2)||0),0)/filteredPassages.length:0;
+    const byApron=(cfg.aprons||[]).map(a=>{
+      const arr=filteredPassages.filter(p=>p.apron===a.id);
+      const avg=arr.length?arr.reduce((s,p)=>s+(Number(p.gm2)||0),0)/arr.length:0;
+      const kg=arr.reduce((s,p)=>s+(Number(p.poidsKg)||0),0);
+      return {id:a.id,count:arr.length,avg,kg,last:arr[0]||null};
+    });
+    const maxAvg=Math.max(0.01,...byApron.map(x=>x.avg||0));
+    const critical=byApron.filter(x=>x.avg>=1.01).length;
+    return {totalKg,avgGm2,byApron,maxAvg,critical};
+  })();
 
   const exportFodExcel=()=>{
     const rows=filteredPassages.map(p=>({
@@ -1920,6 +1937,7 @@ function FodBossPage({currentUser,isAdmin,showT}){
       'Fréquence':p.recurrenceLabel||'',
       'Prochain passage':p.nextPassageLabel||'',
       Agent:p.user||'',
+      Photos:(p.photos||[]).length,
       Commentaire:p.commentaire||''
     }));
     const ws=window.XLSX.utils.json_to_sheet(rows);
@@ -1928,12 +1946,54 @@ function FodBossPage({currentUser,isAdmin,showT}){
     window.XLSX.writeFile(wb,'FOD_BOSS_'+new Date().toISOString().slice(0,10)+'.xlsx');
   };
 
+  const exportFodPDF=()=>{
+    try{
+      const {jsPDF}=window.jspdf;
+      const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+      const W=210,H=297;
+      doc.setFillColor(15,32,39);doc.rect(0,0,W,26,'F');
+      doc.setTextColor(255,255,255);doc.setFontSize(18);doc.setFont('helvetica','bold');doc.text('FOD BOSS',12,12);
+      doc.setFontSize(9);doc.setFont('helvetica','normal');doc.text('Rapport des passages APRON',12,19);
+      doc.text('Généré le '+new Date().toLocaleString('fr-FR'),W-12,12,{align:'right'});
+      doc.text('Passages: '+filteredPassages.length,W-12,19,{align:'right'});
+      let y=34;
+      const stats=[
+        ['Passages',filteredPassages.length],['Kg total',fmt(analytics.totalKg)],['g/m² moyen',analytics.avgGm2.toFixed(3)],['Aprons critiques',analytics.critical]
+      ];
+      stats.forEach((s,i)=>{doc.setFillColor(248,248,250);doc.roundedRect(12+i*47,y,42,15,2,2,'F');doc.setTextColor(120,120,120);doc.setFontSize(7);doc.text(s[0].toUpperCase(),15+i*47,y+5);doc.setTextColor(28,28,30);doc.setFontSize(13);doc.setFont('helvetica','bold');doc.text(String(s[1]),15+i*47,y+11);});
+      y+=24;
+      doc.setFillColor(44,83,100);doc.rect(12,y,W-24,8,'F');
+      doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont('helvetica','bold');
+      const xs=[14,38,58,77,97,118,145,173];
+      ['Date','Apron','Kg','Grammes','g/m²','Fréquence','Agent','Photos'].forEach((h,i)=>doc.text(h,xs[i],y+5.5));
+      y+=9;
+      filteredPassages.forEach((p,idx)=>{
+        if(y>H-18){doc.addPage();y=16;doc.setFillColor(44,83,100);doc.rect(12,y,W-24,8,'F');doc.setTextColor(255,255,255);doc.setFontSize(7);doc.setFont('helvetica','bold');['Date','Apron','Kg','Grammes','g/m²','Fréquence','Agent','Photos'].forEach((h,i)=>doc.text(h,xs[i],y+5.5));y+=9;}
+        if(idx%2===0){doc.setFillColor(250,250,250);doc.rect(12,y,W-24,8,'F');}
+        doc.setTextColor(30,30,30);doc.setFontSize(7);doc.setFont('helvetica','normal');
+        const row=[String(p.dateTime||'').slice(0,16),p.apron||'',String(p.poidsKg||''),String(Math.round(p.poidsGrammes||0)),Number(p.gm2||0).toFixed(3),String(p.recurrenceLabel||'').slice(0,18),String(p.user||'').slice(0,14),String((p.photos||[]).length||0)];
+        row.forEach((cell,i)=>doc.text(String(cell),xs[i],y+5.3));
+        y+=8;
+        if((p.commentaire||'') && y<H-14){doc.setTextColor(120,120,120);doc.setFontSize(6);doc.text('Note: '+String(p.commentaire).slice(0,90),14,y+3); y+=5;}
+      });
+      doc.save('FOD_BOSS_'+new Date().toISOString().slice(0,10)+'.pdf');
+    }catch(e){alert('Erreur PDF: '+e.message);}
+  };
+
+  const prepareEmail=()=>{
+    const recipients=(cfg.emails||[]).filter(Boolean).join(',');
+    const dateTxt=new Date().toLocaleDateString('fr-FR');
+    const subject='Rapport FOD BOSS du '+dateTxt;
+    const body='Bonjour,%0D%0A%0D%0AVeuillez trouver ci-joint le rapport FOD BOSS du '+dateTxt+'.%0D%0A%0D%0AIl reprend les passages effectués, les poids collectés, les résultats en g/m² et les fréquences de passage recommandées.%0D%0A%0D%0ACordialement.';
+    window.location.href='mailto:'+encodeURIComponent(recipients)+'?subject='+encodeURIComponent(subject)+'&body='+body;
+  };
+
   if(loading)return h('div',{style:{padding:'20px',textAlign:'center'}},'Chargement FOD BOSS...');
   return h('div',{className:'fi'},
     h('div',{style:{background:'linear-gradient(135deg,#0f2027,#2c5364)',borderRadius:16,padding:'18px',marginBottom:14,color:'#fff'}},
       h('div',{style:{fontSize:11,fontWeight:700,opacity:.75,marginBottom:4}},'FOD BOSS'),
       h('div',{style:{fontSize:24,fontWeight:900,marginBottom:4}},'Suivi des passages APRON'),
-      h('div',{style:{fontSize:13,color:'rgba(255,255,255,.75)'}},'Saisie en kg, conversion automatique en grammes, calcul g/m² et récurrence automatique')
+      h('div',{style:{fontSize:13,color:'rgba(255,255,255,.75)'}},'Saisie en kg, conversion automatique en grammes, calcul g/m², fréquence automatique et rapports exportables')
     ),
     h('div',{style:{display:'flex',gap:8,overflowX:'auto',marginBottom:12}},
       [['passage','Nouveau passage'],['planning','Planning'],['historique','Historique'],['admin','Admin']].map(([id,label])=>h('button',{key:id,onClick:()=>setTab(id),style:{flex:'none',padding:'10px 14px',borderRadius:14,border:'none',fontWeight:700,cursor:'pointer',background:tab===id?S.dark:'#fff',color:tab===id?'#fff':S.gray,boxShadow:'0 1px 3px rgba(0,0,0,.08)'}},label))
@@ -1969,25 +2029,49 @@ function FodBossPage({currentUser,isAdmin,showT}){
         )))
       )
     ),
-    tab==='planning'&&h(Card,{title:'Planning automatique',badge:planning.length},
-      h('div',{style:{padding:'12px'}},planning.map((p,i)=>h('div',{key:i,style:{background:'#fff',borderRadius:12,padding:'12px',marginBottom:8,border:'1px solid '+S.border}},
-        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}},
-          h('div',{style:{fontSize:16,fontWeight:900}},p.id),
-          h('div',{style:{background:p.status==='En retard'?'#fff1f0':p.status==='À venir'?'#e8f0fe':'#fff8e6',color:p.status==='En retard'?S.danger:p.status==='À venir'?S.blue:S.orange,borderRadius:999,padding:'4px 10px',fontSize:11,fontWeight:800}},p.status)
-        ),
-        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12}},
-          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Dernier passage'),h('div',{style:{fontWeight:700}},p.lastLabel)),
-          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Prochain passage'),h('div',{style:{fontWeight:700}},p.next)),
-          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Dernier g/m²'),h('div',{style:{fontWeight:700}},p.gm2)),
-          h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Fréquence'),h('div',{style:{fontWeight:700}},p.freq))
-        )
-      )))
+    tab==='planning'&&h('div',{},
+      h(Card,{title:'Planning automatique',badge:planning.length},
+        h('div',{style:{padding:'12px'}},planning.map((p,i)=>{
+          const statusColor=p.status==='En retard'?S.danger:p.status==='Bientôt'?S.orange:p.status==='À venir'?S.blue:S.gray;
+          return h('div',{key:i,style:{background:'#fff',borderRadius:12,padding:'12px',marginBottom:8,border:'1px solid '+S.border}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:8,marginBottom:6,flexWrap:'wrap'}},
+              h('div',{style:{fontSize:16,fontWeight:900}},p.id),
+              h('div',{style:{background:statusColor+'22',color:statusColor,borderRadius:999,padding:'4px 10px',fontSize:11,fontWeight:800}},p.status)
+            ),
+            h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12}},
+              h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Dernier passage'),h('div',{style:{fontWeight:700}},p.lastLabel)),
+              h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Prochain passage'),h('div',{style:{fontWeight:700}},p.next)),
+              h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Dernier g/m²'),h('div',{style:{fontWeight:700,color:statusColor}},p.gm2)),
+              h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Fréquence'),h('div',{style:{fontWeight:700}},p.freq))
+            )
+          );
+        }))
+      ),
+      h(Card,{title:'Analyse par apron',badge:'Visuel'},
+        h('div',{style:{padding:'12px'}},analytics.byApron.map((row,i)=>h('div',{key:i,style:{marginBottom:12}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:4}},h('span',{style:{fontWeight:800}},row.id),h('span',{style:{color:S.gray}},row.avg.toFixed(3)+' g/m² · '+fmt(row.kg)+' kg')),
+          h('div',{style:{height:12,background:'#eef1f6',borderRadius:999,overflow:'hidden'}},h('div',{style:{height:'100%',width:Math.max(4,(row.avg/analytics.maxAvg)*100)+'%',background:row.avg>=1.01?S.danger:row.avg>=0.51?S.orange:S.green,borderRadius:999}})),
+          h('div',{style:{fontSize:11,color:S.gray,marginTop:3}},row.count+' passage(s)')
+        )))
+      )
     ),
     tab==='historique'&&h('div',{},
-      h('div',{style:{display:'flex',gap:8,marginBottom:10}},
-        h('div',{style:{position:'relative',flex:1}},h('span',{style:{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',fontSize:14,pointerEvents:'none'}},'🔍'),h('input',{value:search,onChange:e=>setSearch(e.target.value),placeholder:'Rechercher apron, agent, commentaire...',style:{...IS,paddingLeft:34}})),
-        h('button',{onClick:exportFodExcel,style:{...BG,width:'auto',padding:'0 14px'}},'Excel')
+      h('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}},
+        h('div',{style:{background:'#1c1c1e',borderRadius:14,padding:'12px 6px',textAlign:'center',color:'#fff'}},h('div',{style:{fontSize:20,fontWeight:800}},filteredPassages.length),h('div',{style:{fontSize:9,opacity:.65,marginTop:2}},'Passages')),
+        h('div',{style:{background:'#e8f0fe',borderRadius:14,padding:'12px 6px',textAlign:'center'}},h('div',{style:{fontSize:20,fontWeight:800,color:S.blue}},fmt(analytics.totalKg)),h('div',{style:{fontSize:9,color:S.blue,marginTop:2}},'Kg total')),
+        h('div',{style:{background:'#fff8e6',borderRadius:14,padding:'12px 6px',textAlign:'center'}},h('div',{style:{fontSize:20,fontWeight:800,color:S.orange}},analytics.avgGm2.toFixed(3)),h('div',{style:{fontSize:9,color:S.orange,marginTop:2}},'g/m² moyen')),
+        h('div',{style:{background:'#fff1f0',borderRadius:14,padding:'12px 6px',textAlign:'center'}},h('div',{style:{fontSize:20,fontWeight:800,color:S.danger}},analytics.critical),h('div',{style:{fontSize:9,color:S.danger,marginTop:2}},'Aprons critiques'))
       ),
+      h('div',{style:{display:'flex',gap:8,marginBottom:10}},
+        h('div',{style:{position:'relative',flex:1}},h('span',{style:{position:'absolute',left:12,top:'50%',transform:'translateY(-50%)',fontSize:14,pointerEvents:'none'}},'🔍'),h('input',{value:search,onChange:e=>setSearch(e.target.value),placeholder:'Rechercher apron, agent, commentaire...',style:{...IS,paddingLeft:34}}))
+      ),
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}},
+        h('button',{onClick:exportFodPDF,style:{...BP,padding:'12px',fontSize:13}},'📄 Rapport PDF'),
+        h('button',{onClick:exportFodExcel,style:{...BG,padding:'12px',fontSize:13}},'📊 Rapport Excel'),
+        h('button',{onClick:prepareEmail,style:{...BB,padding:'12px',fontSize:13}},'✉️ Préparer email'),
+        h('button',{onClick:()=>setSearch(''),style:{...BS,padding:'12px',fontSize:13}},'Effacer filtre')
+      ),
+      h('div',{style:{background:'#f8f9ff',borderRadius:12,padding:'10px 12px',fontSize:12,color:S.blue,marginBottom:10}},'Le bouton email prépare le message avec les destinataires configurés. Le PDF doit être généré juste avant puis joint manuellement dans l’application mail.'),
       filteredPassages.map((p,i)=>h(Card,{key:p._id||i,title:(p.apron||'Apron')+' — '+(p.dateTime||''),badge:Number(p.gm2||0).toFixed(3)+' g/m²'},
         h('div',{style:{padding:'12px'}},
           h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,fontSize:12,marginBottom:8}},
@@ -1997,7 +2081,8 @@ function FodBossPage({currentUser,isAdmin,showT}){
             h('div',{},h('div',{style:{color:S.gray,fontWeight:700}},'Fréquence'),h('div',{style:{fontWeight:800}},p.recurrenceLabel||''))
           ),
           p.commentaire&&h('div',{style:{fontSize:12,marginBottom:8}},h('span',{style:{fontWeight:700,color:S.gray}},'Commentaire : '),p.commentaire),
-          p.photos?.length>0&&h('div',{style:{display:'flex',gap:6,flexWrap:'wrap'}},p.photos.map((ph,j)=>h('img',{key:j,src:ph,style:{width:62,height:62,objectFit:'cover',borderRadius:8,border:'1px solid '+S.border}}))),
+          p.photos?.length>0&&h('div',{style:{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}},p.photos.map((ph,j)=>h('img',{key:j,src:ph,style:{width:62,height:62,objectFit:'cover',borderRadius:8,border:'1px solid '+S.border}}))),
+          h('div',{style:{fontSize:11,color:S.gray}},'Agent : '+(p.user||'')+' · Prochain passage : '+(p.nextPassageLabel||'—')),
           isAdmin&&h('button',{onClick:async()=>{if(!confirm('Supprimer ce passage ?'))return;await fbDel('fodBossPassages',p._id);showT&&showT('Passage supprimé');},style:{...BS,color:S.danger,marginTop:8}},'Supprimer')
         )
       )),
