@@ -1821,6 +1821,24 @@ const[navConfig,setNavConfig]=useState([
 {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
 {id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
 ]);
+const mergeNavConfig=(stored)=>{
+  const defaults=[
+    {id:"accueil",icon:"🏠",label:"Accueil",visible:true,order:0},
+    {id:"emprunts",icon:"📦",label:"Emprunts",visible:true,order:1},
+    {id:"inspection",icon:"🔧",label:"Inspection",visible:true,order:2},
+    {id:"stocks",icon:"🧤",label:"Stocks",visible:true,order:3},
+    {id:"entrepot",icon:"🏭",label:"Entrepôt",visible:true,order:5},
+    {id:"matsmobile",icon:"⛽",label:"Gestion mâts mobile",visible:true,order:6},
+    {id:"rapport",icon:"📊",label:"Rapport",visible:true,order:7},
+    {id:"admin",icon:"🔐",label:"Admin",visible:false,order:8,hidden:true},
+    {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
+    {id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
+  ];
+  const clean=(stored||[]).filter(n=>n.id!=="kits");
+  const map=new Map(clean.map(n=>[n.id,n]));
+  defaults.forEach(d=>{ if(!map.has(d.id)) map.set(d.id,d); else map.set(d.id,{...d,...map.get(d.id)}); });
+  return [...map.values()].sort((a,b)=>(a.order||0)-(b.order||0));
+};
 
 useEffect(()=>{
 const handleOnline=()=>setIsOnline(true);
@@ -1840,7 +1858,7 @@ const p=parSnap.data();
 if(p.employes)setEmployes(p.employes);
 if(p.adminPin)setAdminPin(p.adminPin);
 if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));
-if(p.navConfig)setNavConfig((p.navConfig||[]).filter(n=>n.id!=="kits"));
+if(p.navConfig)setNavConfig(mergeNavConfig(p.navConfig));
 if(p.userAccounts)setUserAccounts(p.userAccounts);
 if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);
 if(p.matsCfg)setMatsCfg(p.matsCfg);
@@ -1892,7 +1910,7 @@ const outilsLongs=emprunts.filter(e=>!e.retour&&daysSince(e.dateDepart)>=1);
 const alertCount=outilsLongs.length;
 
 const saveWarehouseConfig=async(wc)=>{setWarehouseConfig(wc);await db.collection("params").doc("config").set({warehouseConfig:wc},{merge:true});showT("Configuration entrepôt sauvegardée!");};
-const saveNavConfig=async(nc)=>{setNavConfig(nc);await db.collection("params").doc("config").set({navConfig:nc},{merge:true});showT("Menu configuré!");};
+const saveNavConfig=async(nc)=>{const merged=mergeNavConfig(nc);setNavConfig(merged);await db.collection("params").doc("config").set({navConfig:merged},{merge:true});showT("Menu configuré!");};
 const saveMatsCfg=async(newCfg)=>{setMatsCfg(newCfg);await db.collection("params").doc("config").set({matsCfg:newCfg},{merge:true});showT("Paramètres mâts mobiles sauvegardés!");};
 const saveMatsTour=async(data)=>{setSyncing(true);await fbAdd('matsMobileTours',data);setSyncing(false);showT('Tournée mâts mobile enregistrée!');};
 const deleteMatsTour=async(t)=>{if(!confirm('Supprimer cette tournée ?'))return;await fbDel('matsMobileTours',t._id);showT('Tournée supprimée');};
