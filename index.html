@@ -1419,6 +1419,162 @@ h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:10}},"Annuler")
 
 // ══ PARTIE 4/4 — COLLER DIRECTEMENT APRÈS LA PARTIE 3 ══
 
+// ── GESTION MÂTS MOBILE P2 ─────────────────────────────────────────────────
+function GestionMatsMobilePage({isAdmin,currentUser,userAccounts,showT,cfg,matsCfg,matsTours,saveMatsCfg,onSaveTour,onDeleteTour}){
+const defaultCfg=matsCfg||{};
+const defaultMats=(defaultCfg.mats&&defaultCfg.mats.length===4?defaultCfg.mats:[
+  {id:'MAT-1',nom:'Mât 1'},{id:'MAT-2',nom:'Mât 2'},{id:'MAT-3',nom:'Mât 3'},{id:'MAT-4',nom:'Mât 4'}
+]);
+const[tab,setTab]=useState('tournee');
+const[nowDate,setNowDate]=useState(new Date().toISOString().slice(0,16));
+const[collegue,setCollegue]=useState('');
+const[luxfuel,setLuxfuel]=useState(false);
+const[litresRemorque,setLitresRemorque]=useState('');
+const[remplisseur,setRemplisseur]=useState(currentUser?.name||'');
+const[obs,setObs]=useState('');
+const[justifPhotos,setJustifPhotos]=useState([]);
+const otherUsers=(userAccounts||[]).filter(a=>(a.name||'')!==(currentUser?.name||'')).map(a=>a.name);
+const[mats,setMats]=useState(defaultMats.map((m,i)=>({
+  ...m,
+  mode:i===0?'controle':'plein',
+  statut:'OK',
+  cable:'oui',
+  litres:'',
+  heures:'',
+  test:'OK',
+  photos:[],
+  commentaire:'',
+  signature:''
+})));
+useEffect(()=>{
+  setMats((defaultCfg.mats&&defaultCfg.mats.length===4?defaultCfg.mats:defaultMats).map((m,i)=>({
+    ...m,mode:i===0?'controle':'plein',statut:'OK',cable:'oui',litres:'',heures:'',test:'OK',photos:[],commentaire:'',signature:''
+  })));
+},[JSON.stringify(defaultCfg.mats)]);
+const updateMat=(idx,patch)=>setMats(prev=>prev.map((m,i)=>i===idx?{...m,...patch}:m));
+const totalLitres=(mats||[]).reduce((a,m)=>a+(parseFloat(m.litres)||0),0);
+const sortedTours=[...(matsTours||[])].sort((a,b)=>(b.ts||0)-(a.ts||0));
+const exportCsv=()=>{
+  const headers=['Date','Agent','Autre collègue','Luxfuel','Litres remorque','Remplisseur remorque','Mât','Mode','Statut','Câble','Litres ajoutés','Heures moteur','Test','Commentaire'];
+  const rows=[];
+  sortedTours.forEach(t=>{(t.mats||[]).forEach(m=>rows.push([t.dateTime||'',t.user||'',(t.otherColleague||''),t.luxfuel?'Oui':'Non',t.remorqueLitres||'',t.remorqueFilledBy||'',m.nom||m.id||'',m.mode||'',m.statut||'',m.cable||'',m.litres||'',m.heures||'',m.test||'',(m.commentaire||'').replace(/\n/g,' ')]));});
+  const csv=[headers,...rows].map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(';')).join('\n');
+  const blob=new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='gestion_mats_mobile_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+};
+const saveTour=async()=>{
+  if(!(currentUser?.name)){alert('Utilisateur requis');return;}
+  for(const m of mats){ if(!m.signature){ alert('Signature obligatoire pour '+(m.nom||m.id)); return; } }
+  const payload={
+    dateTime:nowDate?new Date(nowDate).toLocaleString('fr-FR'):now(),
+    user:currentUser?.name||'',
+    otherColleague:collegue||'',
+    trailerName:defaultCfg.trailerName||'Remorque gazole P2',
+    luxfuel:!!luxfuel,
+    remorqueLitres:parseFloat(litresRemorque)||0,
+    remorqueFilledBy:remplisseur||'',
+    generalObs:obs||'',
+    justificatifs:justifPhotos||[],
+    totalLitresMats:totalLitres,
+    mats:mats,
+    ts:Date.now()
+  };
+  await onSaveTour(payload);
+  setLuxfuel(false);setLitresRemorque('');setObs('');setJustifPhotos([]);setCollegue('');
+  setMats(defaultMats.map((m,i)=>({...m,mode:i===0?'controle':'plein',statut:'OK',cable:'oui',litres:'',heures:'',test:'OK',photos:[],commentaire:'',signature:''})));
+};
+const saveCfgLocal=async()=>{
+  await saveMatsCfg({trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:defaultMats});
+};
+return h('div',{className:'fi'},
+  h('div',{style:{background:'linear-gradient(135deg,#23395d,#3f72af)',borderRadius:18,padding:'18px 16px',color:'#fff',marginBottom:14,boxShadow:'0 8px 24px rgba(0,0,0,.15)'}},
+    h('div',{style:{fontSize:11,fontWeight:800,opacity:.8,marginBottom:4,textTransform:'uppercase'}},'Gestion mâts mobile'),
+    h('div',{style:{fontSize:24,fontWeight:900,marginBottom:6}},'Pleins des mâts mobiles P2'),
+    h('div',{style:{fontSize:12,opacity:.85}},'Suivi des tournées, gazole, heures moteur et contrôle de fonctionnement'),
+    h('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:8,marginTop:12}},
+      h('div',{style:{background:'rgba(255,255,255,.13)',borderRadius:14,padding:'10px 8px',textAlign:'center'}},h('div',{style:{fontSize:22,fontWeight:900}},String(sortedTours.length)),h('div',{style:{fontSize:10,fontWeight:700,opacity:.8,marginTop:3}},'Tournées')),
+      h('div',{style:{background:'rgba(255,255,255,.13)',borderRadius:14,padding:'10px 8px',textAlign:'center'}},h('div',{style:{fontSize:22,fontWeight:900}},String(totalLitres)),h('div',{style:{fontSize:10,fontWeight:700,opacity:.8,marginTop:3}},'Litres tournée')),
+      h('div',{style:{background:'rgba(255,255,255,.13)',borderRadius:14,padding:'10px 8px',textAlign:'center'}},h('div',{style:{fontSize:22,fontWeight:900}},String((defaultCfg.mats||defaultMats).length)),h('div',{style:{fontSize:10,fontWeight:700,opacity:.8,marginTop:3}},'Mâts suivis'))
+    )
+  ),
+  h('div',{style:{display:'flex',gap:8,marginBottom:12,overflowX:'auto'}},
+    [['tournee','📝 Nouvelle tournée'],['historique','🗂 Historique'],isAdmin&&['admin','⚙️ Admin']].filter(Boolean).map(([id,label])=>h('button',{key:id,onClick:()=>setTab(id),style:{flex:'none',padding:'10px 14px',borderRadius:14,border:'none',background:tab===id?S.dark:'#fff',color:tab===id?'#fff':S.gray,fontWeight:700,cursor:'pointer',boxShadow:'0 1px 4px rgba(0,0,0,.08)'}},label))
+  ),
+  tab==='tournee'&&h('div',{},
+    h(Card,{title:'Infos générales'},
+      h('div',{style:{padding:'14px'}},
+        FL('Date et heure'),h('input',{type:'datetime-local',value:nowDate,onChange:e=>setNowDate(e.target.value),style:IS}),
+        FL('Utilisateur connecté',true),h('input',{value:currentUser?.name||'',readOnly:true,style:{...IS,background:'#f7f7f7',fontWeight:700}}),
+        FL('Autre collègue',true),h('select',{value:collegue,onChange:e=>setCollegue(e.target.value),style:SS},h('option',{value:''},'– Aucun –'),...otherUsers.map(n=>h('option',{key:n,value:n},n))),
+        FL('Remorque gazole',true),h('input',{value:defaultCfg.trailerName||'Remorque gazole P2',readOnly:true,style:{...IS,background:'#f7f7f7',fontWeight:700}}),
+        FL('Passage Luxfuel',true),h('div',{style:{display:'flex',gap:8}},['oui','non'].map(v=>h('button',{key:v,onClick:()=>setLuxfuel(v==='oui'),style:{flex:1,padding:'10px',borderRadius:12,border:'2px solid '+((luxfuel&&v==='oui')||(!luxfuel&&v==='non')?S.blue:S.border),background:((luxfuel&&v==='oui')||(!luxfuel&&v==='non'))?'#eef5ff':'#fff',fontWeight:700,cursor:'pointer'}},v.toUpperCase()))),
+        FL('Litres remis dans la remorque',true),h('input',{type:'number',value:litresRemorque,onChange:e=>setLitresRemorque(e.target.value),placeholder:'0',style:IS}),
+        FL('Nom de la personne ayant rempli la remorque',true),h('input',{value:remplisseur,onChange:e=>setRemplisseur(e.target.value),style:IS}),
+        FL('Ticket / photo justificative',true),h(PhotoPicker,{photos:justifPhotos,onChange:setJustifPhotos,labelText:'Ajouter justificatif'}),
+        FL('Observations générales',true),h('textarea',{value:obs,onChange:e=>setObs(e.target.value),style:{...IS,minHeight:70,resize:'vertical'},placeholder:'Observations générales de la tournée'})
+      )
+    ),
+    mats.map((mat,idx)=>h(Card,{key:idx,title:mat.nom,color:'#3f72af'},
+      h('div',{style:{padding:'14px'}},
+        idx===0&&h('div',{style:{display:'flex',gap:8,marginBottom:10}},['controle','plein'].map(mode=>h('button',{key:mode,onClick:()=>updateMat(idx,{mode}),style:{flex:1,padding:'10px',borderRadius:12,border:'2px solid '+(mat.mode===mode?S.blue:S.border),background:mat.mode===mode?'#eef5ff':'#fff',fontWeight:700,cursor:'pointer'}},mode==='controle'?'Contrôle uniquement':'Plein effectué'))),
+        FL("Statut à l'arrivée"),h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}},['OK','anomalie','non accessible'].map(v=>h('button',{key:v,onClick:()=>updateMat(idx,{statut:v}),style:{padding:'8px 12px',borderRadius:12,border:'2px solid '+(mat.statut===v?S.red:S.border),background:mat.statut===v?'#fff1f0':'#fff',fontWeight:700,cursor:'pointer'}},v))),
+        FL('Alimentation électrique / maintien câble',true),h('div',{style:{display:'flex',gap:8,flexWrap:'wrap',marginBottom:8}},['oui','non','à vérifier'].map(v=>h('button',{key:v,onClick:()=>updateMat(idx,{cable:v}),style:{padding:'8px 12px',borderRadius:12,border:'2px solid '+(mat.cable===v?S.green:S.border),background:mat.cable===v?'#e6fff0':'#fff',fontWeight:700,cursor:'pointer'}},v))),
+        FL('Litres ajoutés',true),h('input',{type:'number',value:mat.litres,onChange:e=>updateMat(idx,{litres:e.target.value}),placeholder:'0',style:IS,disabled:idx===0&&mat.mode==='controle'}),
+        FL('Heures moteur',true),h('input',{type:'number',value:mat.heures,onChange:e=>updateMat(idx,{heures:e.target.value}),placeholder:'0',style:IS}),
+        FL('Test fonctionnement',true),h('div',{style:{display:'flex',gap:8,marginBottom:8}},['OK','NOK'].map(v=>h('button',{key:v,onClick:()=>updateMat(idx,{test:v}),style:{flex:1,padding:'10px',borderRadius:12,border:'2px solid '+(mat.test===v?(v==='OK'?S.green:S.danger):S.border),background:mat.test===v?(v==='OK'?'#e6fff0':'#fff1f0'):'#fff',fontWeight:700,cursor:'pointer'}},v))),
+        FL('Photos',true),h(PhotoPicker,{photos:mat.photos,onChange:val=>updateMat(idx,{photos:val}),labelText:'Ajouter photos du mât'}),
+        FL('Commentaire',true),h('textarea',{value:mat.commentaire,onChange:e=>updateMat(idx,{commentaire:e.target.value}),style:{...IS,minHeight:60,resize:'vertical'},placeholder:'Remarque, défaut, observation...'}),
+        FL('Signature *',true),h(SignaturePad,{value:mat.signature,onChange:val=>updateMat(idx,{signature:val}),height:130})
+      )
+    )),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}},
+      h('button',{onClick:()=>{setLuxfuel(false);setLitresRemorque('');setObs('');setJustifPhotos([]);setCollegue('');setMats(defaultMats.map((m,i)=>({...m,mode:i===0?'controle':'plein',statut:'OK',cable:'oui',litres:'',heures:'',test:'OK',photos:[],commentaire:'',signature:''})));showT('Formulaire vidé');},style:BS},'Réinitialiser'),
+      h('button',{onClick:saveTour,style:BP},'Enregistrer la tournée')
+    )
+  ),
+  tab==='historique'&&h('div',{},
+    h('div',{style:{display:'grid',gridTemplateColumns:isAdmin?'1fr 1fr':'1fr',gap:10,marginBottom:12}},
+      h('button',{onClick:exportCsv,style:BB},'📊 Export CSV'),
+      isAdmin&&h('button',{onClick:()=>showT('Historique synchronisé'),style:BS},'Actualiser')
+    ),
+    sortedTours.length===0?h('div',{style:{background:'#fff',borderRadius:16,padding:'30px 18px',textAlign:'center',color:S.gray}},'Aucune tournée enregistrée')
+    :sortedTours.map(t=>h(Card,{key:t._id||t.ts,title:t.dateTime||'',badge:(t.totalLitresMats||0)+' L'},
+      h('div',{style:{padding:'14px'}},
+        h('div',{style:{fontSize:13,fontWeight:700,marginBottom:4}},'👤 '+(t.user||'')),
+        t.otherColleague&&h('div',{style:{fontSize:12,color:S.gray,marginBottom:4}},'Avec '+t.otherColleague),
+        h('div',{style:{fontSize:12,color:S.gray,marginBottom:6}},'Remorque : '+(t.trailerName||'Remorque gazole P2')+(t.luxfuel?' · Luxfuel':'')+(t.remorqueLitres?(' · '+t.remorqueLitres+' L'):'') ),
+        h('div',{style:{display:'grid',gap:6}},(t.mats||[]).map((m,i)=>h('div',{key:i,style:{background:'#f7f8fb',borderRadius:12,padding:'10px 12px'}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',gap:8,marginBottom:4}},h('div',{style:{fontWeight:800}},m.nom||m.id),h('div',{style:{fontSize:11,fontWeight:700,color:m.test==='OK'?S.green:S.danger}},m.test||'')),
+          h('div',{style:{fontSize:12,color:S.gray}},'Statut: '+(m.statut||'')+' · Câble: '+(m.cable||'')+' · Litres: '+(m.litres||0)+' · Heures: '+(m.heures||'')),
+          m.commentaire&&h('div',{style:{fontSize:12,marginTop:4}},m.commentaire)
+        ))),
+        isAdmin&&h('div',{style:{display:'flex',gap:8,marginTop:10}},
+          h('button',{onClick:()=>onDeleteTour&&onDeleteTour(t),style:{...BS,color:S.danger}},'Supprimer')
+        )
+      )
+    ))
+  ),
+  tab==='admin'&&isAdmin&&h('div',{},
+    h(Card,{title:'Paramètres Gestion mâts mobile'},
+      h('div',{style:{padding:'14px'}},
+        FL('Nom de la remorque'),h('input',{value:defaultCfg.trailerName||'Remorque gazole P2',onChange:e=>saveMatsCfg({...defaultCfg,trailerName:e.target.value,mats:defaultMats}),style:IS}),
+        h('div',{style:{fontSize:12,fontWeight:700,margin:'14px 0 8px'}},'Noms des 4 mâts'),
+        defaultMats.map((m,i)=>h('input',{key:i,value:m.nom,onChange:e=>{const matsNew=defaultMats.map((x,j)=>j===i?{...x,nom:e.target.value}:x);saveMatsCfg({...defaultCfg,trailerName:defaultCfg.trailerName||'Remorque gazole P2',mats:matsNew});},style:{...IS,marginBottom:8}})),
+        h('button',{onClick:saveCfgLocal,style:BP},'Sauvegarder les paramètres')
+      )
+    ),
+    h(Card,{title:'Rapports et administration'},
+      h('div',{style:{padding:'14px'}},
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},
+          h('button',{onClick:exportCsv,style:BB},'Exporter CSV'),
+          h('button',{onClick:()=>showT(sortedTours.length+' tournée(s) enregistrée(s)'),style:BS},'Voir total tournées')
+        )
+      )
+    )
+  )
+);
+}
+
 // ── ADMIN PANEL ───────────────────────────────────────────────────────────────
 function AdminPanel({cfg,employes,adminPin,hist,emprunts,tools,cons,vets,inspections,maintenances,isEmp,st,lowS,kits,onSaveCfg,onSaveAdmin,onLogout,onDelHist,onDelEmprunt,onModEmprunt,onDetEmprunt,genPDF,showT,setModal,importCSV,saveMaint,onExportBackup,onImportBackup,darkMode,setDarkMode,checklist,setChecklist,navConfig,saveNavConfig,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig}){
 const[tab,setTab]=useState("stats");
@@ -1644,6 +1800,8 @@ const[menuOpen,setMenuOpen]=useState(false);
 const[currentUser,setCurrentUser]=useState(null);
 const[userAccounts,setUserAccounts]=useState([]);
 const[warehouseConfig,setWarehouseConfig]=useState(WAREHOUSE_DEFAULT);
+const[matsCfg,setMatsCfg]=useState({trailerName:'Remorque gazole P2',mats:[{id:'MAT-1',nom:'Mât 1'},{id:'MAT-2',nom:'Mât 2'},{id:'MAT-3',nom:'Mât 3'},{id:'MAT-4',nom:'Mât 4'}]});
+const[matsTours,setMatsTours]=useState([]);
 const[toast,setToast]=useState("");
 const[syncing,setSyncing]=useState(false);
 const[toolSearch,setToolSearch]=useState("");
@@ -1657,10 +1815,11 @@ const[navConfig,setNavConfig]=useState([
 {id:"inspection",icon:"🔧",label:"Inspection",visible:true,order:2},
 {id:"stocks",icon:"🧤",label:"Stocks",visible:true,order:3},
 {id:"entrepot",icon:"🏭",label:"Entrepôt",visible:true,order:5},
-{id:"rapport",icon:"📊",label:"Rapport",visible:true,order:6},
-{id:"admin",icon:"🔐",label:"Admin",visible:false,order:7,hidden:true},
-{id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:8},
-{id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:9},
+{id:"matsmobile",icon:"⛽",label:"Gestion mâts mobile",visible:true,order:6},
+{id:"rapport",icon:"📊",label:"Rapport",visible:true,order:7},
+{id:"admin",icon:"🔐",label:"Admin",visible:false,order:8,hidden:true},
+{id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
+{id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
 ]);
 
 useEffect(()=>{
@@ -1684,9 +1843,10 @@ if(p.cfg)setCfg(prev=>({...prev,...p.cfg}));
 if(p.navConfig)setNavConfig((p.navConfig||[]).filter(n=>n.id!=="kits"));
 if(p.userAccounts)setUserAccounts(p.userAccounts);
 if(p.warehouseConfig)setWarehouseConfig(p.warehouseConfig);
+if(p.matsCfg)setMatsCfg(p.matsCfg);
 }
 const load=async(fn)=>{try{return await Promise.race([fn(),new Promise(r=>setTimeout(()=>r(null),4000))]);}catch(e){return null;}};
-const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,toolsSnap,maintSnap,kitsSnap]=await Promise.all([
+const[empSnap,consSnap,vetsSnap,histSnap,inspSnap,toolsSnap,maintSnap,kitsSnap,matsToursSnap]=await Promise.all([
 load(()=>db.collection("emprunts").orderBy("ts","asc").get()),
 load(()=>db.collection("cons").get()),
 load(()=>db.collection("vets").get()),
@@ -1695,6 +1855,7 @@ load(()=>db.collection("inspections").get()),
 load(()=>db.collection("tools").get()),
 load(()=>db.collection("maintenances").get()),
 load(()=>db.collection("kits").orderBy("ts","asc").get()),
+load(()=>db.collection("matsMobileTours").orderBy("ts","desc").get()),
 ]);
 if(empSnap)setEmprunts(empSnap.docs.map(d=>({...d.data(),_id:d.id})));
 if(consSnap){const cd={};consSnap.forEach(x=>cd[x.id]=x.data());setCons(CONS_DEFAULT.map(c=>cd[c.id]?{...c,...cd[c.id]}:c));}
@@ -1703,6 +1864,7 @@ if(histSnap)setHist(histSnap.docs.map(d=>({...d.data(),_id:d.id})));
 if(inspSnap){const id={};inspSnap.forEach(x=>id[x.id]=x.data());setInspections(id);}
 if(maintSnap){const md={};maintSnap.forEach(x=>md[x.id]=x.data());setMaintenances(md);}
 if(kitsSnap)setKits(kitsSnap.docs.map(d=>({...d.data(),_id:d.id})));
+if(matsToursSnap)setMatsTours(matsToursSnap.docs.map(d=>({...d.data(),_id:d.id})));
 if(toolsSnap&&toolsSnap.docs.length>0)setTools(toolsSnap.docs.map(d=>({...d.data(),id:d.id})));
 }catch(e){console.error("Init error:",e);}
 clearTimeout(fallback);setReady(true);
@@ -1715,7 +1877,8 @@ const u5=db.collection("consHist").orderBy("ts","asc").onSnapshot(s=>setHist(s.d
 const u6=db.collection("tools").onSnapshot(s=>{if(s.docs.length>0)setTools(s.docs.map(d=>({...d.data(),id:d.id})));});
 const u7=db.collection("maintenances").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setMaintenances(d);});
 const u8=db.collection("kits").orderBy("ts","asc").onSnapshot(s=>setKits(s.docs.map(d=>({...d.data(),_id:d.id}))));
-return()=>{u1();u2();u3();u4();u5();u6();u7();u8();};
+const u9=db.collection("matsMobileTours").orderBy("ts","desc").onSnapshot(s=>setMatsTours(s.docs.map(d=>({...d.data(),_id:d.id}))));
+return()=>{u1();u2();u3();u4();u5();u6();u7();u8();u9();};
 },[]);
 
 const showT=msg=>{setToast(msg);setTimeout(()=>setToast(""),3000);};
@@ -1730,6 +1893,9 @@ const alertCount=outilsLongs.length;
 
 const saveWarehouseConfig=async(wc)=>{setWarehouseConfig(wc);await db.collection("params").doc("config").set({warehouseConfig:wc},{merge:true});showT("Configuration entrepôt sauvegardée!");};
 const saveNavConfig=async(nc)=>{setNavConfig(nc);await db.collection("params").doc("config").set({navConfig:nc},{merge:true});showT("Menu configuré!");};
+const saveMatsCfg=async(newCfg)=>{setMatsCfg(newCfg);await db.collection("params").doc("config").set({matsCfg:newCfg},{merge:true});showT("Paramètres mâts mobiles sauvegardés!");};
+const saveMatsTour=async(data)=>{setSyncing(true);await fbAdd('matsMobileTours',data);setSyncing(false);showT('Tournée mâts mobile enregistrée!');};
+const deleteMatsTour=async(t)=>{if(!confirm('Supprimer cette tournée ?'))return;await fbDel('matsMobileTours',t._id);showT('Tournée supprimée');};
 const saveUserAccounts=async(accounts)=>{setUserAccounts(accounts);await db.collection("params").doc("config").set({userAccounts:accounts},{merge:true});showT("Comptes mis à jour!");};
 const scanHandle=raw=>{
 const id=n2(raw);
@@ -1995,6 +2161,8 @@ h("div",{style:{padding:"14px 14px 90px"}},
   ),
 
   page==="entrepot"&&h(EntrepotPage,{isAdmin,showT,cfg,warehouseConfig,currentUser}),
+
+  page==="matsmobile"&&h(GestionMatsMobilePage,{isAdmin,currentUser,userAccounts,showT,cfg,matsCfg,matsTours,saveMatsCfg,onSaveTour:saveMatsTour,onDeleteTour:deleteMatsTour}),
 
   page==="rapport"&&h("div",{className:"fi"},
     !isAdmin?h("div",{style:{textAlign:"center",padding:40}},h("div",{style:{fontSize:56,marginBottom:16}},"🔐"),h("div",{style:{fontSize:18,fontWeight:700,marginBottom:8}},"Accès restreint"),h("p",{style:{fontSize:14,color:S.gray}},"Les rapports sont disponibles uniquement en mode administrateur."))
