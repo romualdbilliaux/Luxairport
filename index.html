@@ -139,7 +139,6 @@ const DASHBOARD_WIDGETS_DEFAULT=[
 {id:'fod',label:'Planning FOD BOSS',visible:true,order:5}
 ];
 const WEATHER_CODE_LABELS={0:'Ensoleillé',1:'Principalement dégagé',2:'Partiellement nuageux',3:'Couvert',45:'Brouillard',48:'Brouillard givrant',51:'Bruine légère',53:'Bruine',55:'Bruine dense',61:'Pluie légère',63:'Pluie',65:'Forte pluie',71:'Neige légère',73:'Neige',75:'Forte neige',80:'Averses légères',81:'Averses',82:'Fortes averses',95:'Orage'};
-const DEFAULT_FOD_HOME_APRONS=[{id:'P1',label:'P1',surface:12000,active:true},{id:'P2',label:'P2',surface:18000,active:true},{id:'P3',label:'P3',surface:9500,active:true},{id:'P4',label:'P4',surface:15000,active:true}];
 
 // ── UTILITAIRES ───────────────────────────────────────────────────────────────
 const {useState,useEffect,useRef,useMemo}=React;
@@ -147,6 +146,16 @@ const h=React.createElement;
 const n2=s=>s.replace(/-/g,"").toUpperCase().trim();
 const now=()=>new Date().toLocaleString('fr-FR');
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
+const nextSequenceId=(items,prefix,startAt=1)=>{
+  const max=(items||[]).reduce((m,it)=>{
+    const val=(it&&((it.id)||(it._id)||''))||'';
+    const mt=String(val).match(new RegExp('^'+prefix.replace(/[.*+?^${}()|[\]\]/g,'\\$&')+'-(\\d+)$'));
+    return mt?Math.max(m,parseInt(mt[1],10)||0):m;
+  },startAt-1);
+  return prefix+'-'+String(max+1).padStart(4,'0');
+};
+const nextToolId=tools=>nextSequenceId(tools,'AS-COMM',35);
+const nextKitId=kits=>nextSequenceId(kits,'AS-KIT',1);
 const fbSet=(c,i,d)=>db.collection(c).doc(i).set(d,{merge:true});
 const fbAdd=(c,d)=>db.collection(c).add({...d,ts:Date.now()});
 const fbUpd=(c,i,d)=>db.collection(c).doc(i).update(d);
@@ -456,10 +465,10 @@ return h('div',{style:{position:'sticky',top:0,zIndex:80,paddingTop:'env(safe-ar
 );
 }
 
-function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg,currentUser,onLogout,onScan,onAlerts,alertCount,lowStock,isAdmin}){
+function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg,currentUser,onLogout,onScan,onAlerts,alertCount,lowStock}){
 if(!open)return null;
 const bg=cfg.couleur||S.red;
-const visibleNavs=[...navConfig].filter(n=>(n.id==='admin' ? !!isAdmin : (n.visible && !n.hidden))).sort((a,b)=>a.order-b.order);
+const visibleNavs=[...navConfig].filter(n=>n.visible&&!n.hidden).sort((a,b)=>a.order-b.order);
 return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:100,backdropFilter:'blur(6px)'}},
   h('div',{onClick:e=>e.stopPropagation(),style:{position:'absolute',top:0,left:0,width:320,maxWidth:'88vw',height:'100%',background:'#fff',overflowY:'auto',boxShadow:'8px 0 30px rgba(0,0,0,.18)',borderTopRightRadius:24,borderBottomRightRadius:24}},
     h('div',{style:{background:'linear-gradient(135deg,'+bg+','+darken(bg)+')',padding:'calc(env(safe-area-inset-top,0) + 18px) 16px 18px',color:'#fff',borderTopRightRadius:24}},
@@ -754,9 +763,10 @@ toolsWithMaint.slice(0,10).map(t=>[h("div",{key:"n"+t.id,style:{fontSize:9,overf
 h("button",{onClick:onClose,style:BS},"Fermer")
 );
 }
-function AddToolModal({onSave,onClose}){
-const[id,setId]=useState("");const[nom,setNom]=useState("");const[marque,setMarque]=useState("HILTI");const[type,setType]=useState("");const[ref,setRef]=useState("");const[fournisseur,setFournisseur]=useState("HILTI");const[emplacement,setEmplacement]=useState("");
-return h(Modal,{onClose},h("div",{style:{background:"linear-gradient(135deg,"+S.red+","+darken(S.red)+")",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},"NOUVEAU"),h("div",{style:{fontSize:20,fontWeight:900}},"Ajouter un outil")),FL("ID unique *",true),h("input",{value:id,onChange:e=>setId(e.target.value.toUpperCase()),placeholder:"Ex: AS-COMM-0035",style:{...IS,textTransform:"uppercase"}}),FL("Dénomination *",true),h("input",{value:nom,onChange:e=>setNom(e.target.value),placeholder:"Nom de l'outil...",style:IS}),h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}},h("div",{},FL("Marque"),h("select",{value:marque,onChange:e=>setMarque(e.target.value),style:SS},["HILTI","MAKITA","BOSCH","DEWALT","Autre"].map(m=>h("option",{key:m,value:m},m)))),h("div",{},FL("Type"),h("input",{value:type,onChange:e=>setType(e.target.value),placeholder:"PERFORATEUR...",style:IS}))),FL("Référence",true),h("input",{value:ref,onChange:e=>setRef(e.target.value),style:IS}),FL("Fournisseur",true),h("input",{value:fournisseur,onChange:e=>setFournisseur(e.target.value),style:IS}),FL("Emplacement",true),h("input",{value:emplacement,onChange:e=>setEmplacement(e.target.value),style:IS}),h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!id||!nom){alert("ID et dénomination requis");return;}onSave({id:id.trim(),nom,marque,type,ref,fournisseur,emplacement});},style:BP},"Ajouter")));
+function AddToolModal({onSave,onClose,nextId}){
+const generatedId=nextId||'AS-COMM-0035';
+const[nom,setNom]=useState('');const[marque,setMarque]=useState('HILTI');const[type,setType]=useState('');const[ref,setRef]=useState('');const[fournisseur,setFournisseur]=useState('HILTI');const[emplacement,setEmplacement]=useState('');
+return h(Modal,{onClose},h('div',{style:{background:'linear-gradient(135deg,'+S.red+','+darken(S.red)+')',color:'#fff',padding:'16px 16px 18px',margin:'-16px -16px 0',borderRadius:'20px 20px 0 0'}},h('div',{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},'NOUVEAU'),h('div',{style:{fontSize:20,fontWeight:900}},'Ajouter un outil')),FL('Numéro outil',true),h('input',{value:generatedId,readOnly:true,style:{...IS,background:'#f7f7f7',fontWeight:800,textTransform:'uppercase',letterSpacing:1}}),FL('Dénomination *',true),h('input',{value:nom,onChange:e=>setNom(e.target.value),placeholder:"Nom de l'outil...",style:IS}),h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8,marginTop:14}},h('div',{},FL('Marque'),h('select',{value:marque,onChange:e=>setMarque(e.target.value),style:SS},['HILTI','MAKITA','BOSCH','DEWALT','Autre'].map(m=>h('option',{key:m,value:m},m)))),h('div',{},FL('Type'),h('input',{value:type,onChange:e=>setType(e.target.value),placeholder:'PERFORATEUR...',style:IS}))),FL('Référence',true),h('input',{value:ref,onChange:e=>setRef(e.target.value),style:IS}),FL('Fournisseur',true),h('input',{value:fournisseur,onChange:e=>setFournisseur(e.target.value),style:IS}),FL('Emplacement',true),h('input',{value:emplacement,onChange:e=>setEmplacement(e.target.value),style:IS}),h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}},h('button',{onClick:onClose,style:BS},'Annuler'),h('button',{onClick:()=>{if(!nom){alert('Dénomination requise');return;}onSave({id:generatedId,nom,marque,type,ref,fournisseur,emplacement});},style:BP},'Ajouter')));
 }
 function EditToolModal({tool,onSave,onDelete,onClose}){
 const[nom,setNom]=useState(tool.nom||"");const[marque,setMarque]=useState(tool.marque||"");const[type,setType]=useState(tool.type||"");const[ref,setRef]=useState(tool.ref||"");const[fournisseur,setFournisseur]=useState(tool.fournisseur||"");const[emplacement,setEmplacement]=useState(tool.emplacement||"");
@@ -778,19 +788,21 @@ h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14
 !isNew&&onDelete&&h("button",{onClick:()=>onDelete(item.id),style:{...BS,color:S.danger,marginTop:10}},"Supprimer cet article")
 );
 }
-function KitModal({kit,tools,emprunts,isEmp,onSave,onClose}){
-const[nom,setNom]=useState(kit?.nom||"");const[desc,setDesc]=useState(kit?.description||"");const[sel,setSel]=useState(kit?.outils||[]);const[search,setSearch]=useState("");
+function KitModal({kit,tools,emprunts,isEmp,onSave,onClose,nextId}){
+const generatedId=kit?.id||nextId||'AS-KIT-0001';
+const[nom,setNom]=useState(kit?.nom||'');const[desc,setDesc]=useState(kit?.description||'');const[sel,setSel]=useState(kit?.outils||[]);const[search,setSearch]=useState('');
 const tog=id=>setSel(p=>p.includes(id)?p.filter(x=>x!==id):[...p,id]);
 const filt=search.length>0?tools.filter(t=>t.nom.toLowerCase().includes(search.toLowerCase())||t.id.toLowerCase().includes(search.toLowerCase())).slice(0,8):tools.slice(0,8);
 return h(Modal,{onClose},
-h("div",{style:{background:"linear-gradient(135deg,#af52de,#8b3dbf)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},kit?"MODIFIER KIT":"NOUVEAU KIT"),h("div",{style:{fontSize:20,fontWeight:900}},kit?kit.nom:"Créer un kit")),
-FL("Nom du kit *",true),h("input",{value:nom,onChange:e=>setNom(e.target.value),placeholder:"Ex: Kit perçage...",style:IS}),
-FL("Description",true),h("input",{value:desc,onChange:e=>setDesc(e.target.value),placeholder:"Description...",style:IS}),
-FL("Outils du kit *",true),
-h("input",{value:search,onChange:e=>setSearch(e.target.value),placeholder:"Rechercher un outil...",style:{...IS,marginBottom:8}}),
-h("div",{style:{maxHeight:200,overflowY:"auto",marginBottom:10}},filt.map(t=>{const sorti=isEmp(t.id);return h("div",{key:t.id,onClick:()=>tog(t.id),style:{padding:"8px 12px",background:sel.includes(t.id)?"#f0e6ff":S.bg,borderRadius:10,marginBottom:4,cursor:"pointer",display:"flex",alignItems:"center",gap:8,opacity:sorti?.6:1}},h("div",{style:{width:20,height:20,borderRadius:6,border:"2px solid "+(sel.includes(t.id)?"#af52de":S.border),background:sel.includes(t.id)?"#af52de":S.white,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}},sel.includes(t.id)&&h("span",{style:{color:"#fff",fontSize:11}},"✓")),h("div",{},h("div",{style:{fontSize:10,fontWeight:700,color:S.red}},t.id),h("div",{style:{fontSize:12,fontWeight:600}},t.nom.substring(0,40)+(sorti?" (sorti)":""))));})),
-sel.length>0&&h("div",{style:{background:"#f0e6ff",borderRadius:10,padding:"8px 12px",marginBottom:10,fontSize:12,fontWeight:700,color:"#af52de"}},sel.length+" outil(s) sélectionné(s)"),
-h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!nom||sel.length===0){alert("Nom et au moins 1 outil requis");return;}onSave({...(kit||{}),nom,description:desc,outils:sel});},style:{...BP,background:"#af52de"}},"Sauvegarder"))
+ h('div',{style:{background:'linear-gradient(135deg,#af52de,#8b3dbf)',color:'#fff',padding:'16px 16px 18px',margin:'-16px -16px 0',borderRadius:'20px 20px 0 0'}},h('div',{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},kit?'MODIFIER KIT':'NOUVEAU KIT'),h('div',{style:{fontSize:20,fontWeight:900}},kit?kit.nom:'Créer un kit')),
+ FL('Numéro kit',true),h('input',{value:generatedId,readOnly:true,style:{...IS,background:'#f7f7f7',fontWeight:800,textTransform:'uppercase',letterSpacing:1}}),
+ FL('Nom du kit *',true),h('input',{value:nom,onChange:e=>setNom(e.target.value),placeholder:'Ex: Kit perçage...',style:IS}),
+ FL('Description',true),h('input',{value:desc,onChange:e=>setDesc(e.target.value),placeholder:'Description...',style:IS}),
+ FL('Outils du kit *',true),
+ h('input',{value:search,onChange:e=>setSearch(e.target.value),placeholder:'Rechercher un outil...',style:{...IS,marginBottom:8}}),
+ h('div',{style:{maxHeight:200,overflowY:'auto',marginBottom:10}},filt.map(t=>{const sorti=isEmp(t.id);return h('div',{key:t.id,onClick:()=>tog(t.id),style:{padding:'8px 12px',background:sel.includes(t.id)?'#f0e6ff':S.bg,borderRadius:10,marginBottom:4,cursor:'pointer',display:'flex',alignItems:'center',gap:8,opacity:sorti?.6:1}},h('div',{style:{width:20,height:20,borderRadius:6,border:'2px solid '+(sel.includes(t.id)?'#af52de':S.border),background:sel.includes(t.id)?'#af52de':S.white,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}},sel.includes(t.id)&&h('span',{style:{color:'#fff',fontSize:11}},'✓')),h('div',{},h('div',{style:{fontSize:10,fontWeight:700,color:S.red}},t.id),h('div',{style:{fontSize:12,fontWeight:600}},t.nom.substring(0,40)+(sorti?' (sorti)':''))));})),
+ sel.length>0&&h('div',{style:{background:'#f0e6ff',borderRadius:10,padding:'8px 12px',marginBottom:10,fontSize:12,fontWeight:700,color:'#af52de'}},sel.length+' outil(s) sélectionné(s)'),
+ h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}},h('button',{onClick:onClose,style:BS},'Annuler'),h('button',{onClick:()=>{if(!nom||sel.length===0){alert('Nom et au moins 1 outil requis');return;}onSave({...(kit||{}),id:generatedId,nom,description:desc,outils:sel});},style:{...BP,background:'#af52de'}},'Sauvegarder'))
 );
 }
 function KitDepModal({kit,tools,emprunts,employes,isEmp,onSave,onClose}){
@@ -1256,7 +1268,7 @@ return()=>{u1();u2();};
 const savePalette=async d=>{await fbAdd("palettes",{...d,ts:Date.now()});setModal(null);showT("Palette "+d.id+" créée !");};
 const updatePalette=async(id,d)=>{await db.collection("palettes").doc(id).set(d,{merge:true});setModal(null);showT("Palette mise à jour !");};
 const deletePalette=async id=>{if(!confirm("Supprimer cette palette ?"))return;await fbDel("palettes",id);setSelPal(null);showT("Supprimée");};
-const saveFamille=async d=>{await fbAdd("familles",{...d,ts:Date.now()});setModal(null);showT("Famille "+d.id+" créée !");};
+const saveFamille=async d=>{const ref=await db.collection("familles").add({...d,ts:Date.now()});setModal(null);showT("Famille "+d.id+" créée !");return {...d,_id:ref.id};};
 const deleteFamille=async id=>{if(!confirm("Supprimer cette famille ?"))return;await fbDel("familles",id);showT("Famille supprimée");};
 const saveFlows=async()=>{const warehouseOrigins=originsTxt.split("\n").map(s=>s.trim()).filter(Boolean);const warehouseDestinations=destsTxt.split("\n").map(s=>s.trim()).filter(Boolean);await db.collection("params").doc("config").set({cfg:{...(cfg||{}),warehouseOrigins,warehouseDestinations}},{merge:true});showT("Provenances / destinations enregistrées");};
 
@@ -2453,7 +2465,7 @@ const[navConfig,setNavConfig]=useState([
 {id:"entrepot",icon:"🏭",label:"Entrepôt",visible:true,order:5},
 {id:"matsmobile",icon:"⛽",label:"Gestion mâts mobile",visible:true,order:6},
 {id:"rapport",icon:"📊",label:"Rapport",visible:true,order:7},
-{id:"admin",icon:"🔐",label:"Admin",visible:true,order:8,hidden:false},
+{id:"admin",icon:"🔐",label:"Admin",visible:false,order:8,hidden:true},
 {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
 {id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
 ]);
@@ -2466,7 +2478,7 @@ const mergeNavConfig=(stored)=>{
     {id:"entrepot",icon:"🏭",label:"Entrepôt",visible:true,order:5},
     {id:"matsmobile",icon:"⛽",label:"Gestion mâts mobile",visible:true,order:6},
     {id:"rapport",icon:"📊",label:"Rapport",visible:true,order:7},
-    {id:"admin",icon:"🔐",label:"Admin",visible:true,order:8,hidden:false},
+    {id:"admin",icon:"🔐",label:"Admin",visible:false,order:8,hidden:true},
     {id:"fod",icon:"✈️",label:"F.O.D BOSS",visible:true,order:9},
     {id:"vehicules",icon:"🚗",label:"Véhicules",visible:true,order:10},
   ];
@@ -2601,7 +2613,7 @@ const adjStock=async(item,cat,nv,raison)=>{setSyncing(true);await fbSet(cat==="c
 const delHist=async id=>{if(!confirm("Supprimer?"))return;await fbDel("consHist",id);showT("Supprimé");};
 const saveCfg=async newCfg=>{const cleaned={...newCfg,dashboardWidgets:mergeDashboardWidgets(newCfg.dashboardWidgets)};setCfg(cleaned);await db.collection("params").doc("config").set({cfg:cleaned},{merge:true});showT("Paramètres sauvegardés!");};
 const saveAdmin=async(np,ne)=>{setAdminPin(np);setEmployes(ne);await db.collection("params").doc("config").set({adminPin:np,employes:ne},{merge:true});showT("Sauvegardé!");};
-const saveKit=async(data)=>{setSyncing(true);if(data._id){await db.collection("kits").doc(data._id).set(data,{merge:true});}else{await fbAdd("kits",{...data,ts:Date.now()});}setSyncing(false);setModal(null);showT("Kit sauvegardé!");};
+const saveKit=async(data)=>{setSyncing(true);if(data._id){await db.collection("kits").doc(data._id).set(data,{merge:true});}else{await fbAdd("kits",{...data,id:data.id||nextKitId(kits),ts:Date.now()});}setSyncing(false);setModal(null);showT("Kit sauvegardé!");};
 const delKit=async id=>{if(!confirm("Supprimer ce kit?"))return;await fbDel("kits",id);showT("Kit supprimé");};
 const saveKitDepart=async(kit,pers,comm)=>{setSyncing(true);for(const toolId of kit.outils||[]){const t=tools.find(x=>x.id===toolId);if(!t||isEmp(t.id))continue;await fbAdd("emprunts",{toolId:t.id,personne:pers,etatDepart:"Bon",commentaireDepart:"Kit: "+kit.nom+(comm?" - "+comm:""),photosDepart:[],signatureDepart:"",dateDepart:now(),retour:null,kitId:kit.id,kitNom:kit.nom,ts:Date.now()});}setSyncing(false);setModal(null);showT("Kit "+kit.nom+" sorti!");};
 const exportBackup=async()=>{
@@ -2670,7 +2682,7 @@ useEffect(()=>{
   return ()=>{dead=true; clearInterval(t);};
 },[]);
 useEffect(()=>{
-  const u1=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{const data=s.exists?(s.data()||{}):{}; const aprons=(Array.isArray(data.aprons)&&data.aprons.length?data.aprons:DEFAULT_FOD_HOME_APRONS); setFodHomeCfg({aprons}); if((!Array.isArray(data.aprons)||!data.aprons.length)){ db.collection('fodBossConfig').doc('main').set({aprons:DEFAULT_FOD_HOME_APRONS},{merge:true}).catch(()=>{}); }});
+  const u1=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{const data=s.exists?(s.data()||{}):{}; setFodHomeCfg({aprons:Array.isArray(data.aprons)?data.aprons:[]});});
   const u2=db.collection('fodBossPassages').orderBy('ts','desc').limit(40).onSnapshot(s=>setFodHomePassages(s.docs.map(d=>({...d.data(),_id:d.id}))));
   return ()=>{u1();u2();};
 },[]);
@@ -2682,7 +2694,7 @@ const fodRules=[
   {min:0.51,max:1,label:'1 x / mois',days:30,color:S.blue},
   {min:0,max:0.5,label:'1 x / 2 mois',days:60,color:S.green}
 ];
-const fodPlanningHome=(((fodHomeCfg.aprons&&fodHomeCfg.aprons.length)?fodHomeCfg.aprons:DEFAULT_FOD_HOME_APRONS).filter(a=>a.active!==false).map(a=>{
+const fodPlanningHome=((fodHomeCfg.aprons||[]).filter(a=>a.active!==false).map(a=>{
   const last=[...(fodHomePassages||[])].filter(p=>p.apron===a.id).sort((x,y)=>(y.ts||0)-(x.ts||0))[0];
   const gm2=Number(last?.gm2||0);
   const rule=fodRules.find(r=>gm2>=r.min&&gm2<=r.max) || fodRules[fodRules.length-1];
@@ -2757,7 +2769,7 @@ if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>
 
 return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
-h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg,currentUser,onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage('accueil');},onScan:()=>setModal({t:'scan'}),onAlerts:()=>setModal({t:'alertes'}),alertCount,lowStock:lowS.length,isAdmin}),
+h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg,currentUser,onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage('accueil');},onScan:()=>setModal({t:'scan'}),onAlerts:()=>setModal({t:'alertes'}),alertCount,lowStock:lowS.length}),
 
 h("div",{style:{padding:"14px 14px 90px"}},
 
@@ -2944,11 +2956,11 @@ modal&&h("div",{},
   modal.t==="add"&&h(AddModal,{item:modal.item,cat:modal.cat,employes,defaultPers:currentUser?.name||"",onSave:addStock,onClose:()=>setModal(null)}),
   modal.t==="adj"&&h(AdjModal,{item:modal.item,cat:modal.cat,onSave:adjStock,onClose:()=>setModal(null)}),
   modal.t==="csv"&&h(CSVModal,{cat:modal.cat,onImport:importCSV,onClose:()=>setModal(null)}),
-  modal.t==="kit"&&h(KitModal,{kit:modal.kit,tools,emprunts,isEmp,onSave:saveKit,onClose:()=>setModal(null)}),
+  modal.t==="kit"&&h(KitModal,{kit:modal.kit,tools,emprunts,isEmp,nextId:nextKitId(kits),onSave:saveKit,onClose:()=>setModal(null)}),
   modal.t==="kitDep"&&h(KitDepModal,{kit:modal.kit,tools,employes,emprunts,isEmp,onSave:saveKitDepart,onClose:()=>setModal(null)}),
   modal.t==="multiScan"&&h(MultiScanModal,{tools,kits,emprunts,employes,currentUser,userAccounts,isEmp,onSave:saveDepart,onClose:()=>setModal(null)}),
   modal.t==="globalSearch"&&h(GlobalSearchModal,{tools,cons,vets,emprunts,kits,onClose:()=>setModal(null)}),
-  modal.t==="addTool"&&h(AddToolModal,{onSave:async(data)=>{setSyncing(true);const id=data.id.toUpperCase();await fbSet("tools",id,{...data,id});setSyncing(false);setModal(null);showT("Outil ajouté!");},onClose:()=>setModal(null)}),
+  modal.t==="addTool"&&h(AddToolModal,{nextId:nextToolId(tools),onSave:async(data)=>{setSyncing(true);const id=(data.id||nextToolId(tools)).toUpperCase();await fbSet("tools",id,{...data,id});setSyncing(false);setModal(null);showT("Outil ajouté!");},onClose:()=>setModal(null)}),
   modal.t==="editTool"&&h(EditToolModal,{tool:modal.tool,onSave:async(data)=>{setSyncing(true);await fbSet("tools",data.id,data);setSyncing(false);setModal(null);showT("Outil modifié!");},onDelete:async(id)=>{if(!confirm("Supprimer cet outil?"))return;setSyncing(true);await fbDel("tools",id);setSyncing(false);setModal(null);showT("Outil supprimé!");},onClose:()=>setModal(null)}),
   modal.t==="addCons"&&h(EditStockModal,{item:null,cat:modal.cat,onSave:async(data)=>{setSyncing(true);await fbSet(modal.cat==="cons"?"cons":"vets",data.id,data);setSyncing(false);setModal(null);showT("Article ajouté!");},onDelete:null,onClose:()=>setModal(null)}),
   modal.t==="editCons"&&h(EditStockModal,{item:modal.item,cat:modal.cat,onSave:async(data)=>{setSyncing(true);await fbSet(modal.cat==="cons"?"cons":"vets",data.id,data);setSyncing(false);setModal(null);showT("Article modifié!");},onDelete:async(id)=>{if(!confirm("Supprimer?"))return;setSyncing(true);await fbDel(modal.cat==="cons"?"cons":"vets",id);setSyncing(false);setModal(null);showT("Article supprimé!");},onClose:()=>setModal(null)}),
