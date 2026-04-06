@@ -2654,23 +2654,116 @@ h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,set
 
 h("div",{style:{padding:"14px 14px 90px"}},
 
-  page==="accueil"&&h("div",{className:"fi",style:{minHeight:"65vh",display:"flex",alignItems:"center",justifyContent:"center"}},
-    h("div",{style:{width:"100%",maxWidth:640,margin:"0 auto",display:"grid",gap:16}},
-      h("div",{style:{textAlign:"center",marginBottom:4}},
-        h("div",{style:{fontSize:28,fontWeight:900,color:S.red,marginBottom:6}},"Messages équipe"),
-        h("div",{style:{fontSize:13,color:S.gray}},"Accueil simplifié")
-      ),
-      h("div",{style:{background:S.white,borderRadius:22,padding:"24px 20px",boxShadow:"0 10px 30px rgba(0,0,0,.08)"}},
-        h("div",{style:{display:"flex",justifyContent:"center",gap:10,marginBottom:18,flexWrap:"wrap"}},
-          isAdmin&&h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||"");if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:"auto",padding:"10px 16px",fontSize:13}},"Modifier 1"),
-          isAdmin&&h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||"");if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:"auto",padding:"10px 16px",fontSize:13}},"Modifier 2")
+  page==="accueil"&&(()=>{
+    const latestMats=(matsTours||[]).slice().sort((a,b)=>(b.ts||0)-(a.ts||0))[0]||null;
+    const recDaysFromGm2=(gm2)=>{
+      const v=Number(gm2)||0;
+      if(v>=5.01)return 7;
+      if(v>=1.01)return 14;
+      if(v>=0.51)return 30;
+      return 60;
+    };
+    const addDays=(dateStr,days)=>{
+      const base=parseAnyDate(dateStr);
+      base.setDate(base.getDate()+days);
+      return base;
+    };
+    const fodPlanning=Object.values((fodHomePassages||[]).reduce((acc,p)=>{
+      const apron=(p.apron||'APRON').toUpperCase();
+      if(!acc[apron] || (p.ts||0)>(acc[apron].ts||0)) acc[apron]=p;
+      return acc;
+    },{})).sort((a,b)=>String(a.apron||'').localeCompare(String(b.apron||''))).slice(0,6).map(p=>{
+      const days=recDaysFromGm2(p.gm2);
+      const nextDate=addDays(p.debutDate||p.dateTime||new Date(),days);
+      const today=new Date();
+      today.setHours(0,0,0,0);
+      const cmp=new Date(nextDate); cmp.setHours(0,0,0,0);
+      const diff=Math.round((cmp-today)/86400000);
+      return {
+        apron:p.apron||'APRON',
+        lastDate:p.debutDate||'—',
+        nextDate:nextDate.toLocaleDateString('fr-FR'),
+        gm2:Number(p.gm2||0),
+        diff
+      };
+    });
+    return h("div",{className:"fi"},
+      h("div",{style:{display:"grid",gap:14}},
+        h("div",{style:{textAlign:"center",padding:"4px 0 2px"}},
+          h("div",{style:{fontSize:30,fontWeight:900,color:S.red,letterSpacing:.3}},"DASHBOARD"),
+          h("div",{style:{fontSize:13,color:S.gray}},"Vue d'ensemble airside")
         ),
-        cfg.teamMessage1&&h("div",{style:{background:"#fff7f7",borderLeft:"4px solid "+S.red,borderRadius:16,padding:"18px 18px",marginBottom:12,textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Message 1"),h("div",{style:{fontSize:20,fontWeight:700,whiteSpace:"pre-wrap"}},cfg.teamMessage1)),
-        cfg.teamMessage2&&h("div",{style:{background:"#f5f8ff",borderLeft:"4px solid "+S.blue,borderRadius:16,padding:"18px 18px",textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Message 2"),h("div",{style:{fontSize:20,fontWeight:700,whiteSpace:"pre-wrap"}},cfg.teamMessage2)),
-        !cfg.teamMessage1&&!cfg.teamMessage2&&h("div",{style:{padding:24,textAlign:"center",color:S.gray,fontSize:14}},"Aucun message actuellement")
+
+        h("div",{style:{background:"linear-gradient(135deg,#fff,#fff7f8)",borderRadius:20,padding:"18px 16px",boxShadow:"0 10px 30px rgba(0,0,0,.08)",border:"1px solid #f3d4da"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,gap:8}},
+            h("div",{},
+              h("div",{style:{fontSize:12,fontWeight:800,color:S.gray,textTransform:"uppercase",letterSpacing:.8}},"Planning automatique FOD BOSS"),
+              h("div",{style:{fontSize:20,fontWeight:900,color:S.dark,marginTop:2}},"Prochains passages")
+            ),
+            h("div",{style:{background:"#ffecef",color:S.red,borderRadius:999,padding:"5px 10px",fontSize:11,fontWeight:800}},String(fodPlanning.length||0)+" apron(s)")
+          ),
+          fodPlanning.length===0
+            ? h("div",{style:{padding:"14px 12px",borderRadius:14,background:"#fff",textAlign:"center",color:S.gray,fontSize:13}},"Aucun passage FOD BOSS enregistré")
+            : h("div",{style:{display:"grid",gap:8}},
+                fodPlanning.map((r,i)=>h("div",{key:i,style:{background:"#fff",borderRadius:16,padding:"12px 14px",border:`2px solid ${r.diff<0?S.danger:(r.diff<=3?S.green:S.border)}`,boxShadow:"0 2px 8px rgba(0,0,0,.04)"}},
+                  h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10}},
+                    h("div",{},
+                      h("div",{style:{fontSize:12,fontWeight:800,color:S.gray,marginBottom:2}},r.apron),
+                      h("div",{style:{fontSize:22,fontWeight:900,color:r.diff<0?S.danger:(r.diff<=3?S.green:S.dark)}},""+r.nextDate),
+                      h("div",{style:{fontSize:11,color:S.gray,marginTop:4}},"Dernier passage : "+r.lastDate+" • "+r.gm2.toFixed(2)+" g/m²")
+                    ),
+                    h("div",{style:{background:r.diff<0?"#fff1f0":(r.diff<=3?"#e6fff0":"#f2f2f7"),color:r.diff<0?S.danger:(r.diff<=3?S.green:S.gray),borderRadius:12,padding:"8px 10px",fontSize:12,fontWeight:800,whiteSpace:"nowrap"}},
+                      r.diff<0 ? "❗ En retard" : (r.diff<=3 ? "🟢 Bientôt" : "Planifié")
+                    )
+                  )
+                ))
+              )
+        ),
+
+        h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}},
+          h("div",{style:{background:"#fff",borderRadius:18,padding:"16px",boxShadow:"0 8px 22px rgba(0,0,0,.06)"}},
+            h("div",{style:{fontSize:12,fontWeight:800,color:S.gray,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}},"Dernier plein des mâts"),
+            latestMats
+              ? h("div",{},
+                  h("div",{style:{fontSize:22,fontWeight:900,color:S.dark,marginBottom:4}},latestMats.dateTime||latestMats.date||"Dernière tournée"),
+                  h("div",{style:{fontSize:12,color:S.gray,marginBottom:8}},(latestMats.user||"—")+(latestMats.otherColleague?" + "+latestMats.otherColleague:"")),
+                  h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}},
+                    (latestMats.mats||[]).slice(0,4).map((m,i)=>h("div",{key:i,style:{background:"#f7f8fb",borderRadius:12,padding:"8px 10px"}},
+                      h("div",{style:{fontSize:11,fontWeight:800,color:S.gray}},m.nom||m.id||("Mât "+(i+1))),
+                      h("div",{style:{fontSize:13,fontWeight:800,color:(m.statut||'').toLowerCase()==='plein'?S.green:S.dark}},m.statut||"Renseigné")
+                    ))
+                  )
+                )
+              : h("div",{style:{fontSize:13,color:S.gray}},"Aucune tournée enregistrée")
+          ),
+
+          h("div",{style:{background:"linear-gradient(135deg,#4aa3ff,#7cc8ff)",borderRadius:18,padding:"16px",boxShadow:"0 8px 22px rgba(0,0,0,.06)",color:"#fff"}},
+            h("div",{style:{fontSize:12,fontWeight:800,opacity:.85,textTransform:"uppercase",letterSpacing:.7,marginBottom:6}},"Météo"),
+            h("div",{style:{fontSize:30,fontWeight:900,lineHeight:1,marginBottom:6}},dashboardWeather&&dashboardWeather.temp!=null?(String(Math.round(dashboardWeather.temp))+"°C"):"—"),
+            h("div",{style:{fontSize:14,fontWeight:700,marginBottom:4}},dashboardWeather?.label||"Chargement…"),
+            h("div",{style:{fontSize:12,opacity:.9}},dashboardWeather&&dashboardWeather.wind!=null?("Vent "+Math.round(dashboardWeather.wind)+" km/h"):""),
+            h("div",{style:{fontSize:11,opacity:.8,marginTop:6}},dashboardWeather?.time||"Luxembourg Findel")
+          )
+        ),
+
+        h("div",{style:{background:"#fff",borderRadius:22,padding:"24px 20px",boxShadow:"0 10px 30px rgba(0,0,0,.08)"}},
+          h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10,marginBottom:18,flexWrap:"wrap"}},
+            h("div",{},
+              h("div",{style:{fontSize:28,fontWeight:900,color:S.red,marginBottom:4}},"Messages équipe"),
+              h("div",{style:{fontSize:13,color:S.gray}},"Informations importantes")
+            ),
+            h("div",{style:{display:"flex",gap:10,flexWrap:"wrap"}},
+              isAdmin&&h("button",{onClick:async()=>{const v=prompt("Message équipe 1",cfg.teamMessage1||"");if(v===null)return;await saveCfg({...cfg,teamMessage1:v});},style:{...BO,width:"auto",padding:"10px 16px",fontSize:13}},"Modifier 1"),
+              isAdmin&&h("button",{onClick:async()=>{const v=prompt("Message équipe 2",cfg.teamMessage2||"");if(v===null)return;await saveCfg({...cfg,teamMessage2:v});},style:{...BO,width:"auto",padding:"10px 16px",fontSize:13}},"Modifier 2")
+            )
+          ),
+          cfg.teamMessage1&&h("div",{style:{background:"#fff7f7",borderLeft:"4px solid "+S.red,borderRadius:16,padding:"18px 18px",marginBottom:12,textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Message 1"),h("div",{style:{fontSize:20,fontWeight:700,whiteSpace:"pre-wrap"}},cfg.teamMessage1)),
+          cfg.teamMessage2&&h("div",{style:{background:"#f5f8ff",borderLeft:"4px solid "+S.blue,borderRadius:16,padding:"18px 18px",textAlign:"center"}},h("div",{style:{fontSize:11,color:S.gray,fontWeight:700,textTransform:"uppercase",marginBottom:6}},"Message 2"),h("div",{style:{fontSize:20,fontWeight:700,whiteSpace:"pre-wrap"}},cfg.teamMessage2)),
+          !cfg.teamMessage1&&!cfg.teamMessage2&&h("div",{style:{padding:24,textAlign:"center",color:S.gray,fontSize:14}},"Aucun message actuellement")
+        )
       )
-    )
-  ),
+    );
+  })(),
 
   page==="emprunts"&&h("div",{className:"fi"},
     h("div",{style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 1fr 1fr":"1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour"),isAdmin&&h("button",{onClick:()=>setPage("kits"),style:{...BG,padding:"12px",fontSize:13}},"🧰 Gérer kits")),
