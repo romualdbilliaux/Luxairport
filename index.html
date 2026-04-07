@@ -139,6 +139,7 @@ const DASHBOARD_WIDGETS_DEFAULT=[
 {id:'fod',label:'Planning FOD BOSS',visible:true,order:5}
 ];
 const WEATHER_CODE_LABELS={0:'Ensoleillé',1:'Principalement dégagé',2:'Partiellement nuageux',3:'Couvert',45:'Brouillard',48:'Brouillard givrant',51:'Bruine légère',53:'Bruine',55:'Bruine dense',61:'Pluie légère',63:'Pluie',65:'Forte pluie',71:'Neige légère',73:'Neige',75:'Forte neige',80:'Averses légères',81:'Averses',82:'Fortes averses',95:'Orage'};
+const DEFAULT_FOD_HOME_APRONS=[{id:'P1',label:'P1',surface:12000,active:true},{id:'P2',label:'P2',surface:18000,active:true},{id:'P3',label:'P3',surface:9500,active:true},{id:'P4',label:'P4',surface:15000,active:true}];
 
 // ── UTILITAIRES ───────────────────────────────────────────────────────────────
 const {useState,useEffect,useRef,useMemo}=React;
@@ -455,10 +456,11 @@ return h('div',{style:{position:'sticky',top:0,zIndex:80,paddingTop:'env(safe-ar
 );
 }
 
-function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg,currentUser,onLogout,onScan,onAlerts,alertCount,lowStock}){
+function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg,currentUser,onLogout,onScan,onAlerts,alertCount,lowStock,isAdmin}){
 if(!open)return null;
 const bg=cfg.couleur||S.red;
-const visibleNavs=[...navConfig].filter(n=>n.visible&&!n.hidden).sort((a,b)=>a.order-b.order);
+const adminAllowed=!!isAdmin || currentUser?.role==='admin' || currentUser?.name==='Administrateur';
+const visibleNavs=[...navConfig].filter(n=>(n.id==='admin' ? adminAllowed : (n.visible && !n.hidden))).sort((a,b)=>a.order-b.order);
 return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:100,backdropFilter:'blur(6px)'}},
   h('div',{onClick:e=>e.stopPropagation(),style:{position:'absolute',top:0,left:0,width:320,maxWidth:'88vw',height:'100%',background:'#fff',overflowY:'auto',boxShadow:'8px 0 30px rgba(0,0,0,.18)',borderTopRightRadius:24,borderBottomRightRadius:24}},
     h('div',{style:{background:'linear-gradient(135deg,'+bg+','+darken(bg)+')',padding:'calc(env(safe-area-inset-top,0) + 18px) 16px 18px',color:'#fff',borderTopRightRadius:24}},
@@ -1693,6 +1695,10 @@ tabs.map(([id,l])=>h("button",{key:id,onClick:()=>setTab(id),style:{flex:"none",
 ),
 
 tab==="stats"&&h("div",{},
+  h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}},
+    h("button",{onClick:()=>setTab("perso"),style:{background:"#eef4ff",color:S.blue,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,cursor:"pointer"}},"⚙️ Widgets / Menu"),
+    h("button",{onClick:()=>setTab("config"),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,cursor:"pointer"}},"🔐 Réglages admin")
+  ),
   h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}},
     [{n:tools.length,l:"Outils total",c:"#1c1c1e"},{n:emprunts.filter(e=>!e.retour).length,l:"En cours",c:S.blue},{n:emprunts.filter(e=>!e.retour&&daysSince(e.dateDepart)>=1).length,l:"Sortis +24h",c:S.orange},{n:emprunts.length,l:"Total emprunts",c:S.gray},{n:hist.length,l:"Mouvements stock",c:S.green},{n:lowS.length,l:"Stock faible",c:S.danger}].map(x=>
       h("div",{key:x.l,style:{background:S.white,borderRadius:12,padding:"12px 14px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
@@ -1835,7 +1841,7 @@ tab==="config"&&h("div",{},
 ),
 
 tab==="perso"&&h("div",{},
-  h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration du menu et des widgets"),
+  h("div",{style:{fontSize:14,fontWeight:700,marginBottom:12}},"Configuration du menu"),
   h("div",{style:{background:S.white,borderRadius:14,padding:"14px",marginBottom:14,boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
     navConfig.map((n,i)=>h("div",{key:n.id,style:{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 0",borderBottom:"1px solid "+S.bg}},
       h("span",{style:{fontSize:13,fontWeight:500}},n.icon+" "+n.label),
@@ -2485,6 +2491,12 @@ const mergeDashboardWidgets=(stored)=>{
 };
 
 useEffect(()=>{
+if(currentUser?.role==='admin' || currentUser?.name==='Administrateur'){
+  setIsAdmin(true);
+}
+},[currentUser]);
+
+useEffect(()=>{
 const handleOnline=()=>setIsOnline(true);
 const handleOffline=()=>setIsOnline(false);
 window.addEventListener("online",handleOnline);
@@ -2669,7 +2681,7 @@ useEffect(()=>{
   return ()=>{dead=true; clearInterval(t);};
 },[]);
 useEffect(()=>{
-  const u1=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{const data=s.exists?(s.data()||{}):{}; setFodHomeCfg({aprons:Array.isArray(data.aprons)?data.aprons:[]});});
+  const u1=db.collection('fodBossConfig').doc('main').onSnapshot(s=>{const data=s.exists?(s.data()||{}):{}; const aprons=(Array.isArray(data.aprons)&&data.aprons.length?data.aprons:DEFAULT_FOD_HOME_APRONS); setFodHomeCfg({aprons}); if((!Array.isArray(data.aprons)||!data.aprons.length)){ db.collection('fodBossConfig').doc('main').set({aprons:DEFAULT_FOD_HOME_APRONS},{merge:true}).catch(()=>{}); }});
   const u2=db.collection('fodBossPassages').orderBy('ts','desc').limit(40).onSnapshot(s=>setFodHomePassages(s.docs.map(d=>({...d.data(),_id:d.id}))));
   return ()=>{u1();u2();};
 },[]);
@@ -2681,7 +2693,7 @@ const fodRules=[
   {min:0.51,max:1,label:'1 x / mois',days:30,color:S.blue},
   {min:0,max:0.5,label:'1 x / 2 mois',days:60,color:S.green}
 ];
-const fodPlanningHome=((fodHomeCfg.aprons||[]).filter(a=>a.active!==false).map(a=>{
+const fodPlanningHome=(((fodHomeCfg.aprons&&fodHomeCfg.aprons.length)?fodHomeCfg.aprons:DEFAULT_FOD_HOME_APRONS).filter(a=>a.active!==false).map(a=>{
   const last=[...(fodHomePassages||[])].filter(p=>p.apron===a.id).sort((x,y)=>(y.ts||0)-(x.ts||0))[0];
   const gm2=Number(last?.gm2||0);
   const rule=fodRules.find(r=>gm2>=r.min&&gm2<=r.max) || fodRules[fodRules.length-1];
@@ -2752,11 +2764,11 @@ const renderDashboardWidget=(widget)=>{
 };
 
 if(!ready)return h(Spinner,null);
-if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);setIsAdmin(user.role==="admin");setPage("accueil");}});
+if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{const adminOk=user?.role==="admin"||user?.name==="Administrateur";setCurrentUser({...user,role:adminOk?"admin":user?.role});setIsAdmin(adminOk);setPage("accueil");}});
 
 return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
-h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg,currentUser,onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage('accueil');},onScan:()=>setModal({t:'scan'}),onAlerts:()=>setModal({t:'alertes'}),alertCount,lowStock:lowS.length}),
+h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg,currentUser,onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage('accueil');},onScan:()=>setModal({t:'scan'}),onAlerts:()=>setModal({t:'alertes'}),alertCount,lowStock:lowS.length,isAdmin}),
 
 h("div",{style:{padding:"14px 14px 90px"}},
 
@@ -2984,5 +2996,40 @@ document.getElementById('root').innerHTML='<div style="padding:20px;font-family:
 }
 
 </script>
+
+<script>
+// ===== ADMIN FIX DEFINITIF =====
+window.addEventListener("DOMContentLoaded", function(){
+
+  // Create floating admin button
+  const btn = document.createElement("button");
+  btn.innerHTML = "⚙️ ADMIN";
+  btn.style.position = "fixed";
+  btn.style.bottom = "20px";
+  btn.style.right = "20px";
+  btn.style.zIndex = "9999";
+  btn.style.padding = "12px 16px";
+  btn.style.borderRadius = "12px";
+  btn.style.background = "#e74c3c";
+  btn.style.color = "#fff";
+  btn.style.border = "none";
+  btn.style.fontWeight = "700";
+  btn.style.boxShadow = "0 4px 12px rgba(0,0,0,0.3)";
+  btn.style.cursor = "pointer";
+
+  btn.onclick = function(){
+    if(window.setTab){
+      window.setTab("config");
+    }else{
+      alert("Accès admin");
+    }
+  };
+
+  document.body.appendChild(btn);
+
+  console.log("ADMIN FIX ACTIF");
+});
+</script>
+
 </body>
 </html>
