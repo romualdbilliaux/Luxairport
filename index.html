@@ -52,7 +52,7 @@ input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appeara
 <script>
 
 // ── ERREURS ───────────────────────────────────────────────────────────────────
-window.onerror=function(msg,src,line,col,err){document.getElementById('root').innerHTML='<div style="padding:20px;font-family:monospace;background:#fff;color:red"><h2>ERREUR JS</h2><p>'+msg+'</p><p>Ligne: '+line+'</p>'+(err?'<pre>'+err.stack+'</pre>':'')+'</div>';return false;};
+window.onerror=function(msg,src,line,col,err){var root=document.getElementById('root'); if(root){root.innerHTML='<div style="padding:20px;font-family:monospace;background:#fff;color:red"><h2>ERREUR JS</h2><p>'+(msg||'Erreur inconnue')+'</p><p>Source: '+(src||'')+'</p><p>Ligne: '+(line||'')+'</p>'+(err&&err.stack?'<pre>'+err.stack+'</pre>':'')+'</div>';} return false;};
 window.addEventListener('unhandledrejection',function(e){document.getElementById('root').innerHTML='<div style="padding:20px;font-family:monospace;background:#fff;color:red"><h2>ERREUR PROMISE</h2><p>'+(e.reason&&e.reason.message?e.reason.message:String(e.reason))+'</p></div>';});
 
 // ── FIREBASE ──────────────────────────────────────────────────────────────────
@@ -200,6 +200,8 @@ function compressImageFile(file,maxWidth=1400,quality=0.72){
     }catch(err){reject(err);}
   });
 }
+function safeFileList(files){try{return Array.from(files||[]);}catch(e){return [];}}
+
 async function filesToCompressedImages(files,maxFiles=6){
   const arr=Array.from(files||[]).slice(0,maxFiles);
   const out=[];
@@ -1039,7 +1041,7 @@ h("button",{onClick:()=>onSave({alleeA:{...alleeA,casesSOL:solA},alleeB:{...alle
 function RackVisual({warehouseConfig,palettes,familles,onSelectPalette}){
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
 const getPal=(allee,rack,etage,pos)=>palettes.find(p=>p.allee===allee&&String(p.rack)===String(rack)&&String(p.etagere)===String(etage)&&p.position===pos);
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f.id===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);return f?f.couleur:null;};
 const renderAllee=(alleeLabel,alleeCfg,color)=>{
 if(!alleeCfg)return null;
 const racks=Array.from({length:alleeCfg.racks||3},(_,i)=>i+1);
@@ -1090,7 +1092,7 @@ renderAllee("B",wc.alleeB,"#e74c3c")
 // ── VISUEL SOL ────────────────────────────────────────────────────────────────
 function SolVisual({warehouseConfig,palettes,familles,onSelectPalette}){
 const wc=warehouseConfig||WAREHOUSE_DEFAULT;
-const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f.id===pal.familleId);return f?f.couleur:null;};
+const getFamColor=pal=>{if(!pal||!pal.familleId)return null;const f=familles.find(f=>f._id===pal.familleId||f.id===pal.familleId);return f?f.couleur:null;};
 const renderAlleeSol=(alleeLabel,alleeCfg,color)=>{
 if(!alleeCfg)return null;
 const cases=Array.from({length:alleeCfg.casesSOL||5},(_,i)=>i+1);
@@ -1255,27 +1257,15 @@ const createFamilyFromButton=async()=>{
   if(!nom){alert("Indiquez un nom de famille");return;}
   try{
     setFamilyCreating(true);
-    const nums=(familles||[]).map(f=>parseInt(String(f.id||"").replace(/\D/g,""))).filter(n=>!isNaN(n));
-    const next=(nums.length?Math.max(...nums):0)+1;
-    const payload={id:"FAM-"+String(next).padStart(4,"0"),nom:nom,couleur:FAM_COLORS[(next-1)%FAM_COLORS.length],createdAt:new Date().toLocaleString("fr-FR"),ts:Date.now()};
-    let createdId="";
-    if(onCreateFamille){
-      const created=await onCreateFamille(nom);
-      createdId=created?._id||created?.id||"";
-    }
-    if(!createdId){
-      const ref=await db.collection("familles").add(payload);
-      createdId=ref.id;
-    }
-    if(createdId){
-      setFamilleId(createdId);
-      setNewFamilyName("");
-      setShowFamilyCreator(false);
-      return;
-    }
-    alert("La famille a été créée mais n'a pas pu être sélectionnée automatiquement.");
+    if(typeof onCreateFamille!=="function"){throw new Error("Création de famille indisponible");}
+    const created=await onCreateFamille(nom);
+    const createdId=(created&&((created._id)||(created.id)))||"";
+    if(!createdId){throw new Error("Famille créée mais identifiant introuvable");}
+    setFamilleId(createdId);
+    setNewFamilyName("");
+    setShowFamilyCreator(false);
   }catch(e){
-    alert("Erreur création famille : "+(e?.message||e));
+    alert("Erreur création famille : "+((e&&e.message)||String(e)));
   }finally{
     setFamilyCreating(false);
   }
