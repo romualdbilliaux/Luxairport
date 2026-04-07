@@ -35,6 +35,15 @@ input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appeara
 .user-card:active{background:rgba(255,255,255,.18);}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 .su{animation:slideUp .3s ease}
+
+@media (min-width: 768px){
+  body{background:#ececf1;}
+  #root{padding:18px 0;}
+}
+@media (min-width: 1024px){
+  body{background:linear-gradient(180deg,#efeff4 0%,#e8e8ee 100%);}
+}
+
 </style>
 </head>
 <body>
@@ -459,10 +468,9 @@ return h('div',{style:{position:'sticky',top:0,zIndex:80,paddingTop:'env(safe-ar
 function HamburgerMenu({open,onClose,navConfig,page,setPage,cfg,currentUser,onLogout,onScan,onAlerts,alertCount,lowStock,isAdmin}){
 if(!open)return null;
 const bg=cfg.couleur||S.red;
-const adminAllowed=!!isAdmin || currentUser?.role==='admin' || currentUser?.name==='Administrateur';
-const visibleNavs=[...navConfig].filter(n=>(n.id==='admin' ? adminAllowed : (n.visible && !n.hidden))).sort((a,b)=>a.order-b.order);
+const visibleNavs=[...navConfig].filter(n=>(n.id==='admin' ? !!isAdmin : (n.visible && !n.hidden))).sort((a,b)=>a.order-b.order);
 return h('div',{onClick:onClose,style:{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:100,backdropFilter:'blur(6px)'}},
-  h('div',{onClick:e=>e.stopPropagation(),style:{position:'absolute',top:0,left:0,width:320,maxWidth:'88vw',height:'100%',background:'#fff',overflowY:'auto',boxShadow:'8px 0 30px rgba(0,0,0,.18)',borderTopRightRadius:24,borderBottomRightRadius:24}},
+  h('div',{onClick:e=>e.stopPropagation(),style:{position:'absolute',top:0,left:0,width:window.innerWidth>=768?380:320,maxWidth:'88vw',height:'100%',background:'#fff',overflowY:'auto',boxShadow:'8px 0 30px rgba(0,0,0,.18)',borderTopRightRadius:24,borderBottomRightRadius:24}},
     h('div',{style:{background:'linear-gradient(135deg,'+bg+','+darken(bg)+')',padding:'calc(env(safe-area-inset-top,0) + 18px) 16px 18px',color:'#fff',borderTopRightRadius:24}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10}},
         h('div',{style:{display:'flex',alignItems:'center',gap:12,minWidth:0}},
@@ -1681,7 +1689,7 @@ const[newE,setNewE]=useState("");
 const[pin,setPin]=useState(adminPin);
 const[pin2,setPin2]=useState("");
 const[lCfg,setLCfg]=useState({...cfg});
-const tabs=[["comptes","Comptes"],["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["entrepotCfg","Entrepôt"],["backup","Backup"],["config","Config"],["perso","Widgets/Menu"]];
+const tabs=[["comptes","Comptes"],["stats","Stats"],["emprunts","Emprunts"],["hist","Hist."],["maint","Maint."],["entrepotCfg","Entrepôt"],["backup","Backup"],["config","Config"],["perso","Perso"]];
 const sortiesParJour=()=>{const map={};emprunts.forEach(e=>{const d=(e.dateDepart||"").split(" ")[0];if(d)map[d]=(map[d]||0)+1;});return Object.entries(map).slice(-7).map(([d,n])=>({d:d.split("/").slice(0,2).join("/"),n}));};
 const sParJ=sortiesParJour();const maxN=Math.max(...sParJ.map(x=>x.n),1);
 
@@ -1695,10 +1703,6 @@ tabs.map(([id,l])=>h("button",{key:id,onClick:()=>setTab(id),style:{flex:"none",
 ),
 
 tab==="stats"&&h("div",{},
-  h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}},
-    h("button",{onClick:()=>setTab("perso"),style:{background:"#eef4ff",color:S.blue,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,cursor:"pointer"}},"⚙️ Widgets / Menu"),
-    h("button",{onClick:()=>setTab("config"),style:{background:"#fff8e6",color:S.orange,border:"none",borderRadius:12,padding:"12px",fontSize:13,fontWeight:800,cursor:"pointer"}},"🔐 Réglages admin")
-  ),
   h("div",{style:{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}},
     [{n:tools.length,l:"Outils total",c:"#1c1c1e"},{n:emprunts.filter(e=>!e.retour).length,l:"En cours",c:S.blue},{n:emprunts.filter(e=>!e.retour&&daysSince(e.dateDepart)>=1).length,l:"Sortis +24h",c:S.orange},{n:emprunts.length,l:"Total emprunts",c:S.gray},{n:hist.length,l:"Mouvements stock",c:S.green},{n:lowS.length,l:"Stock faible",c:S.danger}].map(x=>
       h("div",{key:x.l,style:{background:S.white,borderRadius:12,padding:"12px 14px",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}},
@@ -2491,12 +2495,6 @@ const mergeDashboardWidgets=(stored)=>{
 };
 
 useEffect(()=>{
-if(currentUser?.role==='admin' || currentUser?.name==='Administrateur'){
-  setIsAdmin(true);
-}
-},[currentUser]);
-
-useEffect(()=>{
 const handleOnline=()=>setIsOnline(true);
 const handleOffline=()=>setIsOnline(false);
 window.addEventListener("online",handleOnline);
@@ -2764,13 +2762,14 @@ const renderDashboardWidget=(widget)=>{
 };
 
 if(!ready)return h(Spinner,null);
-if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{const adminOk=user?.role==="admin"||user?.name==="Administrateur";setCurrentUser({...user,role:adminOk?"admin":user?.role});setIsAdmin(adminOk);setPage("accueil");}});
+if(!currentUser)return h(LoginScreen,{cfg,userAccounts,adminPin,onLogin:(user)=>{setCurrentUser(user);setIsAdmin(user.role==="admin");setPage("accueil");}});
 
-return h("div",{style:{maxWidth:480,margin:"0 auto",minHeight:"100vh",background:S.bg}},
+const appMaxWidth=window.innerWidth>=1280?1380:(window.innerWidth>=1024?1180:(window.innerWidth>=768?900:480));
+return h("div",{style:{maxWidth:appMaxWidth,width:"100%",margin:"0 auto",minHeight:"100vh",background:S.bg,borderRadius:window.innerWidth>=768?24:0,overflow:"hidden",boxShadow:window.innerWidth>=768?"0 8px 30px rgba(0,0,0,.08)":"none"}},
 h(AppHeader,{cfg,currentUser,syncing,isOnline,lowStock:lowS.length,onScan:()=>setModal({t:"scan"}),onAlerts:()=>setModal({t:"alertes"}),onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage("accueil");},alertCount,page,setPage,navConfig,menuOpen,setMenuOpen,isAdmin}),
 h(HamburgerMenu,{open:menuOpen,onClose:()=>setMenuOpen(false),navConfig,page,setPage,cfg,currentUser,onLogout:()=>{setCurrentUser(null);setIsAdmin(false);setPage('accueil');},onScan:()=>setModal({t:'scan'}),onAlerts:()=>setModal({t:'alertes'}),alertCount,lowStock:lowS.length,isAdmin}),
 
-h("div",{style:{padding:"14px 14px 90px"}},
+h("div",{style:{padding:window.innerWidth>=768?"20px 20px 110px":"14px 14px 90px"}},
 
   page==="accueil"&&h("div",{className:"fi"},
     h("div",{style:{display:"grid",gap:14}},
