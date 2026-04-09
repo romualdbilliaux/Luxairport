@@ -576,6 +576,48 @@ function Spinner(){return h('div',{style:{display:'flex',alignItems:'center',jus
 function Modal({onClose,children}){return h('div',{onClick:e=>{if(e.target===e.currentTarget)onClose();},style:{position:'fixed',inset:0,background:'rgba(0,0,0,.55)',zIndex:200,display:'flex',alignItems:'flex-end',backdropFilter:'blur(4px)'}},h('div',{onClick:e=>e.stopPropagation(),style:{background:S.white,borderRadius:'20px 20px 0 0',width:'100%',maxWidth:480,margin:'0 auto',maxHeight:'93vh',overflowY:'auto',padding:'16px 16px 44px'}},h('div',{style:{width:36,height:5,background:S.border,borderRadius:3,margin:'0 auto 16px'}}),children));}
 function Card({title,badge,children,color}){return h('div',{style:{background:S.white,borderRadius:16,overflow:'hidden',boxShadow:'0 1px 3px rgba(0,0,0,.08)'}},title&&h('div',{style:{padding:'12px 16px',borderBottom:'1px solid '+S.bg,display:'flex',justifyContent:'space-between',alignItems:'center',borderLeft:color?`4px solid ${color}`:'none'}},h('span',{style:{fontSize:14,fontWeight:700}},title),badge!==undefined&&h('span',{style:{background:'#fdf4f4',color:S.red,borderRadius:20,padding:'2px 10px',fontSize:11,fontWeight:700}},badge)),children);}
 function QRCodeDisplay({text,size=120,label}){const canvasRef=useRef(null);useEffect(()=>{if(!canvasRef.current||!text)return;try{new window.QRious({element:canvasRef.current,value:String(text),size,background:"white",foreground:"black",level:"H"});}catch(e){}},[text,size]);return h("div",{style:{textAlign:"center"}},h("div",{style:{display:"inline-block",background:"#fff",padding:6,borderRadius:10,boxShadow:"0 2px 8px rgba(0,0,0,.12)"}},h("canvas",{ref:canvasRef,width:size,height:size,style:{display:"block",borderRadius:6}})),label&&h("div",{style:{fontSize:9,color:S.gray,fontWeight:700,marginTop:3,letterSpacing:.5,textTransform:"uppercase"}},label));}
+function buildQrLabelDataUrl(value,size=300){
+  try{
+    const canvas=document.createElement('canvas');
+    new window.QRious({element:canvas,value:String(value||''),size,background:'white',foreground:'black',level:'H'});
+    return canvas.toDataURL('image/png');
+  }catch(e){return null;}
+}
+function generateQrLabelsPDF(items,options){
+  try{
+    const rowsByCount={12:4,18:6,24:6,30:6};
+    const colsByCount={12:3,18:3,24:4,30:5};
+    const perPage=Number(options?.perPage||24);
+    const rows=rowsByCount[perPage]||6;
+    const cols=colsByCount[perPage]||4;
+    const {jsPDF}=window.jspdf;
+    const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const W=210,H=297;
+    const marginX=8, marginY=8, gapX=4, gapY=4;
+    const cellW=(W-marginX*2-gapX*(cols-1))/cols;
+    const cellH=(H-marginY*2-gapY*(rows-1))/rows;
+    const safeItems=(items||[]).filter(x=>x&&x.id);
+    safeItems.forEach((item,idx)=>{
+      if(idx>0 && idx%perPage===0) doc.addPage();
+      const localIdx=idx%perPage;
+      const row=Math.floor(localIdx/cols), col=localIdx%cols;
+      const x=marginX+col*(cellW+gapX), y=marginY+row*(cellH+gapY);
+      doc.setDrawColor(215,215,220); doc.roundedRect(x,y,cellW,cellH,2,2);
+      const qrSize=Math.min(cellW-8,cellH*0.58,28);
+      const qrX=x+(cellW-qrSize)/2, qrY=y+4;
+      const qrImg=buildQrLabelDataUrl(item.id,320);
+      if(qrImg) doc.addImage(qrImg,'PNG',qrX,qrY,qrSize,qrSize);
+      doc.setTextColor(28,28,30);
+      doc.setFont('helvetica','bold'); doc.setFontSize(8.5);
+      const nameLines=doc.splitTextToSize(String(item.nom||item.name||item.id),cellW-6).slice(0,2);
+      doc.text(nameLines,x+cellW/2,qrY+qrSize+5,{align:'center',maxWidth:cellW-6});
+      doc.setFont('helvetica','bold'); doc.setFontSize(8);
+      const codeY=qrY+qrSize+5+(nameLines.length*3.8)+1;
+      doc.text(String(item.id),x+cellW/2,Math.min(y+cellH-4,codeY),{align:'center',maxWidth:cellW-6});
+    });
+    doc.save(makeReportFileName('Etiquettes QR','pdf'));
+  }catch(e){alert('Erreur étiquettes QR: '+e.message);}
+}
 function CamScanner({onDetect}){
 const vr=useRef(null);const cr=useRef(null);const sr=useRef(null);const raf=useRef(null);
 const[manual,setManual]=useState('');const[err,setErr]=useState('');const[ok,setOk]=useState('');
@@ -1091,6 +1133,42 @@ results.map((r,i)=>h("div",{key:i,style:{display:"flex",alignItems:"center",gap:
 h("button",{onClick:onClose,style:{...BS,marginTop:8}},"Fermer")
 );
 }
+
+function LabelSheetModal({title,items,onClose}){
+const[search,setSearch]=useState("");const[perPage,setPerPage]=useState(24);
+const[selectedIds,setSelectedIds]=useState((items||[]).slice(0,Math.min(24,(items||[]).length)).map(x=>x.id));
+const filtered=(items||[]).filter(item=>{const q=search.trim().toLowerCase();return !q||(String(item.id||'').toLowerCase().includes(q))||(String(item.nom||'').toLowerCase().includes(q));});
+const toggle=id=>setSelectedIds(prev=>prev.includes(id)?prev.filter(x=>x!==id):[...prev,id]);
+const selectedItems=(items||[]).filter(x=>selectedIds.includes(x.id));
+return h(Modal,{onClose},
+  h('div',{style:{background:'linear-gradient(135deg,#2c3e50,#3498db)',color:'#fff',padding:'16px 16px 18px',margin:'-16px -16px 0',borderRadius:'20px 20px 0 0'}},
+    h('div',{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},'ÉTIQUETTES QR'),
+    h('div',{style:{fontSize:20,fontWeight:900}},title||'Générer des étiquettes'),
+    h('div',{style:{fontSize:12,opacity:.78,marginTop:3}},(items||[]).length+' élément(s) disponible(s)')
+  ),
+  FL('Recherche',true),h('input',{value:search,onChange:e=>setSearch(e.target.value),placeholder:'Nom ou numéro...',style:IS}),
+  FL('Format A4',true),
+  h('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8,marginBottom:10}},[12,18,24,30].map(n=>h('button',{key:n,onClick:()=>setPerPage(n),style:{padding:'10px',borderRadius:12,border:'1.5px solid '+(perPage===n?S.blue:S.border),background:perPage===n?'#e8f0fe':'#fff',color:perPage===n?S.blue:S.dark,fontWeight:800,cursor:'pointer'}},n+'/page'))),
+  h('div',{style:{display:'flex',gap:8,marginBottom:8}},
+    h('button',{onClick:()=>setSelectedIds(filtered.map(x=>x.id)),style:{...BS,flex:1,padding:'10px',fontSize:12}},'Tout sélectionner'),
+    h('button',{onClick:()=>setSelectedIds([]),style:{...BS,flex:1,padding:'10px',fontSize:12,color:S.danger}},'Tout vider')
+  ),
+  h('div',{style:{maxHeight:320,overflowY:'auto',display:'flex',flexDirection:'column',gap:6,marginBottom:10}},
+    filtered.length===0?h('div',{style:{padding:'20px',textAlign:'center',color:S.gray}},'Aucun résultat')
+    :filtered.map(item=>{const checked=selectedIds.includes(item.id);return h('label',{key:item.id,style:{display:'flex',alignItems:'center',gap:10,padding:'10px 12px',borderRadius:12,background:checked?'#eef5ff':'#f7f7fa',border:'1.5px solid '+(checked?'#bfd8ff':'#ececf2'),cursor:'pointer'}},
+      h('input',{type:'checkbox',checked,onChange:()=>toggle(item.id),style:{width:18,height:18,cursor:'pointer'}}),
+      h(QRCodeDisplay,{text:item.id,size:46}),
+      h('div',{style:{minWidth:0,flex:1}},h('div',{style:{fontSize:12,fontWeight:800,color:S.red}},item.id),h('div',{style:{fontSize:13,fontWeight:700,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},item.nom||item.id),item.type&&h('div',{style:{fontSize:11,color:S.gray}},item.type))
+    );})
+  ),
+  h('div',{style:{background:'#f7f9fc',borderRadius:12,padding:'10px 12px',fontSize:12,color:S.gray}},selectedItems.length+' étiquette(s) sélectionnée(s) · QR + nom + numéro'),
+  h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginTop:14}},
+    h('button',{onClick:onClose,style:BS},'Fermer'),
+    h('button',{onClick:()=>{if(!selectedItems.length){alert('Sélectionnez au moins une étiquette');return;}generateQrLabelsPDF(selectedItems,{perPage});},style:BB},'📄 Générer A4')
+  )
+);
+}
+
 function UserManagementPanel({userAccounts,onSave,setModal}){
 const[search,setSearch]=useState("");const[filter,setFilter]=useState("all");const[showPins,setShowPins]=useState({});
 const all=userAccounts||[];
@@ -3454,6 +3532,7 @@ const matchesFilter=activeFilters.some(f=>{
 });
 return ms&&matchesFilter;
 });
+const inspectionKitList=(kits||[]).filter(k=>{const q=(toolSearch||"").toLowerCase();const code=(k.id||k._id||"").toLowerCase();const nom=(k.nom||"").toLowerCase();const desc=(k.description||"").toLowerCase();const outilsTxt=(k.outils||[]).map(id=>{const t=tools.find(x=>x.id===id);return ((t?.id)||id)+" "+((t?.nom)||"");}).join(" ").toLowerCase();return !toolSearch||code.includes(q)||nom.includes(q)||desc.includes(q)||outilsTxt.includes(q);});
 const stockList=(stockTab==="cons"?cons:vets).filter(i=>{const q=stockQ.toLowerCase();return !stockQ||i.nom.toLowerCase().includes(q)||i.id.toLowerCase().includes(q)||(i.taille||"").toLowerCase().includes(q);});
 
 const empList=empF==="tous"?emprunts:empF==="encours"?emprunts.filter(e=>!e.retour):emprunts.filter(e=>e.retour);
@@ -3567,14 +3646,20 @@ const groupedEmpList=useMemo(()=>{
   const kitMap={};
   const out=[];
   source.forEach(e=>{
-    if(e.kitId && !e.retour){
+    if(e.kitId){
       const key=e.kitId+"__"+(e.personne||"")+"__"+(e.dateDepart||"");
       if(!kitMap[key]){
-        kitMap[key]={_groupType:"kit",_id:key,kitId:e.kitId,kitNom:e.kitNom||e.kitId,personne:e.personne,dateDepart:e.dateDepart,retour:e.retour,groupedIds:[],toolCount:0,commentaireDepart:e.commentaireDepart||"",etatDepart:e.etatDepart||"Bon",photosDepart:e.photosDepart||[],signatureDepart:e.signatureDepart||"",ts:e.ts||Date.now()};
+        kitMap[key]={_groupType:"kit",_id:key,kitId:e.kitId,kitNom:e.kitNom||e.kitId,personne:e.personne,dateDepart:e.dateDepart,retour:e.retour||null,groupedIds:[],toolCount:0,commentaireDepart:e.commentaireDepart||"",etatDepart:e.etatDepart||"Bon",photosDepart:e.photosDepart||[],signatureDepart:e.signatureDepart||"",ts:e.ts||Date.now(),etatRetour:e.etatRetour||"",commentaireRetour:e.commentaireRetour||"",retourPar:e.retourPar||""};
         out.push(kitMap[key]);
       }
       kitMap[key].groupedIds.push(e._id);
       kitMap[key].toolCount+=1;
+      if(e.retour){
+        kitMap[key].retour=e.retour;
+        kitMap[key].etatRetour=e.etatRetour||kitMap[key].etatRetour||"";
+        kitMap[key].commentaireRetour=e.commentaireRetour||kitMap[key].commentaireRetour||"";
+        kitMap[key].retourPar=e.retourPar||kitMap[key].retourPar||"";
+      }
     }else{
       out.push(e);
     }
@@ -3615,7 +3700,7 @@ h("div",{className:"app-main"},
   ),
 
   page==="emprunts"&&h("div",{className:"fi"},
-    h("div",{style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 1fr 1fr":"1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour"),isAdmin&&h("button",{onClick:()=>setPage("kits"),style:{...BG,padding:"12px",fontSize:13}},"🧰 Gérer kits")),
+    h("div",{style:{display:"grid",gridTemplateColumns:isAdmin?"1fr 1fr 1fr 1fr":"1fr 1fr 1fr",gap:10,marginBottom:10}},h("button",{onClick:()=>setModal({t:"dep"}),style:BP},"📤 Départ(s)"),h("button",{onClick:()=>setModal({t:"retFind"}),style:BB},"📥 Retour"),h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquettes QR — Emprunts",items:groupedEmpList.map(e=>e._groupType==='kit'?{id:e.kitId||e._id,nom:e.kitNom||e.kitId||'Kit',type:'Kit'}:{id:e.toolId,nom:(tools.find(x=>x.id===e.toolId)?.nom)||e.toolId,type:'Outil'})}),style:{...BO,padding:"12px",fontSize:13}},"🏷️ Étiquettes"),isAdmin&&h("button",{onClick:()=>setPage("kits"),style:{...BG,padding:"12px",fontSize:13}},"🧰 Gérer kits")),
     h("div",{style:{display:"flex",gap:8,marginBottom:14,overflowX:"auto"}},[["tous","Tous"],["encours","En cours"],["retournes","Retournés"]].map(([f,l])=>h("button",{key:f,onClick:()=>setEmpF(f),style:{flex:"none",padding:"7px 14px",borderRadius:20,fontSize:12,fontWeight:600,border:"1.5px solid "+(empF===f?S.red:S.border),background:empF===f?S.red:S.white,color:empF===f?S.white:"#3c3c43",cursor:"pointer"}},l))),
     empList.length===0?h("div",{style:{padding:28,textAlign:"center",color:S.gray}},"Aucun emprunt")
     :groupedEmpList.map(e=>{
@@ -3632,9 +3717,10 @@ h("div",{className:"app-main"},
           h("div",{style:{fontSize:12,color:"#3c3c43"}},"👤 ",h("strong",{},e.personne)),
           h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},(isKitGroup?"Kit complet — ":(e.kitNom?"Kit: "+e.kitNom+" — ":""))+"Départ: "+e.dateDepart),
           e.retour&&h("div",{style:{fontSize:11,color:S.gray,marginTop:2}},"Retour: "+e.retour),
-          h("div",{style:{display:"flex",gap:8,marginTop:10}},
+          h("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
             enC&&isKitGroup&&h("button",{onClick:ev=>{ev.stopPropagation();openRetour({type:"kit",id:eid,kitId:e.kitId,kitNom:e.kitNom,personne:e.personne,dateDepart:e.dateDepart,groupedIds:e.groupedIds||[],count:e.toolCount||0});},style:{...BB,padding:"9px",flex:2}},"📥 Retour kit"),
             enC&&!isKitGroup&&!e.kitId&&h("button",{onClick:ev=>{ev.stopPropagation();openRetour(eid);},style:{...BB,padding:"9px",flex:2}},"📥 Retour"),
+            h("button",{onClick:ev=>{ev.stopPropagation();setModal({t:"labelSheet",title:"Étiquettes QR — Emprunts",items:[isKitGroup?{id:e.kitId||eid,nom:e.kitNom||e.kitId||'Kit',type:'Kit'}:{id:e.toolId,nom:(t?t.nom:e.toolId),type:'Outil'}]});},style:{background:"#eef5ff",color:S.blue,border:"none",borderRadius:10,padding:"9px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer",minWidth:90}},"🏷️ QR"),
             isAdmin&&!isKitGroup&&h("button",{onClick:ev=>{ev.stopPropagation();setModal({t:"modEmp",empr:e});},style:{...BS,padding:"9px",flex:1,fontSize:12}},"✏️"),
             isAdmin&&!isKitGroup&&h("button",{onClick:ev=>{ev.stopPropagation();delEmprunt(eid);},style:{background:"#fff1f0",color:S.danger,border:"none",borderRadius:10,padding:"9px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer"}},"🗑️")
           )
@@ -3646,10 +3732,14 @@ h("div",{className:"app-main"},
   page==="inspection"&&h("div",{className:"fi"},
     isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:10}},h("button",{onClick:resetInspections,style:{...BO,flex:1,padding:"11px",fontSize:13}},"🔄 Réinitialiser inspections"),h("button",{onClick:()=>setPage("rapport"),style:{...BG,flex:1,padding:"11px",fontSize:13}},"📊 Rapports")),
     h("div",{style:{display:"flex",gap:8,marginBottom:10}},
-      h("div",{style:{position:"relative",flex:1}},h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:15}},"🔍"),h("input",{value:toolSearch,onChange:e=>setToolSearch(e.target.value),placeholder:"ID, nom, marque...",style:{width:"100%",padding:"11px 14px 11px 36px",border:"none",borderRadius:12,fontSize:14,background:S.white,outline:"none",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})),
+      h("div",{style:{position:"relative",flex:1}},h("span",{style:{position:"absolute",left:11,top:"50%",transform:"translateY(-50%)",fontSize:15}},"🔍"),h("input",{value:toolSearch,onChange:e=>setToolSearch(e.target.value),placeholder:"ID, nom, marque, kit...",style:{width:"100%",padding:"11px 14px 11px 36px",border:"none",borderRadius:12,fontSize:14,background:S.white,outline:"none",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}})),
       h("button",{onClick:()=>setModal({t:"scan"}),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 14px",fontSize:20,cursor:"pointer"}},"📷")
     ),
-    isAdmin&&h("button",{onClick:()=>setModal({t:"addTool"}),style:{...BG,marginBottom:10,fontSize:13}},"+ Ajouter un outil"),
+    h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
+      isAdmin&&h("button",{onClick:()=>setModal({t:"addTool"}),style:{...BG,flex:1,padding:"10px",fontSize:13,minWidth:150}},"+ Ajouter un outil"),
+      isAdmin&&h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer",flex:1,minWidth:150}},"🧰 Ajouter un kit"),
+      h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquettes QR — Inspection",items:[...tools.map(t=>({id:t.id,nom:t.nom,type:"Outil"})),...inspectionKitList.map(k=>({id:k.id||k._id,nom:k.nom||k.id||"Kit",type:"Kit"}))]}),style:{...BO,flex:1,padding:"10px",fontSize:13,minWidth:170}},"🏷️ Étiquettes QR")
+    ),
     isAdmin
       ? h("div",{style:{display:"grid",gridTemplateColumns:"170px 1fr",gap:10,alignItems:"start",marginBottom:14}},
           h("div",{style:{background:"#fff",borderRadius:14,padding:"12px",boxShadow:"0 1px 4px rgba(0,0,0,.08)",position:"sticky",top:8}},
@@ -3719,7 +3809,43 @@ h("div",{className:"app-main"},
               )
             );
           })
-        )
+        ),
+    inspectionKitList.length>0&&h("div",{style:{marginTop:14}},
+      h("div",{style:{fontSize:14,fontWeight:800,marginBottom:10,display:"flex",alignItems:"center",gap:8}},
+        h("span",{style:{fontSize:22}},"🧰"),
+        h("span",{},"Kits dans inspection"),
+        h("span",{style:{background:"#f0e6ff",color:S.purple,borderRadius:20,padding:"3px 9px",fontSize:11,fontWeight:700}},inspectionKitList.length)
+      ),
+      inspectionKitList.map(kit=>{
+        const dispo=(kit.outils||[]).every(id=>!isEmp(id));
+        const outilsDispo=(kit.outils||[]).filter(id=>!isEmp(id)).length||0;
+        const total=(kit.outils||[]).length||0;
+        const kitCode=kit.id||kit._id;
+        return h("div",{key:"insp-kit-"+kitCode,style:{background:S.white,borderRadius:14,marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.08)",overflow:"hidden",borderLeft:"4px solid "+(dispo?S.green:S.orange)}},
+          h("div",{style:{padding:"14px 16px"}},
+            h("div",{style:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8,gap:12}},
+              h("div",{style:{flex:1,minWidth:0}},
+                h("div",{style:{fontSize:10,fontWeight:800,color:S.purple,marginBottom:3}},kitCode),
+                h("div",{style:{fontSize:16,fontWeight:800}},kit.nom||"Kit"),
+                kit.description&&h("div",{style:{fontSize:12,color:S.gray,marginTop:2}},kit.description),
+                h("div",{style:{fontSize:12,marginTop:4,color:dispo?S.green:S.orange,fontWeight:600}},outilsDispo+"/"+total+" outils disponibles")
+              ),
+              h("div",{style:{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:6}},
+                h("span",{style:{background:dispo?"#e6fff0":"#fff8e6",color:dispo?S.green:S.orange,borderRadius:20,padding:"4px 10px",fontSize:11,fontWeight:700}},dispo?"Disponible":"Partiel"),
+                h(QRCodeDisplay,{text:kitCode,size:58,label:"Kit"})
+              )
+            ),
+            h("div",{style:{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}},(kit.outils||[]).map(id=>{const t=tools.find(x=>x.id===id);const sorti=isEmp(id);return h("span",{key:id,style:{background:sorti?"#fff1f0":"#e6fff0",color:sorti?S.danger:S.green,borderRadius:8,padding:"3px 8px",fontSize:10,fontWeight:600}},t?t.nom.substring(0,20):id);})),
+            h("div",{style:{display:"flex",gap:8,flexWrap:"wrap"}},
+              h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquette QR — Kit",items:[{id:kitCode,nom:kit.nom||kitCode,type:"Kit"}]}),style:{background:"#eef5ff",color:S.blue,border:"none",borderRadius:10,padding:"10px 12px",fontSize:12,fontWeight:700,cursor:"pointer",minWidth:90}},"🏷️ QR"),
+              h("button",{onClick:()=>setModal({t:"qrCode",id:kitCode,nom:kit.nom||kitCode}),style:{background:"#f0e6ff",color:S.purple,border:"none",borderRadius:10,padding:"10px 12px",fontSize:12,fontWeight:700,cursor:"pointer",minWidth:90}},"Afficher QR"),
+              h("button",{onClick:()=>setModal({t:"kitDep",kit}),style:{...BP,flex:1,padding:"10px",fontSize:13,minWidth:120}},"📤 Sortir le kit"),
+              isAdmin&&h("button",{onClick:()=>setModal({t:"kit",kit}),style:{...BS,flex:1,padding:"10px",fontSize:12,minWidth:110}},"Modifier")
+            )
+          )
+        );
+      })
+    )
   ),
 
   page==="stocks"&&h("div",{className:"fi"},
@@ -3728,7 +3854,7 @@ h("div",{className:"app-main"},
       h("button",{onClick:()=>setModal({t:"scan"}),style:{background:S.red,color:S.white,border:"none",borderRadius:12,padding:"0 14px",fontSize:20,cursor:"pointer"}},"📷")
     ),
     h("div",{style:{display:"flex",background:S.border,borderRadius:12,padding:3,marginBottom:14}},[["cons","📦 Consommables"],["vets","🧤 EPI/Vêtements"]].map(([tb,lb])=>h("button",{key:tb,onClick:()=>{setStockTab(tb);setStockQ("");},style:{flex:1,padding:"9px",borderRadius:10,border:"none",background:stockTab===tb?S.white:"transparent",color:stockTab===tb?S.dark:S.gray,fontWeight:stockTab===tb?700:500,fontSize:13,cursor:"pointer",boxShadow:stockTab===tb?"0 1px 3px rgba(0,0,0,.1)":"none"}},lb))),
-    isAdmin&&h("div",{style:{display:"flex",gap:8,marginBottom:12}},h("button",{onClick:()=>setModal({t:"addCons",cat:stockTab}),style:{...BG,flex:1,padding:"10px",fontSize:13}},"+Ajouter"),h("button",{onClick:()=>setModal({t:"csv",cat:stockTab}),style:{...BO,flex:1,padding:"10px",fontSize:13}},"📥 Import Excel/CSV")),
+    h("div",{style:{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}},isAdmin&&h("button",{onClick:()=>setModal({t:"addCons",cat:stockTab}),style:{...BG,flex:1,padding:"10px",fontSize:13,minWidth:120}},"+Ajouter"),isAdmin&&h("button",{onClick:()=>setModal({t:"csv",cat:stockTab}),style:{...BO,flex:1,padding:"10px",fontSize:13,minWidth:150}},"📥 Import Excel/CSV"),h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquettes QR — Stock",items:stockList.map(item=>({id:item.id,nom:item.nom,type:stockTab==='cons'?'Consommable':'EPI / vêtement'}))}),style:{...BB,flex:1,padding:"10px",fontSize:13,minWidth:150}},"🏷️ Étiquettes QR")),
     stockList.length===0?h("div",{style:{padding:28,textAlign:"center",color:S.gray}},"Aucun article")
     :stockList.map(item=>{
       const low=item.stock<=item.min;
@@ -3742,6 +3868,7 @@ h("div",{className:"app-main"},
           h("div",{style:{display:"flex",gap:8,marginTop:10,flexWrap:"wrap"}},
             h("button",{onClick:()=>setModal({t:"take",item,cat:stockTab}),style:{...BP,flex:2,padding:"10px",fontSize:13,minWidth:70}},"− Prendre"),
             isAdmin&&h("button",{onClick:()=>setModal({t:"add",item,cat:stockTab}),style:{...BG,flex:2,padding:"10px",fontSize:13,minWidth:70}},"+Ajouter"),
+            h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquette QR",items:[{id:item.id,nom:item.nom,type:stockTab==='cons'?'Consommable':'EPI / vêtement'}]}),style:{background:"#eef5ff",color:S.blue,border:"none",borderRadius:10,padding:"10px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer",minWidth:70}},"🏷️"),
             isAdmin&&h("button",{onClick:()=>setModal({t:"editCons",item,cat:stockTab}),style:{background:S.orange,color:S.white,border:"none",borderRadius:10,padding:"10px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer",minWidth:50}},"✏️"),
             isAdmin&&h("button",{onClick:()=>setModal({t:"adj",item,cat:stockTab}),style:{background:"#e8f0fe",color:S.blue,border:"none",borderRadius:10,padding:"10px",flex:1,fontSize:12,fontWeight:700,cursor:"pointer",minWidth:50}},"⚖️")
           )
@@ -3833,6 +3960,7 @@ modal&&h("div",{},
   modal.t==="editCons"&&h(EditStockModal,{item:modal.item,cat:modal.cat,onSave:async(data)=>{setSyncing(true);await fbSet(modal.cat==="cons"?"cons":"vets",data.id,data);setSyncing(false);setModal(null);showT("Article modifié!");},onDelete:async(id)=>{if(!confirm("Supprimer?"))return;setSyncing(true);await fbDel(modal.cat==="cons"?"cons":"vets",id);setSyncing(false);setModal(null);showT("Article supprimé!");},onClose:()=>setModal(null)}),
   modal.t==="reparation"&&h(ReparationModal,{tool:modal.tool,ins:modal.ins||{},onSave:async(toolId,data)=>{setSyncing(true);const existing=inspections[toolId]||{};const repHist=[...(existing.repHistory||[]),{...data,date:now()}];await fbSet("inspections",toolId,{...existing,statut:"En reparation",reparation:data,repHistory:repHist,date:now()});setSyncing(false);setModal(null);showT("Mise en réparation enregistrée!");},onRetour:async(toolId)=>{setSyncing(true);const existing=inspections[toolId]||{};await fbSet("inspections",toolId,{...existing,statut:"Disponible",date:now()});setSyncing(false);setModal(null);showT("Retour de réparation enregistré!");},onClose:()=>setModal(null)}),
   modal.t==="qrCode"&&h(Modal,{onClose:()=>setModal(null)},h("div",{style:{textAlign:"center",padding:"10px 0"}},h("div",{style:{fontSize:11,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},modal.nom||""),h("div",{style:{fontSize:18,fontWeight:800,marginBottom:16}},modal.id),h(QRCodeDisplay,{text:modal.id,size:200,label:modal.id}),h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:12}},"Fermer"))),
+  modal.t==="labelSheet"&&h(LabelSheetModal,{title:modal.title,items:modal.items||[],onClose:()=>setModal(null)}),
   modal.t==="planningMaint"&&h(PlanningMaintenanceModal,{tools,maintenances,onClose:()=>setModal(null)}),
   modal.t==="addUser"&&h(AddUserModal,{onSave:(u)=>{saveUserAccounts([...(userAccounts||[]),u]);setModal(null);},onClose:()=>setModal(null)}),
   modal.t==="editUser"&&h(AddUserModal,{existing:modal.acc,onSave:(u)=>{const na=[...(userAccounts||[])];na[modal.idx]=u;saveUserAccounts(na);setModal(null);},onClose:()=>setModal(null)}),
