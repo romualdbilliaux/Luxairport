@@ -375,7 +375,7 @@ function getTrackMapSpec(bounds,options={}){
         tileX:wrapped,
         tileY:ty,
         zoom,
-        url:`https://tile.openstreetmap.org/${zoom}/${wrapped}/${ty}.png`
+        url:`https://mt1.google.com/vt/lyrs=y&x=${wrapped}&y=${ty}&z=${zoom}`
       });
     }
   }
@@ -423,9 +423,6 @@ async function buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,options={
       })));
       loaded.forEach(({tile,img})=>{ if(img){ try{ ctx.drawImage(img,tile.x,tile.y,mapSpec.tileSize,mapSpec.tileSize); }catch(e){} } });
     }
-    ctx.fillStyle='rgba(255,255,255,0.14)';
-    for(let x=0;x<width;x+=64){ ctx.fillRect(x,0,1,height); }
-    for(let y=0;y<height;y+=64){ ctx.fillRect(0,y,width,1); }
     ctx.strokeStyle='rgba(148,163,184,0.85)';
     ctx.setLineDash([8,8]);
     ctx.lineWidth=2;
@@ -3166,7 +3163,7 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
               h('text',{x:986,y:865,fill:'#475569',fontSize:'20'},latest?fmtTimeFR(latest.ts):'En attente GPS')
             )
           ),
-          h('div',{style:{fontSize:11,color:S.gray,marginTop:8}},'Fond de plan OpenStreetMap affiché automatiquement selon la zone GPS relevée.')
+          h('div',{style:{fontSize:11,color:S.gray,marginTop:8}},'Fond de plan hybride satellite affiché automatiquement selon la zone GPS relevée.')
         ),
         latest&&h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}},
           h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px 12px',fontSize:12}},h('div',{style:{fontWeight:800,marginBottom:3}},'Latitude / Longitude'),h('div',{style:{color:S.gray}},latest.lat.toFixed(6)+' / '+latest.lng.toFixed(6))),
