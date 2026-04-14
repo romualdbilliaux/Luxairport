@@ -54,6 +54,8 @@ input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appeara
   .rack-scroll::-webkit-scrollbar{height:0px;}
 }
 </style>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
 <div id="root"></div>
@@ -2367,13 +2369,18 @@ const flatRows=(toursAsc||[]).flatMap(t=>(t.mats||[]).map((m,mi)=>{
   const prevReading=matLastReading[matName];
   const explicitHeures=(m.heuresFonctionnement!==undefined&&m.heuresFonctionnement!==null&&m.heuresFonctionnement!=='')?toNum(m.heuresFonctionnement):null;
   let deltaHeures=0;
-  if(explicitHeures!==null){
+  if(prevReading!==undefined){
+    if(rawHeures>=prevReading){
+      deltaHeures=rawHeures-prevReading;
+    }else if(explicitHeures!==null && explicitHeures>=0 && explicitHeures<=rawHeures){
+      deltaHeures=explicitHeures;
+    }else{
+      deltaHeures=0;
+    }
+  }else if(explicitHeures!==null && explicitHeures>=0 && explicitHeures<rawHeures){
     deltaHeures=explicitHeures;
-  }else if(prevReading!==undefined){
-    if(rawHeures>=prevReading) deltaHeures=rawHeures-prevReading;
-    else deltaHeures=Math.max(0,toNum(m.heures));
-  }else if(rawHeures>0){
-    deltaHeures=rawHeures;
+  }else{
+    deltaHeures=0;
   }
   matLastReading[matName]=rawHeures;
   return {
@@ -2446,13 +2453,7 @@ const currentPayload=()=>({
   generalObs:obs||'',
   justificatifs:justifPhotos||[],
   totalLitresMats:totalLitres,
-  mats:(mats||[]).map(m=>{
-    const item={...m,heuresLecture:toNum(m.heures)};
-    if(m.heuresFonctionnement!==undefined && m.heuresFonctionnement!==null && String(m.heuresFonctionnement).trim()!==''){
-      item.heuresFonctionnement=toNum(m.heuresFonctionnement);
-    }
-    return item;
-  }),
+  mats:(mats||[]).map(m=>({...m,heuresLecture:toNum(m.heures),heuresFonctionnement:m.heuresFonctionnement!==undefined?toNum(m.heuresFonctionnement):undefined})),
   finalSignature:finalSignature||''
 });
 const loadTourForEdit=(tour)=>{
@@ -2891,9 +2892,49 @@ tab==="perso"&&h("div",{},
 
 
 
+
+function buildSweepPolygonLatLngs(points,widthM){
+  const pts=(points||[]).filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lng));
+  const half=Math.max(0.25,toNum(widthM)||0)/2;
+  if(pts.length<2) return [];
+  const avgLat=pts.reduce((a,p)=>a+p.lat,0)/pts.length;
+  const cosLat=Math.max(0.2,Math.cos(avgLat*Math.PI/180));
+  const R=6378137;
+  const toXY=p=>({x:(p.lng*Math.PI/180)*R*cosLat,y:(p.lat*Math.PI/180)*R});
+  const toLL=xy=>({lat:(xy.y/R)*(180/Math.PI),lng:(xy.x/(R*cosLat))*(180/Math.PI)});
+  const xy=pts.map(toXY);
+  const normals=[];
+  for(let i=0;i<xy.length-1;i++){
+    const dx=xy[i+1].x-xy[i].x, dy=xy[i+1].y-xy[i].y;
+    const len=Math.hypot(dx,dy);
+    if(len<0.01) normals.push({x:0,y:0});
+    else normals.push({x:-dy/len,y:dx/len});
+  }
+  const vertexNormal=i=>{
+    if(i===0) return normals[0]||{x:0,y:0};
+    if(i===xy.length-1) return normals[normals.length-1]||{x:0,y:0};
+    const a=normals[i-1]||{x:0,y:0}, b=normals[i]||{x:0,y:0};
+    const nx=a.x+b.x, ny=a.y+b.y;
+    const len=Math.hypot(nx,ny);
+    return len<0.01 ? b : {x:nx/len,y:ny/len};
+  };
+  const left=[], right=[];
+  xy.forEach((p,i)=>{
+    const n=vertexNormal(i);
+    left.push(toLL({x:p.x+n.x*half,y:p.y+n.y*half}));
+    right.push(toLL({x:p.x-n.x*half,y:p.y-n.y*half}));
+  });
+  return [...left,...right.reverse()];
+}
+
 function FodVehicleTrackingPage({currentUser,showT,setPage}){
   const TRACK_COLLECTION='fodBossVehicleTracks';
-  const svgRef=useRef(null);
+  const mapElRef=useRef(null);
+  const liveMapRef=useRef(null);
+  const liveBaseRef=useRef(null);
+  const liveSweepRef=useRef(null);
+  const liveCenterRef=useRef(null);
+  const histMapsRef=useRef({});
   const [tracking,setTracking]=useState(false);
   const [watchId,setWatchId]=useState(null);
   const [points,setPoints]=useState([]);
@@ -2918,6 +2959,32 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
   },[]);
 
   useEffect(()=>()=>{ if(watchId!==null && navigator.geolocation){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} } },[watchId]);
+
+  useEffect(()=>{
+    if(!window.L || !mapElRef.current || liveMapRef.current) return;
+    const map=window.L.map(mapElRef.current,{zoomControl:true,attributionControl:true});
+    liveMapRef.current=map;
+    liveBaseRef.current=window.L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:21,subdomains:['mt0','mt1','mt2','mt3'],attribution:'Données cartographiques'}).addTo(map);
+    liveSweepRef.current=window.L.polygon([], {color:'#10b981',weight:2,fillColor:'#10b981',fillOpacity:0.28});
+    liveCenterRef.current=window.L.polyline([], {color:'#047857',weight:4,opacity:0.95,lineCap:'round',lineJoin:'round'});
+    liveSweepRef.current.addTo(map);
+    liveCenterRef.current.addTo(map);
+    map.setView([49.6306,6.2044],16);
+    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} },150);
+    return ()=>{ try{ map.remove(); }catch(e){} liveMapRef.current=null; };
+  },[]);
+
+  useEffect(()=>{
+    const map=liveMapRef.current;
+    if(!map || !window.L) return;
+    const latlngs=(points||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).map(p=>[p.lat,p.lng]);
+    if(liveCenterRef.current) liveCenterRef.current.setLatLngs(latlngs);
+    const sweepPoly=buildSweepPolygonLatLngs(points,sweepWidthM).map(p=>[p.lat,p.lng]);
+    if(liveSweepRef.current) liveSweepRef.current.setLatLngs(sweepPoly);
+    if(latlngs.length===1){ map.setView(latlngs[0],18); }
+    else if(latlngs.length>1){ map.fitBounds(window.L.latLngBounds(latlngs),{padding:[24,24],maxZoom:20}); }
+    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} },0);
+  },[points,sweepWidthM]);
 
   const totalDistanceM = useMemo(()=>{
     if(points.length<2) return 0;
@@ -3155,38 +3222,15 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
       ),
       h('div',{style:cardStyle},
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}},
-          h('div',{},h('div',{style:{fontSize:15,fontWeight:800}},'Vue de couverture'),h('div',{style:{fontSize:12,color:S.gray}},'La zone verte représente la largeur de travail réelle. Le trait central montre l’axe du véhicule.')),
+          h('div',{},h('div',{style:{fontSize:15,fontWeight:800}},'Carte interactive en direct'),h('div',{style:{fontSize:12,color:S.gray}},'Zoom, déplacement et traînée réelle selon la largeur saisie. La zone verte montre le passage couvert en temps réel.')),
           h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
             h('button',{onClick:()=>exportTrackPDF(),style:{...BS,background:'#eef9f4',color:'#0f766e',width:'auto',padding:'10px 14px'},disabled:!points.length},'📄 PDF'),
             h('button',{onClick:saveTrack,style:{...BB,background:'#0f766e',width:'auto',padding:'10px 14px'},disabled:saving||!points.length},saving?'Sauvegarde...':'Sauvegarder la trace')
           )
         ),
         h('div',{style:{background:'linear-gradient(180deg,#f8fafc,#eef2f7)',borderRadius:18,padding:10,border:'1px solid #dbe3ec'}},
-          h('div',{style:{position:'relative',height:360,borderRadius:14,overflow:'hidden',background:'#eef2f7'}},
-            mapSpec && mapSpec.tiles.map((tile,i)=>h('img',{key:'tile-'+i,src:tile.url,crossOrigin:'anonymous',alt:'',style:{position:'absolute',left:(tile.x/1200*100)+'%',top:(tile.y/900*100)+'%',width:(tile.tileSize/1200*100)+'%',height:(tile.tileSize/900*100)+'%',objectFit:'cover',pointerEvents:'none',userSelect:'none'}})),
-            h('svg',{ref:svgRef,viewBox:'0 0 1200 900',preserveAspectRatio:'none',style:{position:'absolute',inset:0,display:'block',width:'100%',height:'100%',borderRadius:14,background:'transparent'}},
-              h('defs',{},
-                h('pattern',{id:'grid-fod-track',width:'64',height:'64',patternUnits:'userSpaceOnUse'},
-                  h('path',{d:'M 64 0 L 0 0 0 64',fill:'none',stroke:'rgba(217,227,238,0.45)',strokeWidth:'1'})
-                )
-              ),
-              h('rect',{x:0,y:0,width:1200,height:900,fill:'url(#grid-fod-track)'}),
-              h('rect',{x:14,y:14,width:1172,height:872,rx:22,ry:22,fill:'none',stroke:'#94a3b8',strokeWidth:'2',strokeDasharray:'8 8'}),
-              overlayPathD&&h('path',{d:overlayPathD,fill:'none',stroke:'rgba(16,185,129,.26)',strokeWidth:String(sweepStrokePx),strokeLinecap:'round',strokeLinejoin:'round'}),
-              overlayPathD&&h('path',{d:overlayPathD,fill:'none',stroke:'#10b981',strokeWidth:'6',strokeLinecap:'round',strokeLinejoin:'round'}),
-              projectedPoints.length>1 && projectedPoints.map((q,i)=>h('circle',{key:i,cx:q.x,cy:q.y,r:i===projectedPoints.length-1?7:3.2,fill:i===projectedPoints.length-1?'#ef4444':'#10b981',opacity:i===projectedPoints.length-1?1:0.85})),
-              h('g',{},
-                h('circle',{cx:latestProjected.x,cy:latestProjected.y,r:14,fill:'rgba(239,68,68,.14)',stroke:'none'}),
-                h('circle',{cx:latestProjected.x,cy:latestProjected.y,r:7,fill:'#ef4444'})
-              ),
-              h('rect',{x:18,y:18,width:190,height:52,rx:12,ry:12,fill:'rgba(255,255,255,0.88)'}),
-              h('text',{x:30,y:44,fill:'#334155',fontSize:'28',fontWeight:'700'},'Zone couverte'),
-              h('text',{x:30,y:70,fill:'#64748b',fontSize:'20'},'Largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m'),
-              h('rect',{x:970,y:842,width:212,height:34,rx:10,ry:10,fill:'rgba(255,255,255,0.90)'}),
-              h('text',{x:986,y:865,fill:'#475569',fontSize:'20'},latest?fmtTimeFR(latest.ts):'En attente GPS')
-            )
-          ),
-          h('div',{style:{fontSize:11,color:S.gray,marginTop:8}},'Fond de plan hybride satellite affiché automatiquement selon la zone GPS relevée.')
+          h('div',{ref:mapElRef,style:{height:430,borderRadius:14,overflow:'hidden',background:'#eef2f7'}}),
+          h('div',{style:{fontSize:11,color:S.gray,marginTop:8}},'Astuce : pincez ou zoomez à la molette pour ajuster la vue. La largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m est appliquée en direct sur la traînée.')
         ),
         latest&&h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}},
           h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px 12px',fontSize:12}},h('div',{style:{fontWeight:800,marginBottom:3}},'Latitude / Longitude'),h('div',{style:{color:S.gray}},latest.lat.toFixed(6)+' / '+latest.lng.toFixed(6))),
