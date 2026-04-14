@@ -208,7 +208,7 @@ const fmtDateFR=(val)=>{try{const p=luxParts(val);return `${p.dd}/${p.mm}/${p.yy
 const fmtTimeFR=(val)=>{try{const p=luxParts(val);return `${p.hh}h${p.mi}`;}catch(e){return '';}}
 const toDateInputValue=(val)=>{const p=luxParts(val||new Date());return `${p.yyyy}-${p.mm}-${p.dd}`;};
 const toDateTimeLocalValue=(val)=>{const p=luxParts(val||new Date());return `${p.yyyy}-${p.mm}-${p.dd}T${p.hh}:${p.mi}`;};
-const formatFileDate=(val)=>{const p=luxParts(val||new Date());return p.yyyy+p.mm+p.dd;}
+const formatFileDate=(val)=>{const p=luxParts(val||new Date());return p.mm+p.dd+p.yyyy;}
 const sanitizeReportName=s=>String(s||'Rapport').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
 const makeReportFileName=(label,ext='pdf',dateVal)=>`${formatFileDate(dateVal)} - ${sanitizeReportName(label)}.${ext}`;
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
@@ -1285,12 +1285,12 @@ function EditToolModal({tool,onSave,onDelete,onClose}){
 const[nom,setNom]=useState(tool.nom||"");const[marque,setMarque]=useState(tool.marque||"");const[type,setType]=useState(tool.type||"");const[ref,setRef]=useState(tool.ref||"");const[fournisseur,setFournisseur]=useState(tool.fournisseur||"");const[emplacement,setEmplacement]=useState(tool.emplacement||"");
 return h(Modal,{onClose},h("div",{style:{background:"linear-gradient(135deg,"+S.orange+",#e67e22)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},tool.id),h("div",{style:{fontSize:18,fontWeight:800}},"Modifier l'outil")),FL("Dénomination *",true),h("input",{value:nom,onChange:e=>setNom(e.target.value),style:IS}),h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}},h("div",{},FL("Marque"),h("input",{value:marque,onChange:e=>setMarque(e.target.value),style:IS})),h("div",{},FL("Type"),h("input",{value:type,onChange:e=>setType(e.target.value),style:IS}))),FL("Référence",true),h("input",{value:ref,onChange:e=>setRef(e.target.value),style:IS}),FL("Fournisseur",true),h("input",{value:fournisseur,onChange:e=>setFournisseur(e.target.value),style:IS}),FL("Emplacement",true),h("input",{value:emplacement,onChange:e=>setEmplacement(e.target.value),style:IS}),h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}},h("button",{onClick:onClose,style:BS},"Annuler"),h("button",{onClick:()=>{if(!nom){alert("Dénomination requise");return;}onSave({...tool,nom,marque,type,ref,fournisseur,emplacement});},style:{...BP,background:S.orange}},"Sauvegarder")),h("button",{onClick:()=>onDelete(tool.id),style:{...BS,color:S.danger,marginTop:10}},"Supprimer cet outil"));
 }
-function EditStockModal({item,cat,onSave,onDelete,onClose}){
+function EditStockModal({item,cat,onSave,onDelete,onClose,nextId}){
 const isNew=!item;
-const[id,setId]=useState(item?.id||"");const[nom,setNom]=useState(item?.nom||"");const[ref,setRef]=useState(item?.ref||"");const[fournisseur,setFournisseur]=useState(item?.fournisseur||"");const[emplacement,setEmplacement]=useState(item?.emplacement||"");const[stock,setStock]=useState(item?.stock||0);const[min,setMin]=useState(item?.min||1);const[taille,setTaille]=useState(item?.taille||"");const[type,setType]=useState(item?.type||"");
+const[id,setId]=useState(item?.id||nextId||"");const[nom,setNom]=useState(item?.nom||"");const[ref,setRef]=useState(item?.ref||"");const[fournisseur,setFournisseur]=useState(item?.fournisseur||"");const[emplacement,setEmplacement]=useState(item?.emplacement||"");const[stock,setStock]=useState(item?.stock||0);const[min,setMin]=useState(item?.min||1);const[taille,setTaille]=useState(item?.taille||"");const[type,setType]=useState(item?.type||"");
 return h(Modal,{onClose},
 h("div",{style:{background:"linear-gradient(135deg,"+S.blue+",#005ecb)",color:"#fff",padding:"16px 16px 18px",margin:"-16px -16px 0",borderRadius:"20px 20px 0 0"}},h("div",{style:{fontSize:11,fontWeight:700,opacity:.8,marginBottom:4}},isNew?"NOUVEAU":"MODIFIER"),h("div",{style:{fontSize:18,fontWeight:800}},isNew?"Ajouter un article":item.nom)),
-isNew&&h("div",{},FL("ID unique *",true),h("input",{value:id,onChange:e=>setId(e.target.value.toUpperCase()),placeholder:"Ex: AS-CONS-0007",style:{...IS,textTransform:"uppercase"}})),
+isNew&&h("div",{},FL("ID unique *",true),h("input",{value:id,readOnly:!!nextId,onChange:e=>setId(e.target.value.toUpperCase()),placeholder:cat==="cons"?"Ex: AS-CONS-0007":"Ex: AS-VET-0001",style:{...IS,textTransform:"uppercase",background:nextId?"#f7f7f7":"#fff",fontWeight:700}})),
 FL("Dénomination *",true),h("input",{value:nom,onChange:e=>setNom(e.target.value),style:IS}),
 cat==="vets"&&h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:14}},h("div",{},FL("Taille"),h("input",{value:taille,onChange:e=>setTaille(e.target.value),style:IS})),h("div",{},FL("Type"),h("input",{value:type,onChange:e=>setType(e.target.value),style:IS}))),
 FL("Référence",true),h("input",{value:ref,onChange:e=>setRef(e.target.value),style:IS}),
@@ -4016,8 +4016,8 @@ load(()=>db.collection("kits").orderBy("ts","asc").get()),
 load(()=>db.collection("matsMobileTours").orderBy("ts","desc").get()),
 ]);
 if(empSnap)setEmprunts(empSnap.docs.map(d=>({...d.data(),_id:d.id})));
-if(consSnap){const cd={};consSnap.forEach(x=>cd[x.id]=x.data());setCons(CONS_DEFAULT.map(c=>cd[c.id]?{...c,...cd[c.id]}:c));}
-if(vetsSnap){const vd={};vetsSnap.forEach(x=>vd[x.id]=x.data());setVets(VET_DEFAULT.map(v=>vd[v.id]?{...v,...vd[v.id]}:v));}
+if(consSnap){const docs=consSnap.docs.map(d=>({...d.data(),id:d.id}));const merged=[...CONS_DEFAULT.map(c=>{const found=docs.find(d=>d.id===c.id);return found?{...c,...found}:c;}),...docs.filter(d=>!CONS_DEFAULT.some(c=>c.id===d.id))];setCons(merged);}
+if(vetsSnap){const docs=vetsSnap.docs.map(d=>({...d.data(),id:d.id}));const merged=[...VET_DEFAULT.map(v=>{const found=docs.find(d=>d.id===v.id);return found?{...v,...found}:v;}),...docs.filter(d=>!VET_DEFAULT.some(v=>v.id===d.id))];setVets(merged);}
 if(histSnap)setHist(histSnap.docs.map(d=>({...d.data(),_id:d.id})));
 if(inspSnap){const id={};inspSnap.forEach(x=>id[x.id]=x.data());setInspections(id);}
 if(maintSnap){const md={};maintSnap.forEach(x=>md[x.id]=x.data());setMaintenances(md);}
@@ -4029,8 +4029,8 @@ clearTimeout(fallback);setReady(true);
 })();
 const u1=db.collection("inspections").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setInspections(d);});
 const u2=db.collection("emprunts").orderBy("ts","asc").onSnapshot(s=>setEmprunts(s.docs.map(d=>({...d.data(),_id:d.id}))));
-const u3=db.collection("cons").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setCons(prev=>prev.map(c=>d[c.id]?{...c,...d[c.id]}:c));});
-const u4=db.collection("vets").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setVets(prev=>prev.map(v=>d[v.id]?{...v,...d[v.id]}:v));});
+const u3=db.collection("cons").onSnapshot(s=>{const docs=s.docs.map(d=>({...d.data(),id:d.id}));setCons(prev=>{const base=(prev&&prev.length?prev:CONS_DEFAULT);return [...base.map(c=>{const found=docs.find(d=>d.id===c.id);return found?{...c,...found}:c;}),...docs.filter(d=>!base.some(c=>c.id===d.id))];});});
+const u4=db.collection("vets").onSnapshot(s=>{const docs=s.docs.map(d=>({...d.data(),id:d.id}));setVets(prev=>{const base=(prev&&prev.length?prev:VET_DEFAULT);return [...base.map(v=>{const found=docs.find(d=>d.id===v.id);return found?{...v,...found}:v;}),...docs.filter(d=>!base.some(v=>v.id===d.id))];});});
 const u5=db.collection("consHist").orderBy("ts","asc").onSnapshot(s=>setHist(s.docs.map(d=>({...d.data(),_id:d.id}))));
 const u6=db.collection("tools").onSnapshot(s=>{if(s.docs.length>0)setTools(s.docs.map(d=>({...d.data(),id:d.id})));});
 const u7=db.collection("maintenances").onSnapshot(s=>{const d={};s.forEach(x=>d[x.id]=x.data());setMaintenances(d);});
@@ -4051,6 +4051,16 @@ const nextKitId=useMemo(()=>{
   const next=Math.max(0,...nums)+1;
   return 'AS-KIT-'+String(next).padStart(4,'0');
 },[kits]);
+const nextConsId=useMemo(()=>{
+  const nums=(cons||[]).map(c=>{const m=String(c.id||'').match(/^AS-CONS-(\d{4})$/);return m?parseInt(m[1],10):0;});
+  const next=Math.max(0,...nums)+1;
+  return 'AS-CONS-'+String(next).padStart(4,'0');
+},[cons]);
+const nextVetId=useMemo(()=>{
+  const nums=(vets||[]).map(v=>{const m=String(v.id||'').match(/^AS-VET-(\d{4})$/);return m?parseInt(m[1],10):0;});
+  const next=Math.max(0,...nums)+1;
+  return 'AS-VET-'+String(next).padStart(4,'0');
+},[vets]);
 const st=(()=>{let ok=0,mo=0,ma=0,at=0,so=0;tools.forEach(t=>{if(isEmp(t.id)){so++;return;}const i=inspections[t.id];if(!i||!i.etat){at++;return;}if(i.etat==="Bon")ok++;else if(i.etat==="Moyen")mo++;else if(i.etat==="Mauvais")ma++;else at++;});return{ok,mo,ma,at,so,total:tools.length,fait:ok+mo+ma};})();
 const pct=st.total?Math.round(st.fait/st.total*100):0;
 const lowS=[...cons,...vets].filter(i=>i.stock<=i.min);
@@ -4630,7 +4640,7 @@ modal&&h("div",{},
   modal.t==="globalSearch"&&h(GlobalSearchModal,{tools,cons,vets,emprunts,kits,onClose:()=>setModal(null)}),
   modal.t==="addTool"&&h(AddToolModal,{nextId:nextToolId,onSave:async(data)=>{setSyncing(true);const id=(data.id||nextToolId).toUpperCase();await fbSet("tools",id,{...data,id});setSyncing(false);setModal(null);showT("Outil ajouté!");},onClose:()=>setModal(null)}),
   modal.t==="editTool"&&h(EditToolModal,{tool:modal.tool,onSave:async(data)=>{setSyncing(true);await fbSet("tools",data.id,data);setSyncing(false);setModal(null);showT("Outil modifié!");},onDelete:async(id)=>{if(!confirm("Supprimer cet outil?"))return;setSyncing(true);await fbDel("tools",id);setSyncing(false);setModal(null);showT("Outil supprimé!");},onClose:()=>setModal(null)}),
-  modal.t==="addCons"&&h(EditStockModal,{item:null,cat:modal.cat,onSave:async(data)=>{setSyncing(true);await fbSet(modal.cat==="cons"?"cons":"vets",data.id,data);setSyncing(false);setModal(null);showT("Article ajouté!");},onDelete:null,onClose:()=>setModal(null)}),
+  modal.t==="addCons"&&h(EditStockModal,{item:null,cat:modal.cat,nextId:modal.cat==="cons"?nextConsId:nextVetId,onSave:async(data)=>{setSyncing(true);const id=(data.id||(modal.cat==="cons"?nextConsId:nextVetId)).toUpperCase();await fbSet(modal.cat==="cons"?"cons":"vets",id,{...data,id});setSyncing(false);setModal(null);showT("Article ajouté!");},onDelete:null,onClose:()=>setModal(null)}),
   modal.t==="editCons"&&h(EditStockModal,{item:modal.item,cat:modal.cat,onSave:async(data)=>{setSyncing(true);await fbSet(modal.cat==="cons"?"cons":"vets",data.id,data);setSyncing(false);setModal(null);showT("Article modifié!");},onDelete:async(id)=>{if(!confirm("Supprimer?"))return;setSyncing(true);await fbDel(modal.cat==="cons"?"cons":"vets",id);setSyncing(false);setModal(null);showT("Article supprimé!");},onClose:()=>setModal(null)}),
   modal.t==="reparation"&&h(ReparationModal,{tool:modal.tool,ins:modal.ins||{},onSave:async(toolId,data)=>{setSyncing(true);const existing=inspections[toolId]||{};const repHist=[...(existing.repHistory||[]),{...data,date:now()}];await fbSet("inspections",toolId,{...existing,statut:"En reparation",reparation:data,repHistory:repHist,date:now()});setSyncing(false);setModal(null);showT("Mise en réparation enregistrée!");},onRetour:async(toolId)=>{setSyncing(true);const existing=inspections[toolId]||{};await fbSet("inspections",toolId,{...existing,statut:"Disponible",date:now()});setSyncing(false);setModal(null);showT("Retour de réparation enregistré!");},onClose:()=>setModal(null)}),
   modal.t==="qrCode"&&h(Modal,{onClose:()=>setModal(null)},h("div",{style:{textAlign:"center",padding:"10px 0"}},h("div",{style:{fontSize:11,fontWeight:700,color:S.gray,textTransform:"uppercase",marginBottom:4}},modal.nom||""),h("div",{style:{fontSize:18,fontWeight:800,marginBottom:16}},modal.id),h(QRCodeDisplay,{text:modal.id,size:200,label:modal.id}),h("button",{onClick:()=>setModal(null),style:{...BS,marginTop:12}},"Fermer"))),
