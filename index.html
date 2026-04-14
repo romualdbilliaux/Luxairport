@@ -423,10 +423,58 @@ async function buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,options={
   try{
     const width=Math.max(320,Number(options.width)||1200);
     const height=Math.max(240,Number(options.height)||900);
+    const drawScene=(ctx,withTiles)=>{
+      ctx.clearRect(0,0,width,height);
+      ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,width,height);
+      ctx.strokeStyle='rgba(148,163,184,0.85)';
+      ctx.setLineDash([8,8]);
+      ctx.lineWidth=2;
+      ctx.strokeRect(14,14,width-28,height-28);
+      ctx.setLineDash([]);
+      if(points&&points.length&&mapSpec){
+        const projected=points.map(p=>mapSpec.project(p.lat,p.lng)).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+        if(projected.length>1){
+          const strokePx=Math.max(10,Math.min(72,Number(options.strokePx)||18));
+          ctx.lineCap='round'; ctx.lineJoin='round';
+          ctx.beginPath(); projected.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+          ctx.strokeStyle='rgba(16,185,129,0.26)'; ctx.lineWidth=strokePx; ctx.stroke();
+          ctx.beginPath(); projected.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+          ctx.strokeStyle='#10b981'; ctx.lineWidth=6; ctx.stroke();
+        }
+        projected.forEach((p,i)=>{
+          ctx.beginPath();
+          ctx.arc(p.x,p.y,i===projected.length-1?7:3.2,0,Math.PI*2);
+          ctx.fillStyle=i===projected.length-1?'#ef4444':'#10b981';
+          ctx.globalAlpha=i===projected.length-1?1:0.9;
+          ctx.fill();
+          ctx.globalAlpha=1;
+        });
+      }
+      ctx.fillStyle='rgba(255,255,255,0.88)';
+      ctx.fillRect(18,18,240,52);
+      ctx.fillStyle='#334155';
+      ctx.font='bold 28px sans-serif';
+      ctx.fillText('Zone couverte',30,50);
+      ctx.font='20px sans-serif';
+      ctx.fillText('Largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m',30,78);
+      ctx.fillStyle='rgba(255,255,255,0.9)';
+      ctx.fillRect(width-230,height-58,212,34);
+      ctx.fillStyle='#475569';
+      ctx.font='20px sans-serif';
+      const lastTs=points&&points.length?fmtTimeFR(points[points.length-1].ts):'En attente GPS';
+      ctx.fillText(lastTs,width-214,height-34);
+      if(!withTiles){
+        ctx.fillStyle='rgba(255,255,255,0.92)';
+        ctx.fillRect(18,height-58,310,34);
+        ctx.fillStyle='#64748b';
+        ctx.font='18px sans-serif';
+        ctx.fillText('Fond satellite indisponible dans le PDF',30,height-34);
+      }
+    };
     const canvas=document.createElement('canvas');
     canvas.width=width; canvas.height=height;
     const ctx=canvas.getContext('2d');
-    ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,width,height);
+    let tilesDrawn=false;
     if(mapSpec&&Array.isArray(mapSpec.tiles)){
       const loaded=await Promise.all(mapSpec.tiles.map(tile=>new Promise(resolve=>{
         const img=new Image();
@@ -435,46 +483,18 @@ async function buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,options={
         img.onerror=()=>resolve({tile,img:null});
         img.src=tile.url;
       })));
-      loaded.forEach(({tile,img})=>{ if(img){ try{ ctx.drawImage(img,tile.x,tile.y,mapSpec.tileSize,mapSpec.tileSize); }catch(e){} } });
+      loaded.forEach(({tile,img})=>{ if(img){ try{ ctx.drawImage(img,tile.x,tile.y,mapSpec.tileSize,mapSpec.tileSize); tilesDrawn=true; }catch(e){} } });
     }
-    ctx.strokeStyle='rgba(148,163,184,0.85)';
-    ctx.setLineDash([8,8]);
-    ctx.lineWidth=2;
-    ctx.strokeRect(14,14,width-28,height-28);
-    ctx.setLineDash([]);
-    if(points&&points.length&&mapSpec){
-      const projected=points.map(p=>mapSpec.project(p.lat,p.lng)).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
-      if(projected.length>1){
-        const strokePx=Math.max(10,Math.min(72,Number(options.strokePx)||18));
-        ctx.lineCap='round'; ctx.lineJoin='round';
-        ctx.beginPath(); projected.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
-        ctx.strokeStyle='rgba(16,185,129,0.26)'; ctx.lineWidth=strokePx; ctx.stroke();
-        ctx.beginPath(); projected.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
-        ctx.strokeStyle='#10b981'; ctx.lineWidth=6; ctx.stroke();
-      }
-      projected.forEach((p,i)=>{
-        ctx.beginPath();
-        ctx.arc(p.x,p.y,i===projected.length-1?7:3.2,0,Math.PI*2);
-        ctx.fillStyle=i===projected.length-1?'#ef4444':'#10b981';
-        ctx.globalAlpha=i===projected.length-1?1:0.9;
-        ctx.fill();
-        ctx.globalAlpha=1;
-      });
+    drawScene(ctx,tilesDrawn);
+    try{
+      return canvas.toDataURL('image/png',0.95);
+    }catch(e){
+      const fallback=document.createElement('canvas');
+      fallback.width=width; fallback.height=height;
+      const fctx=fallback.getContext('2d');
+      drawScene(fctx,false);
+      try{return fallback.toDataURL('image/png',0.95);}catch(_){return '';}
     }
-    ctx.fillStyle='rgba(255,255,255,0.88)';
-    ctx.fillRect(18,18,190,52);
-    ctx.fillStyle='#334155';
-    ctx.font='bold 28px sans-serif';
-    ctx.fillText('Zone couverte',30,50);
-    ctx.font='20px sans-serif';
-    ctx.fillText('Largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m',30,78);
-    ctx.fillStyle='rgba(255,255,255,0.9)';
-    ctx.fillRect(width-230,height-58,212,34);
-    ctx.fillStyle='#475569';
-    ctx.font='20px sans-serif';
-    const lastTs=points&&points.length?fmtTimeFR(points[points.length-1].ts):'En attente GPS';
-    ctx.fillText(lastTs,width-214,height-34);
-    return canvas.toDataURL('image/png',0.95);
   }catch(e){ return ''; }
 }
 
@@ -3174,7 +3194,14 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
 
   const exportTrackPDF=async(trackArg)=>{
     try{
-      const track=trackArg||await buildTrackPayload();
+      let track=trackArg||await buildTrackPayload();
+      if((!track.snapshot) && Array.isArray(track.points) && track.points.length){
+        const liveBounds=getTrackBounds(track.points);
+        const liveMapSpec=getTrackMapSpec(liveBounds,{width:1200,height:900,padding:0.12});
+        const liveSweepPx=Math.max(10,Math.min(72,Number((toNum(track.sweepWidthM)/Math.max(getGeoSizeMetersFromBounds(liveBounds).mPerUnit||1,0.5)).toFixed(2))*4.5||18));
+        const regeneratedSnapshot=await buildTrackMapSnapshot(track.points,liveBounds,track.sweepWidthM,liveMapSpec,{width:1200,height:900,strokePx:liveSweepPx});
+        if(regeneratedSnapshot) track={...track,snapshot:regeneratedSnapshot};
+      }
       const {jsPDF}=window.jspdf;
       const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
       const W=210,H=297;
