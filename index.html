@@ -208,7 +208,7 @@ const fmtDateFR=(val)=>{try{const p=luxParts(val);return `${p.dd}/${p.mm}/${p.yy
 const fmtTimeFR=(val)=>{try{const p=luxParts(val);return `${p.hh}h${p.mi}`;}catch(e){return '';}}
 const toDateInputValue=(val)=>{const p=luxParts(val||new Date());return `${p.yyyy}-${p.mm}-${p.dd}`;};
 const toDateTimeLocalValue=(val)=>{const p=luxParts(val||new Date());return `${p.yyyy}-${p.mm}-${p.dd}T${p.hh}:${p.mi}`;};
-const formatFileDate=(val)=>{const p=luxParts(val||new Date());return p.mm+p.dd+p.yyyy;}
+const formatFileDate=(val)=>{const p=luxParts(val||new Date());return p.yyyy+p.mm+p.dd;}
 const sanitizeReportName=s=>String(s||'Rapport').replace(/[\\/:*?"<>|]+/g,' ').replace(/\s+/g,' ').trim();
 const makeReportFileName=(label,ext='pdf',dateVal)=>`${formatFileDate(dateVal)} - ${sanitizeReportName(label)}.${ext}`;
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
