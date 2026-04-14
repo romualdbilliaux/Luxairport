@@ -3130,7 +3130,11 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
   };
 
   const buildTrackSnapshotDataUrl=async()=>{
-    return await buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,{width:1200,height:900,strokePx:sweepStrokePx});
+    try{
+      return await buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,{width:1200,height:900,strokePx:sweepStrokePx});
+    }catch(e){
+      return '';
+    }
   };
 
   const buildTrackPayload=async()=>{
@@ -3169,8 +3173,8 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
   };
 
   const exportTrackPDF=async(trackArg)=>{
-    const track=trackArg||await buildTrackPayload();
     try{
+      const track=trackArg||await buildTrackPayload();
       const {jsPDF}=window.jspdf;
       const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
       const W=210,H=297;
