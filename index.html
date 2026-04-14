@@ -17,6 +17,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrious/4.0.2/qrious.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f2f2f7;color:#1c1c1e;}
@@ -54,8 +56,6 @@ input,select,textarea,button{font-family:inherit;-webkit-appearance:none;appeara
   .rack-scroll::-webkit-scrollbar{height:0px;}
 }
 </style>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 </head>
 <body>
 <div id="root"></div>
@@ -213,7 +213,19 @@ const sanitizeReportName=s=>String(s||'Rapport').replace(/[\\/:*?"<>|]+/g,' ').r
 const makeReportFileName=(label,ext='pdf',dateVal)=>`${formatFileDate(dateVal)} - ${sanitizeReportName(label)}.${ext}`;
 const refNum=pre=>pre+'-'+new Date().toISOString().slice(0,10).replace(/-/g,'');
 const fbSet=(c,i,d)=>db.collection(c).doc(i).set(d,{merge:true});
-const fbAdd=(c,d)=>db.collection(c).add({...d,ts:Date.now()});
+const stripUndefinedDeep=v=>{
+  if(Array.isArray(v)) return v.map(stripUndefinedDeep).filter(x=>x!==undefined);
+  if(v && typeof v==='object'){
+    const out={};
+    Object.entries(v).forEach(([k,val])=>{
+      const cleaned=stripUndefinedDeep(val);
+      if(cleaned!==undefined) out[k]=cleaned;
+    });
+    return out;
+  }
+  return v===undefined ? undefined : v;
+};
+const fbAdd=(c,d)=>db.collection(c).add(stripUndefinedDeep({...d,ts:Date.now()}));
 const fbUpd=(c,i,d)=>db.collection(c).doc(i).update(d);
 const fbDel=(c,i)=>db.collection(c).doc(i).delete();
 const daysSince=d=>{if(!d)return 0;try{const parts=d.split(/[/ ]/);const date=new Date(parts.length>=3?parts[2]+"-"+parts[1]+"-"+parts[0]:d);return isNaN(date)?0:Math.floor((Date.now()-date.getTime())/86400000);}catch(e){return 0;}};
@@ -464,6 +476,41 @@ async function buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,options={
     ctx.fillText(lastTs,width-214,height-34);
     return canvas.toDataURL('image/png',0.95);
   }catch(e){ return ''; }
+}
+
+function metersPerPixelAtLat(lat,zoom){
+  return 156543.03392*Math.cos((Number(lat)||0)*Math.PI/180)/Math.pow(2,Number(zoom)||0);
+}
+function buildSweepPolygonLatLngs(points,widthM){
+  const pts=(points||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
+  if(pts.length<2) return [];
+  const avgLat=pts.reduce((s,p)=>s+(p.lat||0),0)/pts.length;
+  const mPerDegLat=111320;
+  const mPerDegLng=Math.max(1,111320*Math.cos(avgLat*Math.PI/180));
+  const half=Math.max(0.25,Number(widthM)||0)/2;
+  const xy=pts.map(p=>({x:p.lng*mPerDegLng,y:p.lat*mPerDegLat,lat:p.lat,lng:p.lng}));
+  const left=[]; const right=[];
+  for(let i=0;i<xy.length;i++){
+    const prev=xy[Math.max(0,i-1)];
+    const curr=xy[i];
+    const next=xy[Math.min(xy.length-1,i+1)];
+    let dx1=curr.x-prev.x, dy1=curr.y-prev.y;
+    let dx2=next.x-curr.x, dy2=next.y-curr.y;
+    if(i===0){dx1=dx2; dy1=dy2;}
+    if(i===xy.length-1){dx2=dx1; dy2=dy1;}
+    let len1=Math.hypot(dx1,dy1)||1;
+    let len2=Math.hypot(dx2,dy2)||1;
+    dx1/=len1; dy1/=len1; dx2/=len2; dy2/=len2;
+    let nx=-(dy1+dy2), ny=(dx1+dx2);
+    let nlen=Math.hypot(nx,ny);
+    if(!nlen){ nx=-dy2; ny=dx2; nlen=Math.hypot(nx,ny)||1; }
+    nx/=nlen; ny/=nlen;
+    const lx=curr.x+nx*half, ly=curr.y+ny*half;
+    const rx=curr.x-nx*half, ry=curr.y-ny*half;
+    left.push([ly/mPerDegLat,lx/mPerDegLng]);
+    right.push([ry/mPerDegLat,rx/mPerDegLng]);
+  }
+  return [...left,...right.reverse()];
 }
 
 // ── STYLES ────────────────────────────────────────────────────────────────────
@@ -2369,18 +2416,13 @@ const flatRows=(toursAsc||[]).flatMap(t=>(t.mats||[]).map((m,mi)=>{
   const prevReading=matLastReading[matName];
   const explicitHeures=(m.heuresFonctionnement!==undefined&&m.heuresFonctionnement!==null&&m.heuresFonctionnement!=='')?toNum(m.heuresFonctionnement):null;
   let deltaHeures=0;
-  if(prevReading!==undefined){
-    if(rawHeures>=prevReading){
-      deltaHeures=rawHeures-prevReading;
-    }else if(explicitHeures!==null && explicitHeures>=0 && explicitHeures<=rawHeures){
-      deltaHeures=explicitHeures;
-    }else{
-      deltaHeures=0;
-    }
-  }else if(explicitHeures!==null && explicitHeures>=0 && explicitHeures<rawHeures){
+  if(explicitHeures!==null){
     deltaHeures=explicitHeures;
-  }else{
-    deltaHeures=0;
+  }else if(prevReading!==undefined){
+    if(rawHeures>=prevReading) deltaHeures=rawHeures-prevReading;
+    else deltaHeures=Math.max(0,toNum(m.heures));
+  }else if(rawHeures>0){
+    deltaHeures=rawHeures;
   }
   matLastReading[matName]=rawHeures;
   return {
@@ -2453,7 +2495,16 @@ const currentPayload=()=>({
   generalObs:obs||'',
   justificatifs:justifPhotos||[],
   totalLitresMats:totalLitres,
-  mats:(mats||[]).map(m=>({...m,heuresLecture:toNum(m.heures),heuresFonctionnement:m.heuresFonctionnement!==undefined?toNum(m.heuresFonctionnement):undefined})),
+  mats:(mats||[]).map(m=>{
+    const item={
+      ...m,
+      heuresLecture:toNum(m.heures)
+    };
+    if(m.heuresFonctionnement!==undefined && m.heuresFonctionnement!==null && String(m.heuresFonctionnement).trim()!==''){
+      item.heuresFonctionnement=toNum(m.heuresFonctionnement);
+    }
+    return stripUndefinedDeep(item);
+  }),
   finalSignature:finalSignature||''
 });
 const loadTourForEdit=(tour)=>{
@@ -2892,49 +2943,9 @@ tab==="perso"&&h("div",{},
 
 
 
-
-function buildSweepPolygonLatLngs(points,widthM){
-  const pts=(points||[]).filter(p=>Number.isFinite(p?.lat)&&Number.isFinite(p?.lng));
-  const half=Math.max(0.25,toNum(widthM)||0)/2;
-  if(pts.length<2) return [];
-  const avgLat=pts.reduce((a,p)=>a+p.lat,0)/pts.length;
-  const cosLat=Math.max(0.2,Math.cos(avgLat*Math.PI/180));
-  const R=6378137;
-  const toXY=p=>({x:(p.lng*Math.PI/180)*R*cosLat,y:(p.lat*Math.PI/180)*R});
-  const toLL=xy=>({lat:(xy.y/R)*(180/Math.PI),lng:(xy.x/(R*cosLat))*(180/Math.PI)});
-  const xy=pts.map(toXY);
-  const normals=[];
-  for(let i=0;i<xy.length-1;i++){
-    const dx=xy[i+1].x-xy[i].x, dy=xy[i+1].y-xy[i].y;
-    const len=Math.hypot(dx,dy);
-    if(len<0.01) normals.push({x:0,y:0});
-    else normals.push({x:-dy/len,y:dx/len});
-  }
-  const vertexNormal=i=>{
-    if(i===0) return normals[0]||{x:0,y:0};
-    if(i===xy.length-1) return normals[normals.length-1]||{x:0,y:0};
-    const a=normals[i-1]||{x:0,y:0}, b=normals[i]||{x:0,y:0};
-    const nx=a.x+b.x, ny=a.y+b.y;
-    const len=Math.hypot(nx,ny);
-    return len<0.01 ? b : {x:nx/len,y:ny/len};
-  };
-  const left=[], right=[];
-  xy.forEach((p,i)=>{
-    const n=vertexNormal(i);
-    left.push(toLL({x:p.x+n.x*half,y:p.y+n.y*half}));
-    right.push(toLL({x:p.x-n.x*half,y:p.y-n.y*half}));
-  });
-  return [...left,...right.reverse()];
-}
-
 function FodVehicleTrackingPage({currentUser,showT,setPage}){
   const TRACK_COLLECTION='fodBossVehicleTracks';
-  const mapElRef=useRef(null);
-  const liveMapRef=useRef(null);
-  const liveBaseRef=useRef(null);
-  const liveSweepRef=useRef(null);
-  const liveCenterRef=useRef(null);
-  const histMapsRef=useRef({});
+  const svgRef=useRef(null);
   const [tracking,setTracking]=useState(false);
   const [watchId,setWatchId]=useState(null);
   const [points,setPoints]=useState([]);
@@ -2959,32 +2970,6 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
   },[]);
 
   useEffect(()=>()=>{ if(watchId!==null && navigator.geolocation){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} } },[watchId]);
-
-  useEffect(()=>{
-    if(!window.L || !mapElRef.current || liveMapRef.current) return;
-    const map=window.L.map(mapElRef.current,{zoomControl:true,attributionControl:true});
-    liveMapRef.current=map;
-    liveBaseRef.current=window.L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:21,subdomains:['mt0','mt1','mt2','mt3'],attribution:'Données cartographiques'}).addTo(map);
-    liveSweepRef.current=window.L.polygon([], {color:'#10b981',weight:2,fillColor:'#10b981',fillOpacity:0.28});
-    liveCenterRef.current=window.L.polyline([], {color:'#047857',weight:4,opacity:0.95,lineCap:'round',lineJoin:'round'});
-    liveSweepRef.current.addTo(map);
-    liveCenterRef.current.addTo(map);
-    map.setView([49.6306,6.2044],16);
-    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} },150);
-    return ()=>{ try{ map.remove(); }catch(e){} liveMapRef.current=null; };
-  },[]);
-
-  useEffect(()=>{
-    const map=liveMapRef.current;
-    if(!map || !window.L) return;
-    const latlngs=(points||[]).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng)).map(p=>[p.lat,p.lng]);
-    if(liveCenterRef.current) liveCenterRef.current.setLatLngs(latlngs);
-    const sweepPoly=buildSweepPolygonLatLngs(points,sweepWidthM).map(p=>[p.lat,p.lng]);
-    if(liveSweepRef.current) liveSweepRef.current.setLatLngs(sweepPoly);
-    if(latlngs.length===1){ map.setView(latlngs[0],18); }
-    else if(latlngs.length>1){ map.fitBounds(window.L.latLngBounds(latlngs),{padding:[24,24],maxZoom:20}); }
-    setTimeout(()=>{ try{ map.invalidateSize(); }catch(e){} },0);
-  },[points,sweepWidthM]);
 
   const totalDistanceM = useMemo(()=>{
     if(points.length<2) return 0;
@@ -3047,13 +3032,56 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
 
   const latest=points[points.length-1]||null;
   const mapSpec = useMemo(()=>getTrackMapSpec(bounds,{width:1200,height:900,padding:0.12}),[bounds]);
-  const projectedPoints = useMemo(()=>points.map(p=>mapSpec?mapSpec.project(p.lat,p.lng):{x:600,y:450}),[points,mapSpec]);
-  const overlayPathD = useMemo(()=>{
-    if(projectedPoints.length<2) return '';
-    return projectedPoints.map((p,i)=>`${i===0?'M':'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ');
-  },[projectedPoints]);
-  const sweepStrokePx=Math.max(10, Math.min(72, Number((toNum(sweepWidthM)/Math.max(geoSizeM.mPerUnit||1,0.5)).toFixed(2))*4.5||18));
-  const latestProjected=projectedPoints[projectedPoints.length-1]||{x:600,y:450};
+  const sweepPolygonLatLngs = useMemo(()=>buildSweepPolygonLatLngs(points,Math.max(0.5,toNum(sweepWidthM)||2)),[points,sweepWidthM]);
+  const mapContainerRef = useRef(null);
+  const mapInstanceRef = useRef(null);
+  const tileLayerRef = useRef(null);
+  const centerLineLayerRef = useRef(null);
+  const sweepLayerRef = useRef(null);
+  const markersLayerRef = useRef(null);
+
+  useEffect(()=>{
+    if(!mapContainerRef.current || mapInstanceRef.current || !window.L) return;
+    const map=window.L.map(mapContainerRef.current,{zoomControl:true,attributionControl:true});
+    mapInstanceRef.current=map;
+    tileLayerRef.current=window.L.tileLayer('https://{s}.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{maxZoom:21,subdomains:['mt0','mt1','mt2','mt3'],attribution:'Satellite hybride'}).addTo(map);
+    map.setView([49.6233,6.2044],16);
+    return ()=>{ try{ map.remove(); }catch(e){} mapInstanceRef.current=null; };
+  },[]);
+
+  useEffect(()=>{
+    const map=mapInstanceRef.current;
+    if(!map || !window.L) return;
+    if(centerLineLayerRef.current){ try{ centerLineLayerRef.current.remove(); }catch(e){} centerLineLayerRef.current=null; }
+    if(sweepLayerRef.current){ try{ sweepLayerRef.current.remove(); }catch(e){} sweepLayerRef.current=null; }
+    if(markersLayerRef.current){ try{ markersLayerRef.current.remove(); }catch(e){} markersLayerRef.current=null; }
+
+    const latlngs=(points||[]).map(p=>[p.lat,p.lng]).filter(p=>Number.isFinite(p[0])&&Number.isFinite(p[1]));
+    if(!latlngs.length){
+      map.setView([49.6233,6.2044],16);
+      return;
+    }
+
+    if(sweepPolygonLatLngs.length>=4){
+      sweepLayerRef.current=window.L.polygon(sweepPolygonLatLngs,{stroke:false,fillColor:'#10b981',fillOpacity:0.28,interactive:false}).addTo(map);
+    }else if(latlngs.length===1){
+      sweepLayerRef.current=window.L.circle(latlngs[0],{radius:Math.max(0.5,toNum(sweepWidthM)||2)/2,color:'#10b981',weight:0,fillColor:'#10b981',fillOpacity:0.28,interactive:false}).addTo(map);
+    }
+
+    centerLineLayerRef.current=window.L.polyline(latlngs,{color:'#10b981',weight:6,lineCap:'round',lineJoin:'round'}).addTo(map);
+    const fg=window.L.featureGroup();
+    latlngs.forEach((ll,i)=>{
+      const marker=window.L.circleMarker(ll,{radius:i===latlngs.length-1?7:3.5,color:i===latlngs.length-1?'#ef4444':'#10b981',weight:2,fillColor:i===latlngs.length-1?'#ef4444':'#10b981',fillOpacity:i===latlngs.length-1?1:0.85});
+      marker.addTo(fg);
+    });
+    markersLayerRef.current=fg.addTo(map);
+
+    if(latlngs.length===1){
+      map.setView(latlngs[0],19);
+    }else{
+      map.fitBounds(window.L.latLngBounds(latlngs),{padding:[24,24],maxZoom:20});
+    }
+  },[points,sweepWidthM,sweepPolygonLatLngs]);
 
   const addPoint=pos=>{
     const c=pos.coords||{};
@@ -3222,15 +3250,18 @@ function FodVehicleTrackingPage({currentUser,showT,setPage}){
       ),
       h('div',{style:cardStyle},
         h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}},
-          h('div',{},h('div',{style:{fontSize:15,fontWeight:800}},'Carte interactive en direct'),h('div',{style:{fontSize:12,color:S.gray}},'Zoom, déplacement et traînée réelle selon la largeur saisie. La zone verte montre le passage couvert en temps réel.')),
+          h('div',{},h('div',{style:{fontSize:15,fontWeight:800}},'Vue de couverture'),h('div',{style:{fontSize:12,color:S.gray}},'La zone verte représente la largeur de travail réelle. Le trait central montre l’axe du véhicule.')),
           h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
             h('button',{onClick:()=>exportTrackPDF(),style:{...BS,background:'#eef9f4',color:'#0f766e',width:'auto',padding:'10px 14px'},disabled:!points.length},'📄 PDF'),
             h('button',{onClick:saveTrack,style:{...BB,background:'#0f766e',width:'auto',padding:'10px 14px'},disabled:saving||!points.length},saving?'Sauvegarde...':'Sauvegarder la trace')
           )
         ),
         h('div',{style:{background:'linear-gradient(180deg,#f8fafc,#eef2f7)',borderRadius:18,padding:10,border:'1px solid #dbe3ec'}},
-          h('div',{ref:mapElRef,style:{height:430,borderRadius:14,overflow:'hidden',background:'#eef2f7'}}),
-          h('div',{style:{fontSize:11,color:S.gray,marginTop:8}},'Astuce : pincez ou zoomez à la molette pour ajuster la vue. La largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m est appliquée en direct sur la traînée.')
+          h('div',{ref:mapContainerRef,style:{height:360,borderRadius:14,overflow:'hidden',background:'#eef2f7'}}),
+          h('div',{style:{display:'flex',justifyContent:'space-between',gap:10,flexWrap:'wrap',marginTop:8,fontSize:11,color:S.gray}},
+            h('div',{},'Carte interactive : zoom, déplacement et fond satellite hybride en direct.'),
+            h('div',{},'Traînée visible : '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m')
+          )
         ),
         latest&&h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}},
           h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px 12px',fontSize:12}},h('div',{style:{fontWeight:800,marginBottom:3}},'Latitude / Longitude'),h('div',{style:{color:S.gray}},latest.lat.toFixed(6)+' / '+latest.lng.toFixed(6))),
