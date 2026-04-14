@@ -4133,10 +4133,33 @@ const toggleToolFilter=key=>{
 };
 const setSingleToolFilter=key=>setToolFilters([key]);
 const toolFilterActive=key=>(toolFilters||["tous"]).includes(key);
-const toolList=tools.filter(t=>{
+const inspectionTools=useMemo(()=>{
+  const map=new Map();
+  const addTool=t=>{
+    if(!t||!t.id) return;
+    const prev=map.get(t.id)||{};
+    map.set(t.id,{
+      ...prev,
+      ...t,
+      id:t.id,
+      nom:(t.nom&&String(t.nom).trim())||prev.nom||t.id,
+      marque:(t.marque!==undefined?t.marque:prev.marque)||'',
+      ref:(t.ref!==undefined?t.ref:prev.ref)||'',
+      fournisseur:(t.fournisseur!==undefined?t.fournisseur:prev.fournisseur)||'',
+      emplacement:(t.emplacement!==undefined?t.emplacement:prev.emplacement)||''
+    });
+  };
+  (TOOLS_DEFAULT||[]).forEach(addTool);
+  (tools||[]).forEach(addTool);
+  Object.keys(inspections||{}).forEach(id=>addTool({id,nom:id}));
+  (emprunts||[]).forEach(e=>{ if(e&&e.toolId) addTool({id:e.toolId,nom:e.toolId}); });
+  (kits||[]).forEach(k=>{ (k?.outils||[]).forEach(id=>addTool({id,nom:id})); });
+  return [...map.values()].sort((a,b)=>String(a.id||'').localeCompare(String(b.id||''), 'fr'));
+},[tools,inspections,emprunts,kits]);
+const toolList=inspectionTools.filter(t=>{
 const ins=inspections[t.id]||{};const em=isEmp(t.id);
 const q=toolSearch.toLowerCase();
-const ms=!toolSearch||t.nom.toLowerCase().includes(q)||t.id.toLowerCase().includes(q)||(t.marque||"").toLowerCase().includes(q);
+const ms=!toolSearch||String(t.nom||'').toLowerCase().includes(q)||String(t.id||'').toLowerCase().includes(q)||String(t.marque||'').toLowerCase().includes(q);
 const activeFilters=(toolFilters||["tous"]).filter(f=>f!=="tous");
 if(activeFilters.length===0)return ms;
 const matchesFilter=activeFilters.some(f=>{
@@ -4152,7 +4175,7 @@ const matchesFilter=activeFilters.some(f=>{
 });
 return ms&&matchesFilter;
 });
-const inspectionKitList=(kits||[]).filter(k=>{const q=(toolSearch||"").toLowerCase();const code=(k.id||k._id||"").toLowerCase();const nom=(k.nom||"").toLowerCase();const desc=(k.description||"").toLowerCase();const outilsTxt=(k.outils||[]).map(id=>{const t=tools.find(x=>x.id===id);return ((t?.id)||id)+" "+((t?.nom)||"");}).join(" ").toLowerCase();return !toolSearch||code.includes(q)||nom.includes(q)||desc.includes(q)||outilsTxt.includes(q);});
+const inspectionKitList=(kits||[]).filter(k=>{const q=(toolSearch||"").toLowerCase();const code=(k.id||k._id||"").toLowerCase();const nom=(k.nom||"").toLowerCase();const desc=(k.description||"").toLowerCase();const outilsTxt=(k.outils||[]).map(id=>{const t=inspectionTools.find(x=>x.id===id);return ((t?.id)||id)+" "+((t?.nom)||"");}).join(" ").toLowerCase();return !toolSearch||code.includes(q)||nom.includes(q)||desc.includes(q)||outilsTxt.includes(q);});
 const stockList=(stockTab==="cons"?cons:vets).filter(i=>{const q=stockQ.toLowerCase();return !stockQ||i.nom.toLowerCase().includes(q)||i.id.toLowerCase().includes(q)||(i.taille||"").toLowerCase().includes(q);});
 
 const empList=empF==="tous"?emprunts:empF==="encours"?emprunts.filter(e=>!e.retour):emprunts.filter(e=>e.retour);
@@ -4358,7 +4381,7 @@ h("div",{className:"app-main"},
     h("div",{style:{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}},
       isAdmin&&h("button",{onClick:()=>setModal({t:"addTool"}),style:{...BG,flex:1,padding:"10px",fontSize:13,minWidth:150}},"+ Ajouter un outil"),
       isAdmin&&h("button",{onClick:()=>setModal({t:"kit"}),style:{background:S.purple,color:"#fff",border:"none",borderRadius:14,padding:"10px 14px",fontSize:13,fontWeight:700,cursor:"pointer",flex:1,minWidth:150}},"🧰 Ajouter un kit"),
-      h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquettes QR — Inspection",items:[...tools.map(t=>({id:t.id,nom:t.nom,type:"Outil"})),...inspectionKitList.map(k=>({id:k.id||k._id,nom:k.nom||k.id||"Kit",type:"Kit"}))]}),style:{...BO,flex:1,padding:"10px",fontSize:13,minWidth:170}},"🏷️ Étiquettes QR")
+      h("button",{onClick:()=>setModal({t:"labelSheet",title:"Étiquettes QR — Inspection",items:[...inspectionTools.map(t=>({id:t.id,nom:t.nom,type:"Outil"})),...inspectionKitList.map(k=>({id:k.id||k._id,nom:k.nom||k.id||"Kit",type:"Kit"}))]}),style:{...BO,flex:1,padding:"10px",fontSize:13,minWidth:170}},"🏷️ Étiquettes QR")
     ),
     isAdmin
       ? h("div",{style:{display:"grid",gridTemplateColumns:"170px 1fr",gap:10,alignItems:"start",marginBottom:14}},
@@ -4539,7 +4562,7 @@ h("div",{className:"app-main"},
     :h("div",{},
       h("div",{style:{fontSize:15,fontWeight:800,marginBottom:12}},"Générer des rapports PDF"),
       h("div",{style:{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}},
-        h("button",{onClick:()=>{const rows=tools.map(t=>{const ins=inspections[t.id]||{};const em=isEmp(t.id);return[t.id,t.nom.substring(0,18),t.marque||"",em?"Sorti":(ins.etat||"Attente"),ins.tech||""];});genPDF("insp",{stats:[{n:st.ok,l:"OK",c:"#34c759"},{n:st.mo,l:"Moyen",c:"#ff9500"},{n:st.ma,l:"NOK",c:"#ff3b30"},{n:st.so,l:"Sortis",c:"#007aff"}],headers:["ID","Outil","Marque","État","Tech"],rows},cfg);},style:{...BP,padding:"12px",fontSize:13}},"Inspections"),
+        h("button",{onClick:()=>{const rows=inspectionTools.map(t=>{const ins=inspections[t.id]||{};const em=isEmp(t.id);return[t.id,String(t.nom||t.id).substring(0,18),t.marque||"",em?"Sorti":(ins.etat||"Attente"),ins.tech||""];});genPDF("insp",{stats:[{n:st.ok,l:"OK",c:"#34c759"},{n:st.mo,l:"Moyen",c:"#ff9500"},{n:st.ma,l:"NOK",c:"#ff3b30"},{n:st.so,l:"Sortis",c:"#007aff"}],headers:["ID","Outil","Marque","État","Tech"],rows},cfg);},style:{...BP,padding:"12px",fontSize:13}},"Inspections"),
         h("button",{onClick:()=>{genPDF("emp",{stats:[{n:emprunts.length,l:"Total",c:"#1c1c1e"},{n:emprunts.filter(e=>!e.retour).length,l:"En cours",c:"#007aff"},{n:emprunts.filter(e=>e.retour).length,l:"Retournés",c:"#34c759"},{n:sortiesJ,l:"Auj.",c:"#ff9500"}],headers:["Outil","Personne","Départ","Retour"],rows:emprunts.map(e=>[e.toolId,e.personne,e.dateDepart,e.retour||"En cours"])},cfg);},style:{...BB,padding:"12px",fontSize:13}},"Emprunts"),
         h("button",{onClick:()=>{const allItems=[...cons,...vets];genPDF("stock",{stats:[{n:allItems.length,l:"Total",c:"#1c1c1e"},{n:allItems.filter(i=>i.stock>i.min).length,l:"OK",c:"#34c759"},{n:lowS.length,l:"Faible",c:"#ff3b30"},{n:allItems.reduce((a,i)=>a+i.stock,0),l:"Total pcs",c:"#007aff"}],headers:["ID","Article","Stock","Min","Statut"],rows:allItems.map(i=>[i.id,i.nom.substring(0,16),i.stock,i.min,i.stock<=i.min?"FAIBLE":"OK"])},cfg);},style:{...BG,padding:"12px",fontSize:13}},"Stocks"),
         h("button",{onClick:()=>{genPDF("hist",{headers:["Article","Qté","Action","Personne","Date"],rows:hist.map(hh=>[hh.nom.substring(0,14),hh.qte,hh.action||"sortie",hh.personne,hh.date])},cfg);},style:{...BO,padding:"12px",fontSize:13}},"Historique")
