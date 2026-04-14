@@ -313,6 +313,157 @@ async function filesToCompressedImages(files,maxFiles=6){
   return out;
 }
 
+
+function clamp(val,min,max){return Math.max(min,Math.min(max,val));}
+function latLngToTile(lat,lng,zoom){
+  const z=Math.max(0,Number(zoom)||0);
+  const scale=Math.pow(2,z);
+  const latClamped=clamp(Number(lat)||0,-85.05112878,85.05112878);
+  const lngNorm=((Number(lng)||0)+180)/360;
+  const sinLat=Math.sin(latClamped*Math.PI/180);
+  const x=lngNorm*scale;
+  const y=(0.5-Math.log((1+sinLat)/(1-sinLat))/(4*Math.PI))*scale;
+  return {x,y};
+}
+function tileToLatLng(x,y,zoom){
+  const z=Math.max(0,Number(zoom)||0);
+  const scale=Math.pow(2,z);
+  const lng=(x/scale)*360-180;
+  const n=Math.PI-2*Math.PI*y/scale;
+  const lat=180/Math.PI*Math.atan(0.5*(Math.exp(n)-Math.exp(-n)));
+  return {lat,lng};
+}
+function getTrackMapSpec(bounds,options={}){
+  if(!bounds) return null;
+  const width=Math.max(320,Number(options.width)||1200);
+  const height=Math.max(240,Number(options.height)||900);
+  const padding=Number.isFinite(Number(options.padding))?Number(options.padding):0.12;
+  const tileSize=256;
+  let chosen=null;
+  for(let zoom=19;zoom>=1;zoom--){
+    const a=latLngToTile(bounds.maxLat,bounds.minLng,zoom);
+    const b=latLngToTile(bounds.minLat,bounds.maxLng,zoom);
+    const spanX=Math.abs(b.x-a.x)*tileSize;
+    const spanY=Math.abs(b.y-a.y)*tileSize;
+    if(spanX<=width*(1-padding*2) && spanY<=height*(1-padding*2)){
+      chosen=zoom;
+      break;
+    }
+  }
+  const zoom=chosen||1;
+  const nw=latLngToTile(bounds.maxLat,bounds.minLng,zoom);
+  const se=latLngToTile(bounds.minLat,bounds.maxLng,zoom);
+  const spanPxX=Math.max(1,Math.abs(se.x-nw.x)*tileSize);
+  const spanPxY=Math.max(1,Math.abs(se.y-nw.y)*tileSize);
+  const worldWidth=Math.pow(2,zoom)*tileSize;
+  const marginX=Math.max(0,(width-spanPxX)/2);
+  const marginY=Math.max(0,(height-spanPxY)/2);
+  const originX=nw.x*tileSize-marginX;
+  const originY=nw.y*tileSize-marginY;
+  const minTileX=Math.floor(originX/tileSize);
+  const maxTileX=Math.floor((originX+width)/tileSize);
+  const minTileY=Math.max(0,Math.floor(originY/tileSize));
+  const maxTileY=Math.min(Math.pow(2,zoom)-1,Math.floor((originY+height)/tileSize));
+  const tileCount=Math.pow(2,zoom);
+  const tiles=[];
+  for(let ty=minTileY;ty<=maxTileY;ty++){
+    for(let tx=minTileX;tx<=maxTileX;tx++){
+      const wrapped=((tx%tileCount)+tileCount)%tileCount;
+      tiles.push({
+        x:tx*tileSize-originX,
+        y:ty*tileSize-originY,
+        tileX:wrapped,
+        tileY:ty,
+        zoom,
+        url:`https://mt1.google.com/vt/lyrs=y&x=${wrapped}&y=${ty}&z=${zoom}`
+      });
+    }
+  }
+  const project=(lat,lng)=>{
+    const p=latLngToTile(lat,lng,zoom);
+    return {x:p.x*tileSize-originX,y:p.y*tileSize-originY};
+  };
+  return {zoom,width,height,tileSize,tiles,project};
+}
+async function loadImageDataUrl(src){
+  return await new Promise(resolve=>{
+    try{
+      const img=new Image();
+      img.crossOrigin='anonymous';
+      img.onload=()=>{
+        try{
+          const canvas=document.createElement('canvas');
+          canvas.width=img.naturalWidth||img.width||256;
+          canvas.height=img.naturalHeight||img.height||256;
+          const ctx=canvas.getContext('2d');
+          ctx.drawImage(img,0,0,canvas.width,canvas.height);
+          resolve(canvas.toDataURL('image/png'));
+        }catch(e){ resolve(''); }
+      };
+      img.onerror=()=>resolve('');
+      img.src=src;
+    }catch(e){ resolve(''); }
+  });
+}
+async function buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,options={}){
+  try{
+    const width=Math.max(320,Number(options.width)||1200);
+    const height=Math.max(240,Number(options.height)||900);
+    const canvas=document.createElement('canvas');
+    canvas.width=width; canvas.height=height;
+    const ctx=canvas.getContext('2d');
+    ctx.fillStyle='#f8fafc'; ctx.fillRect(0,0,width,height);
+    if(mapSpec&&Array.isArray(mapSpec.tiles)){
+      const loaded=await Promise.all(mapSpec.tiles.map(tile=>new Promise(resolve=>{
+        const img=new Image();
+        img.crossOrigin='anonymous';
+        img.onload=()=>resolve({tile,img});
+        img.onerror=()=>resolve({tile,img:null});
+        img.src=tile.url;
+      })));
+      loaded.forEach(({tile,img})=>{ if(img){ try{ ctx.drawImage(img,tile.x,tile.y,mapSpec.tileSize,mapSpec.tileSize); }catch(e){} } });
+    }
+    ctx.strokeStyle='rgba(148,163,184,0.85)';
+    ctx.setLineDash([8,8]);
+    ctx.lineWidth=2;
+    ctx.strokeRect(14,14,width-28,height-28);
+    ctx.setLineDash([]);
+    if(points&&points.length&&mapSpec){
+      const projected=points.map(p=>mapSpec.project(p.lat,p.lng)).filter(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+      if(projected.length>1){
+        const strokePx=Math.max(10,Math.min(72,Number(options.strokePx)||18));
+        ctx.lineCap='round'; ctx.lineJoin='round';
+        ctx.beginPath(); projected.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+        ctx.strokeStyle='rgba(16,185,129,0.26)'; ctx.lineWidth=strokePx; ctx.stroke();
+        ctx.beginPath(); projected.forEach((p,i)=>{ if(i===0)ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y); });
+        ctx.strokeStyle='#10b981'; ctx.lineWidth=6; ctx.stroke();
+      }
+      projected.forEach((p,i)=>{
+        ctx.beginPath();
+        ctx.arc(p.x,p.y,i===projected.length-1?7:3.2,0,Math.PI*2);
+        ctx.fillStyle=i===projected.length-1?'#ef4444':'#10b981';
+        ctx.globalAlpha=i===projected.length-1?1:0.9;
+        ctx.fill();
+        ctx.globalAlpha=1;
+      });
+    }
+    ctx.fillStyle='rgba(255,255,255,0.88)';
+    ctx.fillRect(18,18,190,52);
+    ctx.fillStyle='#334155';
+    ctx.font='bold 28px sans-serif';
+    ctx.fillText('Zone couverte',30,50);
+    ctx.font='20px sans-serif';
+    ctx.fillText('Largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m',30,78);
+    ctx.fillStyle='rgba(255,255,255,0.9)';
+    ctx.fillRect(width-230,height-58,212,34);
+    ctx.fillStyle='#475569';
+    ctx.font='20px sans-serif';
+    const lastTs=points&&points.length?fmtTimeFR(points[points.length-1].ts):'En attente GPS';
+    ctx.fillText(lastTs,width-214,height-34);
+    return canvas.toDataURL('image/png',0.95);
+  }catch(e){ return ''; }
+}
+
 // ── STYLES ────────────────────────────────────────────────────────────────────
 const S={red:'#c8102e',blue:'#007aff',green:'#34c759',orange:'#ff9500',danger:'#ff3b30',bg:'#f2f2f7',white:'#fff',gray:'#8e8e93',border:'#e5e5ea',dark:'#1c1c1e',purple:'#af52de',yellow:'#ffd60a'};
 const IS={width:'100%',padding:'12px 13px',border:'1.5px solid #e5e5ea',borderRadius:12,fontSize:14,color:'#1c1c1e',outline:'none',display:'block',background:'#fff'};
@@ -1233,7 +1384,24 @@ const formatRackRestrictionLine=(r)=>{
   const head=[String(r.allee||'').toUpperCase(),r.rack?`R${r.rack}`:'',r.etagere?`E${r.etagere}`:'',String(r.position||'').toUpperCase()].filter(Boolean).join('-');
   return `${head};${r.maxHeightCm}`;
 };
-const[restrictionsTxt,setRestrictionsTxt]=useState(((wc?.rackRestrictions||[{raw:'A-R1-E5-G',allee:'A',rack:'1',etagere:'5',position:'G',maxHeightCm:100}]).map(r=>formatRackRestrictionLine(r))).join("\n"));
+const[restrictionsTxt,setRestrictionsTxt]=useState(((wc?.rackRestrictions||[]).map(r=>formatRackRestrictionLine(r))).join("\n"));
+
+useEffect(()=>{
+  const nextWc=warehouseConfig||WAREHOUSE_DEFAULT;
+  setAlleeA({...(nextWc.alleeA||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
+  setAlleeB({...(nextWc.alleeB||{racks:3,etages:3,positions:["G","M","D"],casesSOL:5})});
+  setSolA((nextWc.alleeA&&nextWc.alleeA.casesSOL)||5);
+  setSolB((nextWc.alleeB&&nextWc.alleeB.casesSOL)||5);
+  setTransitCases(nextWc.transitCases||4);
+  setPresetsTxt((((nextWc?.paletteDimensionsPresets)||[{label:"Europe",longueur:120,largeur:80,hauteur:100},{label:"Demi",longueur:80,largeur:60,hauteur:80}]).map(p=>[p.label,p.longueur,p.largeur,p.hauteur].join(';'))).join("\n"));
+  setRestrictionsTxt((((nextWc?.rackRestrictions)||[]).map(r=>formatRackRestrictionLine(r))).join("\n"));
+},[warehouseConfig]);
+
+useEffect(()=>{
+  setOriginsTxt((cfg?.warehouseOrigins||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
+  setDestsTxt((cfg?.warehouseDestinations||["Bâtiment technique","Parking P1","Parking P2","Parking staff","Airside"]).join("\n"));
+},[cfg?.warehouseOrigins,cfg?.warehouseDestinations]);
+
 const totalA=alleeA.racks*alleeA.etages*alleeA.positions.length+solA;
 const totalB=alleeB.racks*alleeB.etages*alleeB.positions.length+solB;
 const total=totalA+totalB+transitCases;
@@ -2278,7 +2446,13 @@ const currentPayload=()=>({
   generalObs:obs||'',
   justificatifs:justifPhotos||[],
   totalLitresMats:totalLitres,
-  mats:(mats||[]).map(m=>({...m,heuresLecture:toNum(m.heures),heuresFonctionnement:m.heuresFonctionnement!==undefined?toNum(m.heuresFonctionnement):undefined})),
+  mats:(mats||[]).map(m=>{
+    const item={...m,heuresLecture:toNum(m.heures)};
+    if(m.heuresFonctionnement!==undefined && m.heuresFonctionnement!==null && String(m.heuresFonctionnement).trim()!==''){
+      item.heuresFonctionnement=toNum(m.heuresFonctionnement);
+    }
+    return item;
+  }),
   finalSignature:finalSignature||''
 });
 const loadTourForEdit=(tour)=>{
@@ -2713,6 +2887,377 @@ tab==="perso"&&h("div",{},
 
 // ── APPLICATION PRINCIPALE ────────────────────────────────────────────────────
 
+
+
+
+
+function FodVehicleTrackingPage({currentUser,showT,setPage}){
+  const TRACK_COLLECTION='fodBossVehicleTracks';
+  const svgRef=useRef(null);
+  const [tracking,setTracking]=useState(false);
+  const [watchId,setWatchId]=useState(null);
+  const [points,setPoints]=useState([]);
+  const [tracks,setTracks]=useState([]);
+  const [loadingHist,setLoadingHist]=useState(true);
+  const [vehicleLabel,setVehicleLabel]=useState('FOD Boss');
+  const [sessionName,setSessionName]=useState('');
+  const [sweepWidthM,setSweepWidthM]=useState(2);
+  const [zoneLabel,setZoneLabel]=useState('');
+  const [status,setStatus]=useState('Prêt');
+  const [errorMsg,setErrorMsg]=useState('');
+  const [startedAt,setStartedAt]=useState('');
+  const [saving,setSaving]=useState(false);
+  const [tab,setTab]=useState('live');
+
+  useEffect(()=>{
+    const unsub=db.collection(TRACK_COLLECTION).orderBy('ts','desc').limit(30).onSnapshot(
+      s=>{setTracks(s.docs.map(d=>({...d.data(),_id:d.id})));setLoadingHist(false);},
+      ()=>setLoadingHist(false)
+    );
+    return ()=>unsub&&unsub();
+  },[]);
+
+  useEffect(()=>()=>{ if(watchId!==null && navigator.geolocation){ try{navigator.geolocation.clearWatch(watchId);}catch(e){} } },[watchId]);
+
+  const totalDistanceM = useMemo(()=>{
+    if(points.length<2) return 0;
+    const R=6371000;
+    const toRad=v=>v*Math.PI/180;
+    const dist=(a,b)=>{
+      const dLat=toRad((b.lat||0)-(a.lat||0));
+      const dLon=toRad((b.lng||0)-(a.lng||0));
+      const lat1=toRad(a.lat||0); const lat2=toRad(b.lat||0);
+      const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+      return 2*R*Math.asin(Math.sqrt(h));
+    };
+    let total=0;
+    for(let i=1;i<points.length;i++) total+=dist(points[i-1],points[i]);
+    return total;
+  },[points]);
+
+  const approxAreaM2 = useMemo(()=> Math.round((Math.max(0,totalDistanceM)*Math.max(0,toNum(sweepWidthM)))||0), [totalDistanceM,sweepWidthM]);
+
+  const bounds = useMemo(()=>{
+    if(!points.length) return null;
+    const lats=points.map(p=>p.lat), lngs=points.map(p=>p.lng);
+    const minLat=Math.min(...lats), maxLat=Math.max(...lats), minLng=Math.min(...lngs), maxLng=Math.max(...lngs);
+    const latPad=Math.max((maxLat-minLat)*0.12,0.00008);
+    const lngPad=Math.max((maxLng-minLng)*0.12,0.00008);
+    return {minLat:minLat-latPad,maxLat:maxLat+latPad,minLng:minLng-lngPad,maxLng:maxLng+lngPad};
+  },[points]);
+
+  const geoSizeM = useMemo(()=>{
+    if(!bounds) return {widthM:0,heightM:0,mPerUnit:1};
+    const R=6371000;
+    const toRad=v=>v*Math.PI/180;
+    const hav=(a,b,c,d)=>{
+      const dLat=toRad(c-a), dLon=toRad(d-b);
+      const lat1=toRad(a), lat2=toRad(c);
+      const h=Math.sin(dLat/2)**2 + Math.cos(lat1)*Math.cos(lat2)*Math.sin(dLon/2)**2;
+      return 2*R*Math.asin(Math.sqrt(h));
+    };
+    const midLat=(bounds.minLat+bounds.maxLat)/2;
+    const midLng=(bounds.minLng+bounds.maxLng)/2;
+    const widthM=hav(midLat,bounds.minLng,midLat,bounds.maxLng);
+    const heightM=hav(bounds.minLat,midLng,bounds.maxLat,midLng);
+    const mPerUnit=Math.max(widthM/96||0,heightM/96||0,0.5);
+    return {widthM,heightM,mPerUnit};
+  },[bounds]);
+
+  const projectPoint=(p,w=100,h=100)=>{
+    if(!bounds) return {x:w/2,y:h/2};
+    const dx=(bounds.maxLng-bounds.minLng)||1;
+    const dy=(bounds.maxLat-bounds.minLat)||1;
+    const x=((p.lng-bounds.minLng)/dx)*w;
+    const y=h-(((p.lat-bounds.minLat)/dy)*h);
+    return {x:Number.isFinite(x)?x:w/2,y:Number.isFinite(y)?y:h/2};
+  };
+
+  const pathD = useMemo(()=>{
+    if(points.length<2) return '';
+    return points.map((p,i)=>{const q=projectPoint(p,100,100); return `${i===0?'M':'L'} ${q.x.toFixed(2)} ${q.y.toFixed(2)}`;}).join(' ');
+  },[points,bounds]);
+
+  const latest=points[points.length-1]||null;
+  const mapSpec = useMemo(()=>getTrackMapSpec(bounds,{width:1200,height:900,padding:0.12}),[bounds]);
+  const projectedPoints = useMemo(()=>points.map(p=>mapSpec?mapSpec.project(p.lat,p.lng):{x:600,y:450}),[points,mapSpec]);
+  const overlayPathD = useMemo(()=>{
+    if(projectedPoints.length<2) return '';
+    return projectedPoints.map((p,i)=>`${i===0?'M':'L'} ${p.x.toFixed(2)} ${p.y.toFixed(2)}`).join(' ');
+  },[projectedPoints]);
+  const sweepStrokePx=Math.max(10, Math.min(72, Number((toNum(sweepWidthM)/Math.max(geoSizeM.mPerUnit||1,0.5)).toFixed(2))*4.5||18));
+  const latestProjected=projectedPoints[projectedPoints.length-1]||{x:600,y:450};
+
+  const addPoint=pos=>{
+    const c=pos.coords||{};
+    const next={lat:c.latitude,lng:c.longitude,accuracy:c.accuracy||0,speed:c.speed||0,heading:c.heading||0,ts:Date.now()};
+    if(!Number.isFinite(next.lat)||!Number.isFinite(next.lng)) return;
+    setPoints(prev=>{
+      const last=prev[prev.length-1];
+      if(last){
+        const same=Math.abs(last.lat-next.lat)<0.000001 && Math.abs(last.lng-next.lng)<0.000001;
+        if(same) return prev;
+      }
+      return [...prev,next];
+    });
+    setStatus('Suivi en cours');
+    setErrorMsg('');
+  };
+
+  const startTracking=()=>{
+    if(!navigator.geolocation){ setErrorMsg('Le GPS n’est pas disponible sur cet appareil.'); return; }
+    if(tracking) return;
+    setStatus('Recherche du GPS...');
+    setErrorMsg('');
+    const id=navigator.geolocation.watchPosition(
+      pos=>addPoint(pos),
+      err=>{ setErrorMsg(err&&err.message?err.message:'Impossible de lire la position GPS.'); setStatus('Erreur GPS'); },
+      {enableHighAccuracy:true,maximumAge:3000,timeout:12000}
+    );
+    setWatchId(id);
+    setTracking(true);
+    if(!startedAt) setStartedAt(now());
+  };
+
+  const stopTracking=()=>{
+    if(watchId!==null && navigator.geolocation){ navigator.geolocation.clearWatch(watchId); }
+    setWatchId(null);
+    setTracking(false);
+    setStatus(points.length?'Suivi arrêté':'Prêt');
+  };
+
+  const resetTrack=()=>{
+    stopTracking();
+    setPoints([]);
+    setStartedAt('');
+    setStatus('Prêt');
+    setErrorMsg('');
+  };
+
+  const buildTrackSnapshotDataUrl=async()=>{
+    return await buildTrackMapSnapshot(points,bounds,sweepWidthM,mapSpec,{width:1200,height:900,strokePx:sweepStrokePx});
+  };
+
+  const buildTrackPayload=async()=>{
+    const snapshot=await buildTrackSnapshotDataUrl();
+    return {
+      type:'vehicleTrack',
+      module:'fod',
+      vehicleLabel:(vehicleLabel||'FOD Boss').trim()||'FOD Boss',
+      sessionName:(sessionName||'').trim()||('Passage '+fmtDateTimeFR(new Date())),
+      zoneLabel:(zoneLabel||'').trim(),
+      sweepWidthM:Math.max(0.5,toNum(sweepWidthM)||2),
+      startedAt:startedAt||fmtDateTimeFR(points[0]?.ts||new Date()),
+      endedAt:fmtDateTimeFR(new Date()),
+      user:currentUser?.name||'',
+      points,
+      pointCount:points.length,
+      distanceM:Math.round(totalDistanceM),
+      approxAreaM2:approxAreaM2,
+      snapshot,
+      createdAt:now(),
+      ts:Date.now()
+    };
+  };
+
+  const saveTrack=async()=>{
+    if(!points.length){ alert('Aucune trace à enregistrer.'); return; }
+    setSaving(true);
+    try{
+      const payload=await buildTrackPayload();
+      await fbAdd(TRACK_COLLECTION,payload);
+      showT&&showT('Trace GPS enregistrée');
+      setTab('history');
+    }catch(e){
+      alert('Erreur sauvegarde trace: '+e.message);
+    }finally{setSaving(false);}
+  };
+
+  const exportTrackPDF=async(trackArg)=>{
+    const track=trackArg||await buildTrackPayload();
+    try{
+      const {jsPDF}=window.jspdf;
+      const doc=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+      const W=210,H=297;
+      const rgb=hexToRgb('#0f766e');
+      doc.setFillColor(rgb.r,rgb.g,rgb.b); doc.rect(0,0,W,24,'F');
+      doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(16); doc.text('FOD BOSS — SUIVI VÉHICULE',10,14);
+      doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.text('Généré le '+fmtDateTimeFR(new Date()),W-10,14,{align:'right'});
+      let y=32;
+      const row=(l,v)=>{ doc.setFillColor(248,250,252); doc.roundedRect(10,y,190,9,2,2,'F'); doc.setTextColor(100,116,139); doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.text(l,13,y+5.8); doc.setTextColor(15,23,42); doc.setFont('helvetica','normal'); doc.text(String(v||'—').substring(0,90),70,y+5.8); y+=11; };
+      row('Véhicule',track.vehicleLabel||'—');
+      row('Session',track.sessionName||'—');
+      row('Zone',track.zoneLabel||'—');
+      row('Agent',track.user||'—');
+      row('Début',track.startedAt||'—');
+      row('Fin',track.endedAt||'—');
+      row('Largeur de travail',Math.round((toNum(track.sweepWidthM)||0)*10)/10+' m');
+      row('Distance parcourue',Math.round(toNum(track.distanceM)||0)+' m');
+      row('Surface couverte approx.',Math.round(toNum(track.approxAreaM2)||0)+' m²');
+      row('Points GPS',track.pointCount||0);
+      y+=2;
+      doc.setFont('helvetica','bold'); doc.setFontSize(11); doc.setTextColor(15,23,42); doc.text('Capture de couverture',10,y+5);
+      y+=10;
+      if(track.snapshot){
+        try{ doc.addImage(track.snapshot,'PNG',10,y,190,135); }
+        catch(e){}
+      } else {
+        doc.setFillColor(248,250,252); doc.rect(10,y,190,80,'F'); doc.setTextColor(100,116,139); doc.text('Aucune capture disponible',105,y+40,{align:'center'});
+      }
+      doc.setDrawColor(220,226,232); doc.line(10,H-14,W-10,H-14);
+      doc.setTextColor(100,116,139); doc.setFontSize(8); doc.text('Historique FOD Boss véhicule',10,H-8); doc.text('Page 1',W-10,H-8,{align:'right'});
+      doc.save(makeReportFileName(((track.vehicleLabel||'FOD Boss')+' '+(track.sessionName||'trace')).trim(),'pdf',new Date()));
+    }catch(e){ alert('Erreur PDF trace : '+e.message); }
+  };
+
+  const deleteTrack=async(id)=>{
+    if(!id || !confirm('Supprimer cette trace ?')) return;
+    try{ await fbDel(TRACK_COLLECTION,id); showT&&showT('Trace supprimée'); }catch(e){ alert('Erreur suppression : '+e.message); }
+  };
+
+  const cardStyle={background:'#fff',borderRadius:18,padding:'16px',boxShadow:'0 1px 4px rgba(0,0,0,.08)',marginBottom:14};
+  return h('div',{className:'fi'},
+    h('div',{style:{background:'linear-gradient(135deg,#0f766e,#155e75)',borderRadius:20,padding:'18px 16px',color:'#fff',marginBottom:14}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
+        h('div',{},
+          h('div',{style:{fontSize:11,fontWeight:800,opacity:.78,marginBottom:4}},'FOD BOSS · SUIVI VÉHICULE'),
+          h('div',{style:{fontSize:22,fontWeight:900}},'Trace GPS véhicule'),
+          h('div',{style:{fontSize:12,opacity:.78,marginTop:4}},'Largeur réelle, capture de couverture, PDF et historique des passages')
+        ),
+        h('button',{onClick:()=>setPage('fod'),style:{background:'rgba(255,255,255,.15)',color:'#fff',border:'none',borderRadius:12,padding:'10px 14px',fontWeight:800,cursor:'pointer'}},'← Retour')
+      )
+    ),
+    h('div',{style:{display:'flex',gap:8,overflowX:'auto',marginBottom:12}},
+      [['live','Suivi en direct'],['history','Historique']].map(([id,label])=>h('button',{key:id,onClick:()=>setTab(id),style:{padding:'10px 14px',borderRadius:12,border:'none',cursor:'pointer',fontWeight:800,background:tab===id?'#0f766e':'#fff',color:tab===id?'#fff':S.dark,boxShadow:'0 1px 3px rgba(0,0,0,.08)'}},label))
+    ),
+    tab==='live' && h('div',{},
+      h('div',{style:cardStyle},
+        h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}},
+          h('div',{},FL('Nom affiché du véhicule',false),h('input',{value:vehicleLabel,onChange:e=>setVehicleLabel(e.target.value),placeholder:'Ex: FOD Boss P1',style:IS})),
+          h('div',{},FL('Nom de session',false),h('input',{value:sessionName,onChange:e=>setSessionName(e.target.value),placeholder:'Ex: Contrôle matin P1/P2',style:IS})),
+          h('div',{},FL('Zone / secteur',false),h('input',{value:zoneLabel,onChange:e=>setZoneLabel(e.target.value),placeholder:'Ex: Apron P1 côté nord',style:IS})),
+          h('div',{},FL('Largeur de travail (m)',false),h('input',{type:'number',min:'0.5',step:'0.1',value:sweepWidthM,onChange:e=>setSweepWidthM(e.target.value),placeholder:'Ex: 2 ou 5',style:IS}))
+        ),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:10,marginTop:12}},
+          h('button',{onClick:startTracking,style:{...BG,background:'#0f766e'},disabled:tracking},tracking?'GPS actif':'Démarrer'),
+          h('button',{onClick:stopTracking,style:{...BS,background:'#fff7ed',color:'#9a3412'}},'Arrêter'),
+          h('button',{onClick:resetTrack,style:{...BS,color:S.danger}},'Réinitialiser')
+        ),
+        h('div',{style:{display:'grid',gridTemplateColumns:'repeat(5,1fr)',gap:10,marginTop:12}},
+          h('div',{style:{background:'#f0fdf4',borderRadius:14,padding:'12px'}},h('div',{style:{fontSize:22,fontWeight:900,color:'#166534'}},points.length),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Points GPS')),
+          h('div',{style:{background:'#eff6ff',borderRadius:14,padding:'12px'}},h('div',{style:{fontSize:22,fontWeight:900,color:'#1d4ed8'}},Math.round(totalDistanceM)),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Distance m')),
+          h('div',{style:{background:'#ecfeff',borderRadius:14,padding:'12px'}},h('div',{style:{fontSize:22,fontWeight:900,color:'#0f766e'}},Math.round((toNum(sweepWidthM)||0)*10)/10),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Largeur m')),
+          h('div',{style:{background:'#faf5ff',borderRadius:14,padding:'12px'}},h('div',{style:{fontSize:22,fontWeight:900,color:'#7c3aed'}},approxAreaM2),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Couverture m²')),
+          h('div',{style:{background:'#fff7ed',borderRadius:14,padding:'12px'}},h('div',{style:{fontSize:16,fontWeight:900,color:'#c2410c'}},tracking?'EN COURS':'STOP'),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},status))
+        ),
+        errorMsg&&h('div',{style:{marginTop:12,background:'#fff1f0',color:S.danger,borderRadius:12,padding:'10px 12px',fontSize:12,fontWeight:700}},errorMsg),
+        startedAt&&h('div',{style:{marginTop:10,fontSize:12,color:S.gray}},'Début : '+startedAt)
+      ),
+      h('div',{style:cardStyle},
+        h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10,flexWrap:'wrap',gap:8}},
+          h('div',{},h('div',{style:{fontSize:15,fontWeight:800}},'Vue de couverture'),h('div',{style:{fontSize:12,color:S.gray}},'La zone verte représente la largeur de travail réelle. Le trait central montre l’axe du véhicule.')),
+          h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+            h('button',{onClick:()=>exportTrackPDF(),style:{...BS,background:'#eef9f4',color:'#0f766e',width:'auto',padding:'10px 14px'},disabled:!points.length},'📄 PDF'),
+            h('button',{onClick:saveTrack,style:{...BB,background:'#0f766e',width:'auto',padding:'10px 14px'},disabled:saving||!points.length},saving?'Sauvegarde...':'Sauvegarder la trace')
+          )
+        ),
+        h('div',{style:{background:'linear-gradient(180deg,#f8fafc,#eef2f7)',borderRadius:18,padding:10,border:'1px solid #dbe3ec'}},
+          h('div',{style:{position:'relative',height:360,borderRadius:14,overflow:'hidden',background:'#eef2f7'}},
+            mapSpec && mapSpec.tiles.map((tile,i)=>h('img',{key:'tile-'+i,src:tile.url,crossOrigin:'anonymous',alt:'',style:{position:'absolute',left:(tile.x/1200*100)+'%',top:(tile.y/900*100)+'%',width:(tile.tileSize/1200*100)+'%',height:(tile.tileSize/900*100)+'%',objectFit:'cover',pointerEvents:'none',userSelect:'none'}})),
+            h('svg',{ref:svgRef,viewBox:'0 0 1200 900',preserveAspectRatio:'none',style:{position:'absolute',inset:0,display:'block',width:'100%',height:'100%',borderRadius:14,background:'transparent'}},
+              h('defs',{},
+                h('pattern',{id:'grid-fod-track',width:'64',height:'64',patternUnits:'userSpaceOnUse'},
+                  h('path',{d:'M 64 0 L 0 0 0 64',fill:'none',stroke:'rgba(217,227,238,0.45)',strokeWidth:'1'})
+                )
+              ),
+              h('rect',{x:0,y:0,width:1200,height:900,fill:'url(#grid-fod-track)'}),
+              h('rect',{x:14,y:14,width:1172,height:872,rx:22,ry:22,fill:'none',stroke:'#94a3b8',strokeWidth:'2',strokeDasharray:'8 8'}),
+              overlayPathD&&h('path',{d:overlayPathD,fill:'none',stroke:'rgba(16,185,129,.26)',strokeWidth:String(sweepStrokePx),strokeLinecap:'round',strokeLinejoin:'round'}),
+              overlayPathD&&h('path',{d:overlayPathD,fill:'none',stroke:'#10b981',strokeWidth:'6',strokeLinecap:'round',strokeLinejoin:'round'}),
+              projectedPoints.length>1 && projectedPoints.map((q,i)=>h('circle',{key:i,cx:q.x,cy:q.y,r:i===projectedPoints.length-1?7:3.2,fill:i===projectedPoints.length-1?'#ef4444':'#10b981',opacity:i===projectedPoints.length-1?1:0.85})),
+              h('g',{},
+                h('circle',{cx:latestProjected.x,cy:latestProjected.y,r:14,fill:'rgba(239,68,68,.14)',stroke:'none'}),
+                h('circle',{cx:latestProjected.x,cy:latestProjected.y,r:7,fill:'#ef4444'})
+              ),
+              h('rect',{x:18,y:18,width:190,height:52,rx:12,ry:12,fill:'rgba(255,255,255,0.88)'}),
+              h('text',{x:30,y:44,fill:'#334155',fontSize:'28',fontWeight:'700'},'Zone couverte'),
+              h('text',{x:30,y:70,fill:'#64748b',fontSize:'20'},'Largeur '+(Math.round((toNum(sweepWidthM)||0)*10)/10)+' m'),
+              h('rect',{x:970,y:842,width:212,height:34,rx:10,ry:10,fill:'rgba(255,255,255,0.90)'}),
+              h('text',{x:986,y:865,fill:'#475569',fontSize:'20'},latest?fmtTimeFR(latest.ts):'En attente GPS')
+            )
+          ),
+          h('div',{style:{fontSize:11,color:S.gray,marginTop:8}},'Fond de plan hybride satellite affiché automatiquement selon la zone GPS relevée.')
+        ),
+        latest&&h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:10,marginTop:12}},
+          h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px 12px',fontSize:12}},h('div',{style:{fontWeight:800,marginBottom:3}},'Latitude / Longitude'),h('div',{style:{color:S.gray}},latest.lat.toFixed(6)+' / '+latest.lng.toFixed(6))),
+          h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px 12px',fontSize:12}},h('div',{style:{fontWeight:800,marginBottom:3}},'Vitesse / Cap'),h('div',{style:{color:S.gray}},(latest.speed?Math.round(latest.speed*3.6):0)+' km/h · '+(Number.isFinite(latest.heading)?Math.round(latest.heading):0)+'°')),
+          h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px 12px',fontSize:12}},h('div',{style:{fontWeight:800,marginBottom:3}},'Zone couverte approx.'),h('div',{style:{color:S.gray}},approxAreaM2+' m²'))
+        )
+      )
+    ),
+    tab==='history' && h('div',{},
+      h('div',{style:{display:'grid',gridTemplateColumns:'1fr',gap:10}},
+        loadingHist ? h('div',{style:{padding:24,textAlign:'center',color:S.gray}},'Chargement historique...')
+        : tracks.length===0 ? h('div',{style:{...cardStyle,textAlign:'center',color:S.gray}},'Aucune trace enregistrée')
+        : tracks.map(tr=>h('div',{key:tr._id,style:{...cardStyle,padding:'14px'}},
+            h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'flex-start',gap:10,marginBottom:10,flexWrap:'wrap'}},
+              h('div',{style:{minWidth:0,flex:1}},
+                h('div',{style:{fontSize:10,fontWeight:800,color:'#0f766e',marginBottom:3}},tr.vehicleLabel||'FOD Boss'),
+                h('div',{style:{fontSize:15,fontWeight:900,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}},tr.sessionName||'Session'),
+                h('div',{style:{fontSize:12,color:S.gray,marginTop:3}},[tr.zoneLabel,tr.startedAt].filter(Boolean).join(' · '))
+              ),
+              h('div',{style:{display:'flex',gap:8,flexWrap:'wrap'}},
+                h('button',{onClick:()=>exportTrackPDF(tr),style:{...BS,background:'#eef9f4',color:'#0f766e',width:'auto',padding:'8px 12px'}},'PDF'),
+                h('button',{onClick:()=>deleteTrack(tr._id),style:{...BS,color:S.danger,width:'auto',padding:'8px 12px'}},'Suppr.')
+              )
+            ),
+            tr.snapshot && h('img',{src:tr.snapshot,style:{width:'100%',height:190,objectFit:'cover',borderRadius:14,border:'1px solid #e2e8f0',marginBottom:10}}),
+            h('div',{style:{display:'grid',gridTemplateColumns:'repeat(4,1fr)',gap:8}},
+              h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px'}},h('div',{style:{fontSize:18,fontWeight:900,color:'#0f766e'}},Math.round(toNum(tr.distanceM)||0)),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Distance m')),
+              h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px'}},h('div',{style:{fontSize:18,fontWeight:900,color:'#1d4ed8'}},Math.round((toNum(tr.sweepWidthM)||0)*10)/10),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Largeur m')),
+              h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px'}},h('div',{style:{fontSize:18,fontWeight:900,color:'#7c3aed'}},Math.round(toNum(tr.approxAreaM2)||0)),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Couverture m²')),
+              h('div',{style:{background:'#f8fafc',borderRadius:12,padding:'10px'}},h('div',{style:{fontSize:18,fontWeight:900,color:'#c2410c'}},tr.pointCount||0),h('div',{style:{fontSize:11,color:S.gray,fontWeight:700}},'Points'))
+            )
+        ))
+      )
+    )
+  );
+}
+
+function FodBossHubPage({currentUser,isAdmin,showT,setPage}){
+  const [mode,setMode]=useState('hub');
+  if(mode==='track') return h(FodVehicleTrackingPage,{currentUser,showT,setPage:()=>setMode('hub')});
+  if(mode==='report') return h('div',{className:'fi'},
+    h('div',{style:{background:'linear-gradient(135deg,#14532d,#166534)',borderRadius:20,padding:'18px 16px',color:'#fff',marginBottom:14}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',gap:10,flexWrap:'wrap'}},
+        h('div',{},h('div',{style:{fontSize:11,fontWeight:800,opacity:.78,marginBottom:4}},'FOD BOSS'),h('div',{style:{fontSize:22,fontWeight:900}},'Rapport / planning'),h('div',{style:{fontSize:12,opacity:.8,marginTop:4}},'Accès à ta page FOD Boss actuelle')), 
+        h('button',{onClick:()=>setMode('hub'),style:{background:'rgba(255,255,255,.15)',color:'#fff',border:'none',borderRadius:12,padding:'10px 14px',fontWeight:800,cursor:'pointer'}},'← Retour')
+      )
+    ),
+    h(FodBossPage,{currentUser,isAdmin,showT})
+  );
+  const card=(emoji,title,desc,color,onClick)=>h('button',{onClick,style:{background:'#fff',border:'none',borderRadius:22,padding:'18px',boxShadow:'0 8px 24px rgba(0,0,0,.08)',textAlign:'left',cursor:'pointer'}},
+    h('div',{style:{width:54,height:54,borderRadius:18,background:color+'18',display:'flex',alignItems:'center',justifyContent:'center',fontSize:28,marginBottom:12}},emoji),
+    h('div',{style:{fontSize:19,fontWeight:900,marginBottom:6,color:S.dark}},title),
+    h('div',{style:{fontSize:13,color:S.gray,lineHeight:1.45,marginBottom:12}},desc),
+    h('div',{style:{fontSize:12,fontWeight:800,color}},'Ouvrir →')
+  );
+  return h('div',{className:'fi'},
+    h('div',{style:{background:'linear-gradient(135deg,#166534,#14532d)',borderRadius:22,padding:'22px 18px',color:'#fff',marginBottom:14,boxShadow:'0 12px 30px rgba(0,0,0,.12)'}},
+      h('div',{style:{fontSize:11,fontWeight:800,opacity:.8,marginBottom:4,letterSpacing:.8}},'FOD BOSS'),
+      h('div',{style:{fontSize:26,fontWeight:900,marginBottom:6}},'Que veux-tu faire ?'),
+      h('div',{style:{fontSize:13,opacity:.82,maxWidth:680}},'Choisis entre le suivi GPS du véhicule et la partie rapport / planning déjà présente dans ton application.')
+    ),
+    h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14}},
+      card('🛰️','Suivi véhicule','Démarrer un suivi GPS réel, voir la trace du passage, arrêter et sauvegarder la session.', '#0f766e', ()=>setMode('track')),
+      card('📝','Rapport / planning','Retrouver la page FOD Boss actuelle pour le planning, les passages et le reste du module.', '#166534', ()=>setMode('report'))
+    ),
+    h('div',{style:{background:'#fff',borderRadius:18,padding:'16px',boxShadow:'0 1px 4px rgba(0,0,0,.08)',marginTop:14}},
+      h('div',{style:{fontSize:14,fontWeight:800,marginBottom:8}},'Ce qui est prêt dans cette version'),
+      h('div',{style:{fontSize:13,color:S.gray,lineHeight:1.55}},'Suivi GPS temps réel, trace visuelle, nom de session, distance approximative et sauvegarde d\'une trace complète. La vraie carte aérienne et le calcul automatique de zones non couvertes pourront être ajoutés ensuite.')
+    )
+  );
+}
 
 // ── FOD BOSS ────────────────────────────────────────────────────────────────
 
@@ -3927,7 +4472,7 @@ h("div",{className:"app-main"},
     )
   ),
 
-  page==="fod"&&h(FodBossPage,{currentUser,isAdmin,showT}),
+  page==="fod"&&h(FodBossHubPage,{currentUser,isAdmin,showT,setPage}),
   page==="configadmin"&&h(AdminConfigPage,{isAdmin,configContext:adminConfigContext,setPage,cfg,navConfig,saveNavConfig,saveCfg,showT,userAccounts,saveUserAccounts,warehouseConfig,saveWarehouseConfig,setModal}),
 
   page==="vehicules"&&h("div",{className:"fi"},
