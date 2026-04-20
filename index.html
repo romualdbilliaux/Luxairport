@@ -2528,29 +2528,39 @@ const resetTournee=()=>{
   setLuxfuel(false);setLitresRemorque('');setObs('');setJustifPhotos([]);setCollegue('');setRemplisseur(currentUser?.name||'');setFinalSignature('');setEditTourId(null);setNowDate(toDateTimeLocalValue(new Date()));
   setMats(makeMatsState(defaultMats));
 };
-const currentPayload=()=>({
-  dateTime:nowDate?`${fmtDateFR(nowDate)} ${String(nowDate).split('T')[1]||'00:00'}`:now(),
-  user:currentUser?.name||'',
-  otherColleague:collegue||'',
-  trailerName:defaultCfg.trailerName||'Remorque gazole P2',
-  luxfuel:!!luxfuel,
-  remorqueLitres:parseFloat(litresRemorque)||0,
-  remorqueFilledBy:remplisseur||'',
-  generalObs:obs||'',
-  justificatifs:justifPhotos||[],
-  totalLitresMats:totalLitres,
-  mats:(mats||[]).map(m=>{
-    const item={
-      ...m,
-      heuresLecture:toNum(m.heures)
-    };
-    if(m.heuresFonctionnement!==undefined && m.heuresFonctionnement!==null && String(m.heuresFonctionnement).trim()!==''){
-      item.heuresFonctionnement=toNum(m.heuresFonctionnement);
-    }
-    return stripUndefinedDeep(item);
-  }),
-  finalSignature:finalSignature||''
-});
+const currentPayload=()=>{
+  const payload={
+    dateTime:nowDate?`${fmtDateFR(nowDate)} ${String(nowDate).split('T')[1]||'00:00'}`:now(),
+    user:currentUser?.name||'',
+    otherColleague:collegue||'',
+    trailerName:defaultCfg.trailerName||'Remorque gazole P2',
+    luxfuel:!!luxfuel,
+    remorqueLitres:parseFloat(litresRemorque)||0,
+    remorqueFilledBy:remplisseur||(currentUser?.name||''),
+    generalObs:obs||'',
+    justificatifsCount:(justifPhotos||[]).length,
+    totalLitresMats:totalLitres,
+    mats:(mats||[]).map((m,i)=>{
+      const item={
+        id:m.id||('MAT-'+String(i+1)),
+        nom:m.nom||('Mât '+String(i+1)),
+        mode:m.mode||'',
+        statut:m.statut||'',
+        cable:m.cable||'',
+        litres:toNum(m.litres),
+        heuresLecture:toNum(m.heures),
+        test:m.test||'',
+        commentaire:m.commentaire||''
+      };
+      if(m.heuresFonctionnement!==undefined && m.heuresFonctionnement!==null && String(m.heuresFonctionnement).trim()!==''){
+        item.heuresFonctionnement=toNum(m.heuresFonctionnement);
+      }
+      return stripUndefinedDeep(item);
+    }),
+    finalSignature:finalSignature||''
+  };
+  return stripUndefinedDeep(payload);
+};
 const loadTourForEdit=(tour)=>{
   if(!tour)return;
   const srcMats=(tour.mats||defaultMats).map((m,i)=>({...defaultMats[i],...m}));
@@ -2611,6 +2621,13 @@ const saveTour=async()=>{
   if(!(currentUser?.name)){alert('Utilisateur requis');return;}
   if(!finalSignature){ alert('Signature finale obligatoire'); return; }
   const payload=currentPayload();
+  try{
+    const approxSize=new Blob([JSON.stringify(payload)]).size;
+    if(approxSize>850000){
+      alert('Le rapport est encore trop volumineux pour Firestore. Réduisez les données saisies avant enregistrement.');
+      return;
+    }
+  }catch(e){}
   if(editTourId){
     await db.collection('matsMobileTours').doc(editTourId).set({...payload,ts:sortedTours.find(x=>x._id===editTourId)?.ts||Date.now()},{merge:true});
     showT&&showT('Tournée modifiée');
